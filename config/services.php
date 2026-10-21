@@ -38,6 +38,12 @@ return static function (ContainerConfigurator $container): void {
             '../src/Maker/ExtensionSkeleton.php',
             '../src/Content/Type/{Capability,ContentTypeDefinition}.php',
             '../src/Content/Type/Exception/',
+            '../src/Content/{Content,Status}.php',
+            '../src/Content/{Command,Event,Exception}/',
+            '../src/Content/Internal/{Locales,Row}.php',
+            '../src/Content/Revision/Revision.php',
+            '../src/Content/Workflow/ContentSubject.php',
+            '../src/Content/Console/ConsoleErrors.php',
         ]);
 
     $services->set(InstalledExtensions::class)

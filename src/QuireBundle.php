@@ -5,11 +5,18 @@ declare(strict_types=1);
 namespace Quire;
 
 use Composer\Autoload\ClassLoader;
+use Quire\Extension\Boot\CompileTimeState;
+use Quire\Extension\Boot\ExtensionBooter;
+use Quire\Extension\Boot\ExtensionStateResource;
+use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\DatabaseExtensionStateStore;
 use Quire\Extension\State\ExtensionStateStoreInterface;
 use Quire\Extension\State\PinnedExtensionStateStore;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
+use Symfony\Component\Config\Definition\Processor;
+use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Extension\ConfigurationExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
@@ -35,6 +42,10 @@ final class QuireBundle extends AbstractBundle
                             ->info('IDs of the enabled extensions when "pinned" is true.')
                             ->example(['quire-admin', 'acme-reviews'])
                             ->scalarPrototype()->cannotBeEmpty()->end()
+                        ->end()
+                        ->scalarNode('installed_json')
+                            ->info('Path to Composer\'s installed.json, which lists the installed extensions. Defaults to the one in the vendor directory; tests point it at fixtures.')
+                            ->defaultNull()
                         ->end()
                     ->end()
                     ->validate()
@@ -64,6 +75,10 @@ final class QuireBundle extends AbstractBundle
         $builder->prependExtensionConfig('doctrine_migrations', [
             'migrations_paths' => ['Quire\Migrations' => __DIR__.'/../migrations'],
         ]);
+
+        // Extensions boot here, before other bundles process their configuration, so extenders can
+        // still add to it (e.g. Twig paths).
+        $this->bootExtensions($builder);
     }
 
     /**
@@ -73,8 +88,6 @@ final class QuireBundle extends AbstractBundle
     {
         /** @var array{pinned: bool, enabled: list<string>} $extensions */
         $extensions = $config['extensions'];
-
-        $builder->setParameter('quire.composer.installed_json', $this->installedJsonPath());
 
         $container->import('../config/services.php');
 
@@ -89,10 +102,66 @@ final class QuireBundle extends AbstractBundle
         }
     }
 
+    private function bootExtensions(ContainerBuilder $builder): void
+    {
+        $config = $this->extensionsConfig($builder);
+        $installedJson = $config['installed_json'] ?? $this->defaultInstalledJsonPath();
+
+        if (is_file($installedJson)) {
+            $builder->addResource(new FileResource($installedJson));
+        }
+
+        if ($config['pinned']) {
+            $enabledIds = $config['enabled'];
+            $stateAvailable = true;
+        } else {
+            $state = CompileTimeState::read();
+            $enabledIds = $state->enabledIds;
+            $stateAvailable = $state->available;
+            $builder->addResource(new ExtensionStateResource($state->hash()));
+        }
+
+        $projectDir = $builder->getParameter('kernel.project_dir');
+
+        $builder->setParameter('quire.composer.installed_json', $installedJson);
+        $builder->setParameter('quire.extensions.state_available', $stateAvailable);
+
+        new ExtensionBooter(new InstalledExtensions($installedJson))
+            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php');
+    }
+
+    /**
+     * The "quire.extensions" configuration, processed early: it's needed before the regular loading phase.
+     *
+     * @return array{pinned: bool, enabled: list<string>, installed_json: ?string}
+     */
+    private function extensionsConfig(ContainerBuilder $builder): array
+    {
+        $extension = $this->getContainerExtension();
+
+        if (!$extension instanceof ConfigurationExtensionInterface) {
+            throw new \LogicException('The Quire bundle extension must provide its configuration.');
+        }
+
+        $configuration = $extension->getConfiguration([], $builder);
+
+        if (!$configuration instanceof \Symfony\Component\Config\Definition\ConfigurationInterface) {
+            throw new \LogicException('The Quire bundle extension must provide its configuration.');
+        }
+
+        /** @var list<array<mixed>> $configs */
+        $configs = $builder->getParameterBag()->resolveValue($builder->getExtensionConfig($extension->getAlias()));
+
+        /** @var array{extensions: array{pinned: bool, enabled: list<string>, installed_json: ?string}} $processed */
+        $processed = new Processor()->processConfiguration($configuration, $configs);
+
+        return $processed['extensions'];
+    }
+
     /**
      * Composer writes installed.json next to its class loader, wherever the vendor directory is.
      */
-    private function installedJsonPath(): string
+    private function defaultInstalledJsonPath(): string
     {
         $classLoaderFile = new \ReflectionClass(ClassLoader::class)->getFileName();
 

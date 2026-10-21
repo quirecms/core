@@ -46,6 +46,34 @@ final class FakeComposerInstallation
         return $this;
     }
 
+    /**
+     * Writes a file inside an installed package, e.g. its extend.php.
+     */
+    public function addFile(string $packageName, string $relativePath, string $contents): self
+    {
+        $path = $this->root.'/vendor/'.$packageName.'/'.$relativePath;
+
+        if (!is_dir(\dirname($path))) {
+            mkdir(\dirname($path), 0o777, true);
+        }
+
+        file_put_contents($path, $contents);
+
+        return $this;
+    }
+
+    /**
+     * A directory outside vendor/, e.g. to act as the project root.
+     */
+    public function projectDir(): string
+    {
+        if (!is_dir($this->root.'/project')) {
+            mkdir($this->root.'/project');
+        }
+
+        return (string) realpath($this->root.'/project');
+    }
+
     public function installedJsonPath(): string
     {
         $path = $this->root.'/vendor/composer/installed.json';

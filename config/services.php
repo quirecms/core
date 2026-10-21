@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
+use Quire\Routing\ExtensionRouteLoader;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
@@ -20,6 +21,9 @@ return static function (ContainerConfigurator $container): void {
     $services->load('Quire\\', '../src/')
         ->exclude([
             '../src/QuireBundle.php',
+            // Extenders and their context are used while the container is built, not as services.
+            '../src/Extend/',
+            '../src/Extension/Boot/',
             '../src/Health/HealthStatus.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
@@ -32,4 +36,7 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(InstalledExtensions::class)
         ->arg('$installedJsonPath', param('quire.composer.installed_json'));
+
+    $services->set(ExtensionRouteLoader::class)
+        ->tag('routing.loader');
 };

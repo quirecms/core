@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Http\Controller;
 
+use Quire\Settings\Settings;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Routing\Attribute\Route;
@@ -17,12 +18,15 @@ final readonly class HomeController
 {
     public function __construct(
         private Environment $twig,
+        private Settings $settings,
     ) {
     }
 
     #[Route('/', name: 'quire_home', methods: ['GET', 'HEAD'])]
     public function __invoke(): Response
     {
-        return new Response($this->twig->render('@Quire/home.html.twig'));
+        return new Response($this->twig->render('@Quire/home.html.twig', [
+            'site_title' => $this->settings->getString('site.title'),
+        ]));
     }
 }

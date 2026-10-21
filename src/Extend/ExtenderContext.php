@@ -17,6 +17,9 @@ final readonly class ExtenderContext
     /** ID used for the site's own extend.php in the project root. */
     public const string SITE = 'site';
 
+    /** ID used for extenders that Quire's core applies before any extension. */
+    public const string CORE = 'core';
+
     /**
      * @internal Created by Quire for each extension
      *

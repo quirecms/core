@@ -127,7 +127,7 @@ final class QuireBundle extends AbstractBundle
         $builder->setParameter('quire.extensions.state_available', $stateAvailable);
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
-            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php');
+            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', \dirname(__DIR__).\DIRECTORY_SEPARATOR.'extend.php');
     }
 
     /**

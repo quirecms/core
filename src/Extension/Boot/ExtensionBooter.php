@@ -11,6 +11,7 @@ use Quire\Extend\Routes;
 use Quire\Extension\DependencyResolver;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\ResolvedExtensions;
+use Quire\Settings\SettingsSchema;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -35,14 +36,21 @@ final readonly class ExtensionBooter
     /**
      * @param list<string> $enabledIds
      * @param string       $siteExtendFile The project's own extend.php, which runs last
+     * @param string|null  $coreExtendFile Quire core's own extend.php, which runs first
      */
-    public function boot(ContainerBuilder $container, array $enabledIds, string $siteExtendFile): ResolvedExtensions
+    public function boot(ContainerBuilder $container, array $enabledIds, string $siteExtendFile, ?string $coreExtendFile = null): ResolvedExtensions
     {
         $resolved = $this->resolver->resolve($this->installed->all(), $enabledIds);
         $bootOrder = $resolved->bootOrderIds();
         $files = [];
 
         $container->setParameter(Routes::PARAMETER, []);
+        $container->setParameter(SettingsSchema::PARAMETER, []);
+
+        if (null !== $coreExtendFile) {
+            $container->addResource(new FileResource($coreExtendFile));
+            $this->run(new ExtenderContext(ExtenderContext::CORE, \dirname($coreExtendFile), $container, $bootOrder), $coreExtendFile);
+        }
 
         foreach ($resolved->bootOrder as $manifest) {
             $file = $manifest->path.\DIRECTORY_SEPARATOR.'extend.php';

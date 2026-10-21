@@ -24,6 +24,7 @@
         "symfony/dependency-injection": "^8.1",
         "symfony/framework-bundle": "^8.1",
         "symfony/http-kernel": "^8.1",
+        "symfony/process": "^8.1",
         "symfony/routing": "^8.1",
         "symfony/service-contracts": "^3.6",
         "symfony/twig-bundle": "^8.1"

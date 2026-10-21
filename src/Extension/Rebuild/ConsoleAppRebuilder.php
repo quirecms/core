@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Quire\Extension\Rebuild;
+
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Process\Process;
+
+/**
+ * Rebuilds the application by running console commands in new processes.
+ *
+ * New processes are needed because the current one runs the application as it was built before the
+ * change: only a fresh process sees the newly enabled extensions, their services and their migrations.
+ */
+final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
+{
+    /** @var \Closure(list<string>, \Closure(string): void): int */
+    private \Closure $run;
+
+    /**
+     * @param (\Closure(list<string>, \Closure(string): void): int)|null $run Runs a command and returns its exit code; replaceable in tests
+     */
+    public function __construct(
+        #[Autowire(param: 'kernel.project_dir')]
+        private string $projectDir,
+        #[Autowire(param: 'kernel.environment')]
+        private string $environment,
+        ?\Closure $run = null,
+    ) {
+        $this->run = $run ?? $this->runProcess(...);
+    }
+
+    public function rebuild(bool $migrate, \Closure $output): void
+    {
+        $this->console(['cache:clear'], $output);
+
+        if ($migrate) {
+            $this->console(['doctrine:migrations:migrate', '--no-interaction', '--all-or-nothing', '--allow-no-migration'], $output);
+        }
+    }
+
+    /**
+     * @param list<string>           $command
+     * @param \Closure(string): void $output
+     */
+    private function runProcess(array $command, \Closure $output): int
+    {
+        return new Process($command, timeout: 600)->run(static function (string $type, string $buffer) use ($output): void {
+            $output($buffer);
+        });
+    }
+
+    /**
+     * @param list<string>           $arguments
+     * @param \Closure(string): void $output
+     */
+    private function console(array $arguments, \Closure $output): void
+    {
+        $command = [\PHP_BINARY, $this->projectDir.'/bin/console', ...$arguments, '--env='.$this->environment];
+        $exitCode = ($this->run)($command, $output);
+
+        if (0 !== $exitCode) {
+            throw new RebuildFailedException(\sprintf('"bin/console %s" failed with exit code %d. Fix the problem shown above, then run it again.', implode(' ', $arguments), $exitCode));
+        }
+    }
+}

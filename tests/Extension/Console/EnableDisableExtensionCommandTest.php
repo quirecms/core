@@ -11,7 +11,9 @@ use Quire\Extension\ExtensionManager;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\ExtensionStateStoreInterface;
 use Quire\Extension\State\PinnedExtensionStateStore;
+use Quire\Tests\Extension\FakeAppRebuilder;
 use Quire\Tests\Extension\FakeComposerInstallation;
+use Quire\Tests\Extension\FakeExtensionPurger;
 use Quire\Tests\Extension\InMemoryExtensionStateStore;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
@@ -21,8 +23,14 @@ final class EnableDisableExtensionCommandTest extends TestCase
 {
     private FakeComposerInstallation $composer;
 
+    private FakeAppRebuilder $rebuilder;
+
+    private FakeExtensionPurger $purger;
+
     protected function setUp(): void
     {
+        $this->rebuilder = new FakeAppRebuilder();
+        $this->purger = new FakeExtensionPurger();
         $this->composer = new FakeComposerInstallation()
             ->addPackage('quire/reviews', overrides: ['extra' => ['quire' => ['requires' => ['quire-comments']]]])
             ->addPackage('quire/comments')
@@ -139,14 +147,84 @@ final class EnableDisableExtensionCommandTest extends TestCase
         self::assertStringContainsString('Extensions are pinned in configuration', $disable->getDisplay());
     }
 
+    public function testEnableRebuildsAndMigrates(): void
+    {
+        $this->enable(new InMemoryExtensionStateStore())->execute(['ids' => ['quire-seo']]);
+
+        self::assertSame(['migrate'], $this->rebuilder->calls);
+    }
+
+    public function testFailedRebuildDisablesTheExtensionsAgain(): void
+    {
+        $state = new InMemoryExtensionStateStore();
+        $this->rebuilder->failNext = true;
+        $tester = $this->enable($state);
+
+        self::assertSame(Command::FAILURE, $tester->execute(['ids' => ['quire-reviews']]));
+        self::assertSame([], $state->enabledIds());
+        self::assertSame(['migrate', 'no-migrate'], $this->rebuilder->calls);
+        self::assertStringContainsString('The extensions were disabled again: quire-comments, quire-reviews.', preg_replace('/\s+/', ' ', $tester->getDisplay()) ?? '');
+    }
+
+    public function testDisableRebuildsWithoutMigrating(): void
+    {
+        $this->disable(new InMemoryExtensionStateStore(['quire-seo']))->execute(['ids' => ['quire-seo']]);
+
+        self::assertSame(['no-migrate'], $this->rebuilder->calls);
+        self::assertSame([], $this->purger->purged);
+    }
+
+    public function testPurgeWithForcePurgesDependentsFirst(): void
+    {
+        $state = new InMemoryExtensionStateStore(['quire-comments', 'quire-reviews', 'quire-seo']);
+        $tester = $this->disable($state);
+
+        self::assertSame(Command::SUCCESS, $tester->execute(['ids' => ['quire-comments', 'quire-reviews'], '--purge' => true, '--force' => true]));
+        self::assertSame(['quire-reviews', 'quire-comments'], $this->purger->purged);
+        self::assertSame(['quire-seo'], $state->enabledIds());
+        self::assertStringContainsString('Disabled and purged: quire-comments, quire-reviews.', $tester->getDisplay());
+    }
+
+    public function testPurgeRequiresForceWithoutATerminal(): void
+    {
+        $state = new InMemoryExtensionStateStore(['quire-seo']);
+        $tester = $this->disable($state);
+
+        self::assertSame(Command::FAILURE, $tester->execute(['ids' => ['quire-seo'], '--purge' => true], ['interactive' => false]));
+        self::assertStringContainsString('Pass --force to purge without confirmation.', $tester->getDisplay());
+        self::assertSame([], $this->purger->purged);
+        self::assertSame(['quire-seo'], $state->enabledIds());
+    }
+
+    public function testDecliningThePurgeChangesNothing(): void
+    {
+        $state = new InMemoryExtensionStateStore(['quire-seo']);
+        $tester = $this->disable($state);
+        $tester->setInputs(['no']);
+
+        self::assertSame(Command::FAILURE, $tester->execute(['ids' => ['quire-seo'], '--purge' => true], ['interactive' => true]));
+        self::assertSame([], $this->purger->purged);
+        self::assertSame(['quire-seo'], $state->enabledIds());
+    }
+
+    public function testOnlyRunningExtensionsCanBePurged(): void
+    {
+        // quire-reviews is enabled but broken: it requires quire-comments, which isn't enabled.
+        $tester = $this->disable(new InMemoryExtensionStateStore(['quire-reviews']));
+
+        self::assertSame(Command::FAILURE, $tester->execute(['ids' => ['quire-reviews'], '--purge' => true, '--force' => true]));
+        self::assertStringContainsString('Only running extensions can be purged', $tester->getDisplay());
+        self::assertSame([], $this->purger->purged);
+    }
+
     private function enable(ExtensionStateStoreInterface $state): CommandTester
     {
-        return new CommandTester(new Command(null, new EnableExtensionCommand($this->manager($state))));
+        return new CommandTester(new Command(null, new EnableExtensionCommand($this->manager($state), $this->rebuilder)));
     }
 
     private function disable(ExtensionStateStoreInterface $state): CommandTester
     {
-        return new CommandTester(new Command(null, new DisableExtensionCommand($this->manager($state))));
+        return new CommandTester(new Command(null, new DisableExtensionCommand($this->manager($state), $this->purger, $this->rebuilder)));
     }
 
     private function manager(ExtensionStateStoreInterface $state): ExtensionManager

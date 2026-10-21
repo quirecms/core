@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Quire;
 
 use Composer\Autoload\ClassLoader;
+use Doctrine\Migrations\Version\Comparator;
+use Quire\Database\MigrationOrder;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\Boot\ExtensionStateResource;
@@ -72,8 +74,10 @@ final class QuireBundle extends AbstractBundle
             ],
         ]);
 
+        // Core first, then extensions in boot order: see MigrationOrder. Core's own migrations are
+        // registered by its extend.php, like an extension's.
         $builder->prependExtensionConfig('doctrine_migrations', [
-            'migrations_paths' => ['Quire\Migrations' => __DIR__.'/../migrations'],
+            'services' => [Comparator::class => MigrationOrder::class],
         ]);
 
         // Extensions boot here, before other bundles process their configuration, so extenders can

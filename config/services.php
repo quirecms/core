@@ -30,6 +30,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Extension/Exception/',
             '../src/Extension/Event/',
             '../src/Extension/ResolvedExtensions.php',
+            '../src/Extension/Rebuild/RebuildFailedException.php',
             // The state store is chosen in QuireBundle::loadExtension(), depending on "quire.extensions.pinned".
             '../src/Extension/State/',
             '../src/Settings/{Event,Exception}/',

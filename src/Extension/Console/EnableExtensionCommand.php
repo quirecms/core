@@ -9,6 +9,8 @@ use Quire\Extension\Exception\ExtensionStateException;
 use Quire\Extension\Exception\UnknownExtensionException;
 use Quire\Extension\ExtensionManager;
 use Quire\Extension\ExtensionManifest;
+use Quire\Extension\Rebuild\AppRebuilderInterface;
+use Quire\Extension\Rebuild\RebuildFailedException;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
@@ -30,6 +32,7 @@ final readonly class EnableExtensionCommand
 {
     public function __construct(
         private ExtensionManager $extensions,
+        private AppRebuilderInterface $rebuilder,
     ) {
     }
 
@@ -89,6 +92,19 @@ final readonly class EnableExtensionCommand
             $this->extensions->enable($ids);
         } catch (UnknownExtensionException|DependencyException|ExtensionStateException $e) {
             $io->error($e->getMessage());
+
+            return Command::FAILURE;
+        }
+
+        $io->writeln('Rebuilding the application and running migrations…');
+
+        try {
+            $this->rebuilder->rebuild(true, $io->write(...));
+        } catch (RebuildFailedException $e) {
+            // Don't leave extensions enabled whose migrations didn't run.
+            $this->extensions->disable($planIds);
+            $io->error(\sprintf('%s The extensions were disabled again: %s.', $e->getMessage(), implode(', ', $planIds)));
+            $this->rebuilder->rebuild(false, $io->write(...));
 
             return Command::FAILURE;
         }

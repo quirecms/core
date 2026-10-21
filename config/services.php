@@ -36,6 +36,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Settings/{Event,Exception}/',
             '../src/Settings/{SettingDefinition,SettingRecord,SettingType}.php',
             '../src/Maker/ExtensionSkeleton.php',
+            '../src/Content/Type/{Capability,ContentTypeDefinition}.php',
+            '../src/Content/Type/Exception/',
         ]);
 
     $services->set(InstalledExtensions::class)

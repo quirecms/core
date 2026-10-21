@@ -1,0 +1,38 @@
+{
+    "name": "quire/core",
+    "type": "symfony-bundle",
+    "description": "The Quire CMS engine: kernel integration, extension system, content model and theming.",
+    "keywords": ["cms", "symfony", "quire", "extensible"],
+    "homepage": "https://quirecms.com",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "YorvoLabs",
+            "homepage": "https://quirecms.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.5",
+        "doctrine/dbal": "^4.2",
+        "doctrine/doctrine-bundle": "^3.0",
+        "symfony/cache": "^8.1",
+        "symfony/config": "^8.1",
+        "symfony/dependency-injection": "^8.1",
+        "symfony/framework-bundle": "^8.1",
+        "symfony/http-kernel": "^8.1",
+        "symfony/routing": "^8.1",
+        "symfony/twig-bundle": "^8.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Quire\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Quire\\Tests\\": "tests/"
+        }
+    },
+    "minimum-stability": "dev",
+    "prefer-stable": true
+}

@@ -49,6 +49,11 @@ final class QuireBundle extends AbstractBundle
                             ->info('Path to Composer\'s installed.json, which lists the installed extensions. Defaults to the one in the vendor directory; tests point it at fixtures.')
                             ->defaultNull()
                         ->end()
+                        ->integerNode('check_interval')
+                            ->info('How often, in seconds, each PHP worker checks whether the enabled extensions changed elsewhere (e.g. on another server), and refreshes this machine if so. 0 disables the check. Not used when pinned.')
+                            ->defaultValue(5)
+                            ->min(0)
+                        ->end()
                     ->end()
                     ->validate()
                         ->ifTrue(static fn (array $extensions): bool => !$extensions['pinned'] && [] !== $extensions['enabled'])
@@ -118,17 +123,23 @@ final class QuireBundle extends AbstractBundle
         if ($config['pinned']) {
             $enabledIds = $config['enabled'];
             $stateAvailable = true;
+            $stateHash = null;
         } else {
             $state = CompileTimeState::read();
             $enabledIds = $state->enabledIds;
             $stateAvailable = $state->available;
-            $builder->addResource(new ExtensionStateResource($state->hash()));
+            $stateHash = $state->hash();
+            $builder->addResource(new ExtensionStateResource($stateHash));
         }
 
         $projectDir = $builder->getParameter('kernel.project_dir');
 
         $builder->setParameter('quire.composer.installed_json', $installedJson);
         $builder->setParameter('quire.extensions.state_available', $stateAvailable);
+        // What the build was made for, so workers notice changes made elsewhere (null when pinned).
+        $builder->setParameter('quire.extensions.state_hash', $stateHash);
+        $builder->setParameter('quire.extensions.check_interval', $config['check_interval']);
+        $builder->setParameter('quire.runtime.default_admin_url', 'http://localhost:2019');
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
             ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', \dirname(__DIR__).\DIRECTORY_SEPARATOR.'extend.php');
@@ -137,7 +148,7 @@ final class QuireBundle extends AbstractBundle
     /**
      * The "quire.extensions" configuration, processed early: it's needed before the regular loading phase.
      *
-     * @return array{pinned: bool, enabled: list<string>, installed_json: ?string}
+     * @return array{pinned: bool, enabled: list<string>, installed_json: ?string, check_interval: int}
      */
     private function extensionsConfig(ContainerBuilder $builder): array
     {
@@ -156,7 +167,7 @@ final class QuireBundle extends AbstractBundle
         /** @var list<array<mixed>> $configs */
         $configs = $builder->getParameterBag()->resolveValue($builder->getExtensionConfig($extension->getAlias()));
 
-        /** @var array{extensions: array{pinned: bool, enabled: list<string>, installed_json: ?string}} $processed */
+        /** @var array{extensions: array{pinned: bool, enabled: list<string>, installed_json: ?string, check_interval: int}} $processed */
         $processed = new Processor()->processConfiguration($configuration, $configs);
 
         return $processed['extensions'];

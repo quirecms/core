@@ -57,6 +57,14 @@ final readonly class CompileTimeState
      */
     public function hash(): string
     {
-        return $this->available ? hash('xxh128', implode(',', $this->enabledIds)) : 'unavailable';
+        return $this->available ? self::hashOf($this->enabledIds) : 'unavailable';
+    }
+
+    /**
+     * @param list<string> $enabledIds Sorted
+     */
+    public static function hashOf(array $enabledIds): string
+    {
+        return hash('xxh128', implode(',', $enabledIds));
     }
 }

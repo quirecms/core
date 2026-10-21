@@ -22,6 +22,7 @@
         "symfony/config": "^8.1",
         "symfony/console": "^8.1",
         "symfony/dependency-injection": "^8.1",
+        "symfony/filesystem": "^8.1",
         "symfony/framework-bundle": "^8.1",
         "symfony/http-kernel": "^8.1",
         "symfony/process": "^8.1",

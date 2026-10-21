@@ -21,9 +21,9 @@ final class MigrationOrderTest extends TestCase
         $versions = [
             'DoctrineMigrations\Version20260101000000',
             'Acme\Reviews\Migrations\Version20250101000000',
-            'Quire\Migrations\Version20261022090000',
+            \Quire\Migrations\Version20261022090000::class,
             'Zed\Comments\Migrations\Version20270101000000',
-            'Quire\Migrations\Version20261021120000',
+            \Quire\Migrations\Version20261021120000::class,
             'Acme\Reviews\Migrations\Version20240101000000',
         ];
 
@@ -31,8 +31,8 @@ final class MigrationOrderTest extends TestCase
         usort($sorted, $order->compare(...));
 
         self::assertSame([
-            'Quire\Migrations\Version20261021120000',
-            'Quire\Migrations\Version20261022090000',
+            \Quire\Migrations\Version20261021120000::class,
+            \Quire\Migrations\Version20261022090000::class,
             'Zed\Comments\Migrations\Version20270101000000',
             'Acme\Reviews\Migrations\Version20240101000000',
             'Acme\Reviews\Migrations\Version20250101000000',

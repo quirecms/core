@@ -37,6 +37,7 @@ use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Content\Workflow\ContentWorkflow;
+use Quire\Formatter\Formatter;
 use Quire\Settings\Settings;
 
 /**
@@ -51,8 +52,6 @@ use Quire\Settings\Settings;
  */
 final readonly class ContentWriter
 {
-    private const string FORMAT_PATTERN = '/^[a-z][a-z0-9_-]{0,31}$/';
-
     private const int MAX_TITLE_LENGTH = 1000;
 
     /** Changes to these are kept in revisions. */
@@ -66,6 +65,7 @@ final readonly class ContentWriter
         private ContentWorkflow $workflow,
         private Settings $settings,
         private Slugs $slugs,
+        private Formatter $formatter,
         private EventDispatcherInterface $dispatcher,
     ) {
     }
@@ -594,7 +594,7 @@ final readonly class ContentWriter
                     default => null,
                 },
                 'locale' => \is_string($value) && Locales::isValid($value) ? null : 'Use a language tag such as "en", "de" or "pt-BR".',
-                'body_format' => \is_string($value) && 1 === preg_match(self::FORMAT_PATTERN, $value) ? null : 'Use a format name such as "markdown".',
+                'body_format' => \is_string($value) && \in_array($value, $this->formatter->profile('content')->formats, true) ? null : \sprintf('Unknown format. Use one of: %s.', implode(', ', $this->formatter->profile('content')->formats)),
                 'excerpt' => null === $value || $type->has(Capability::EXCERPT) ? null : \sprintf('%s have no excerpt.', $type->pluralLabel),
                 'author_id' => null === $value || $type->has(Capability::AUTHOR) ? null : \sprintf('%s have no author.', $type->pluralLabel),
                 'fields' => \is_array($value) && ([] === $value || !array_is_list($value)) ? null : 'Fields must be an object of names and values.',

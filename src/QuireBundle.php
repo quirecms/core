@@ -6,6 +6,8 @@ namespace Quire;
 
 use Composer\Autoload\ClassLoader;
 use Doctrine\Migrations\Version\Comparator;
+use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
+use Quire\Content\ContentRenderer;
 use Quire\Database\MigrationOrder;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
@@ -14,6 +16,11 @@ use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\DatabaseExtensionStateStore;
 use Quire\Extension\State\ExtensionStateStoreInterface;
 use Quire\Extension\State\PinnedExtensionStateStore;
+use Quire\Formatter\FormatInterface;
+use Quire\Formatter\Formatter;
+use Quire\Formatter\HtmlProcessorInterface;
+use Quire\Formatter\ShortcodeInterface;
+use Quire\Formatter\SourceProcessorInterface;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileResource;
@@ -85,6 +92,11 @@ final class QuireBundle extends AbstractBundle
             'services' => [Comparator::class => MigrationOrder::class],
         ]);
 
+        // Rendered content is cached in its own pool, so it can be cleared on its own.
+        $builder->prependExtensionConfig('framework', [
+            'cache' => ['pools' => [ContentRenderer::CACHE_POOL => ['adapter' => 'cache.app']]],
+        ]);
+
         // Extensions boot here, before other bundles process their configuration, so extenders can
         // still add to it (e.g. Twig paths).
         $this->bootExtensions($builder);
@@ -99,6 +111,11 @@ final class QuireBundle extends AbstractBundle
         $extensions = $config['extensions'];
 
         $container->import('../config/services.php');
+
+        // The formatter finds its services by this tag, however they were registered.
+        foreach ([FormatInterface::class, ShortcodeInterface::class, SourceProcessorInterface::class, HtmlProcessorInterface::class, CommonMarkExtensionInterface::class] as $interface) {
+            $builder->registerForAutoconfiguration($interface)->addTag(Formatter::SERVICE_TAG);
+        }
 
         $services = $container->services();
 
@@ -143,6 +160,9 @@ final class QuireBundle extends AbstractBundle
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
             ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', \dirname(__DIR__).\DIRECTORY_SEPARATOR.'extend.php');
+
+        // Changes when the formatter setup or any installed package changes, so cached HTML is never stale.
+        $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode($builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));
     }
 
     /**

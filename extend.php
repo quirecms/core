@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
+use Quire\Formatter\Format;
 
 /*
  * Quire core uses the same extenders as extensions. This file runs first, before any extension.
@@ -17,6 +18,15 @@ return [
         ->define('site.description', 'string', '', label: 'Site description', help: 'A short description of the site, used by search engines and when the site is shared.', group: 'site', widget: 'textarea')
         ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site')
         ->define('quire.content.revisions_keep', 'int', 50, label: 'Revisions to keep', help: 'How many revisions to keep per content item. Older ones are deleted. 0 keeps all.', group: 'content'),
+
+    new Extend\Formatter()
+        ->format('markdown', Format\MarkdownFormat::class)
+        ->format('text', Format\TextFormat::class)
+        ->format('html', Format\HtmlFormat::class)
+        // Content written by editors.
+        ->profile('content', formats: ['markdown', 'text', 'html'], shortcodes: ['*'], headingAnchors: true)
+        // Text written by visitors, e.g. comments: basic markup, no images, links marked as user-generated.
+        ->profile('comment', formats: ['markdown', 'text'], sanitizer: 'basic', images: false, linkRel: ['nofollow', 'ugc']),
 
     new Extend\ContentWorkflow()
         ->status(Status::DRAFT)

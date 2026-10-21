@@ -9,6 +9,7 @@ use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Exception\ContentOperationCancelledException;
 use Quire\Content\Exception\InvalidContentException;
 use Quire\Content\Exception\TransitionNotAllowedException;
+use Quire\Formatter\Exception\UnknownFormatException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -28,7 +29,7 @@ final class ConsoleErrors
             return $work();
         } catch (InvalidContentException $e) {
             $io->error(array_map(static fn (string $property, string $message): string => \sprintf('%s: %s', $property, $message), array_keys($e->violations), $e->violations));
-        } catch (ContentNotFoundException|ContentConflictException|TransitionNotAllowedException|ContentOperationCancelledException|\JsonException|\InvalidArgumentException $e) {
+        } catch (ContentNotFoundException|ContentConflictException|TransitionNotAllowedException|ContentOperationCancelledException|UnknownFormatException|\JsonException|\InvalidArgumentException $e) {
             $io->error($e->getMessage());
         }
 

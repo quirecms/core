@@ -41,6 +41,7 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
 
         if ($migrate) {
             $this->console(['doctrine:migrations:migrate', '--no-interaction', '--all-or-nothing', '--allow-no-migration'], $output);
+            $this->console(['quire:content:sync-indexes'], $output);
         }
 
         $output($this->workers->restart() ? "Restarted the PHP workers.\n" : "No PHP workers to restart on this machine.\n");

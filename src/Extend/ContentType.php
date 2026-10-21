@@ -4,20 +4,26 @@ declare(strict_types=1);
 
 namespace Quire\Extend;
 
+use Quire\Content\Field\FieldDefinition;
+use Quire\Content\Field\FieldType;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
 
 /**
- * Registers a content type, or adds capabilities to one that another extension registered.
+ * Registers a content type, or adds capabilities and fields to one that another extension registered.
  *
  *     new Extend\ContentType('product')
  *         ->label('Product', 'Products')
  *         ->capabilities(Capability::REVISIONS, Capability::LISTABLE, Capability::SEARCHABLE)
+ *         ->field('price', 'float', required: true, min: 0, sortable: true)
+ *         ->field('color', 'enum', choices: ['red', 'blue'], filterable: true)
  *         ->permalink('/products/{slug}')
  *         ->sortBy('title');
  *
- *     Extend\ContentType::existing('post')->addCapabilities('commentable');
+ *     Extend\ContentType::existing('post')
+ *         ->addCapabilities('commentable')
+ *         ->field('subtitle', 'string', maxLength: 200);
  *
  * Read the registered types with {@see ContentTypeRegistry}.
  *
@@ -28,6 +34,13 @@ final class ContentType implements ExtenderInterface
     private const string ID_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
 
     private const string CAPABILITY_PATTERN = '/^[a-z][a-z0-9_]*$/';
+
+    private const string FIELD_PATTERN = '/^[a-z][a-z0-9_]{0,63}$/';
+
+    /** B-tree index entries must stay well below PostgreSQL's limit of about 2700 bytes. */
+    private const int MAX_INDEXED_LENGTH = 1000;
+
+    private const int DEFAULT_INDEXED_LENGTH = 255;
 
     /** Segments of static text and placeholders, e.g. "/blog/{year}/{slug}". */
     private const string PERMALINK_PATTERN = '#^(?:/(?:[a-z0-9._~-]|\{[a-z]+\})+)+$#';
@@ -55,6 +68,9 @@ final class ContentType implements ExtenderInterface
 
     private string $sortDirection = 'asc';
 
+    /** @var list<array<string, mixed>> */
+    private array $fields = [];
+
     public function __construct(
         private readonly string $id,
         private readonly bool $existing = false,
@@ -62,7 +78,7 @@ final class ContentType implements ExtenderInterface
     }
 
     /**
-     * Changes a type registered by core or by another extension. Only capabilities can be added.
+     * Changes a type registered by core or by another extension. Only capabilities and fields can be added.
      */
     public static function existing(string $id): self
     {
@@ -98,6 +114,44 @@ final class ContentType implements ExtenderInterface
     }
 
     /**
+     * Declares a typed field, stored in the item's "fields" and checked on every save.
+     *
+     * @param FieldType|string $type       "string", "text", "int", "float", "bool", "enum", "list", "date", "datetime" or "json"
+     * @param mixed            $default    Set on new items that don't provide a value
+     * @param bool             $required   New items must have a value, and it can't be removed
+     * @param list<string|int> $choices    Allowed values, for "enum" fields
+     * @param int|float|null   $min        Smallest value, for "int" and "float" fields
+     * @param int|float|null   $max        Largest value, for "int" and "float" fields
+     * @param int|null         $maxLength  Most characters, for "string", "text" and "list" fields (per item). Indexed
+     *                                     string fields default to 255 and allow at most 1000.
+     * @param bool             $sortable   Listings can sort by it. The field gets a database index.
+     * @param bool             $filterable Listings can filter by it. The field gets a database index.
+     * @param string|null      $widget     Hint for admin interfaces, e.g. "textarea" or "color"
+     * @param int|null         $order      Position in admin forms; defaults to declaration order
+     */
+    public function field(
+        string $name,
+        FieldType|string $type,
+        mixed $default = null,
+        bool $required = false,
+        array $choices = [],
+        int|float|null $min = null,
+        int|float|null $max = null,
+        ?int $maxLength = null,
+        bool $sortable = false,
+        bool $filterable = false,
+        ?string $label = null,
+        ?string $help = null,
+        ?string $group = null,
+        ?string $widget = null,
+        ?int $order = null,
+    ): self {
+        $this->fields[] = ['name' => $name, 'type' => $type, 'default' => $default, 'required' => $required, 'choices' => $choices, 'min' => $min, 'max' => $max, 'maxLength' => $maxLength, 'sortable' => $sortable, 'filterable' => $filterable, 'label' => $label, 'help' => $help, 'group' => $group, 'widget' => $widget, 'order' => $order];
+
+        return $this;
+    }
+
+    /**
      * Default URL pattern, built from static text and the placeholders {slug}, {path} (ancestors' slugs
      * and the item's, for hierarchical types), {id}, {year}, {month} and {day}. Sites can change it.
      *
@@ -111,7 +165,8 @@ final class ContentType implements ExtenderInterface
     }
 
     /**
-     * Default order of listings: "published_at", "created_at", "updated_at", "title" or "position".
+     * Default order of listings: "published_at", "created_at", "updated_at", "title", "position", or a
+     * sortable field as "fields.<name>".
      *
      * Defaults to "position" ascending for hierarchical types and "published_at" descending otherwise.
      *
@@ -132,6 +187,11 @@ final class ContentType implements ExtenderInterface
         $all = \is_array($all) ? $all : [];
 
         $type = $this->existing ? $this->modified($context, $all) : $this->registered($context, $all);
+        $type = $this->withFields($context, $type);
+
+        if (!$this->existing) {
+            $this->validateSort($context, $type);
+        }
 
         $all[$this->id] = $type->toArray();
         $container->setParameter(ContentTypeRegistry::PARAMETER, $all);
@@ -164,11 +224,7 @@ final class ContentType implements ExtenderInterface
         $sortField = $this->sortField ?? ($hierarchical ? 'position' : 'published_at');
         $sortDirection = null === $this->sortField && !$hierarchical ? 'desc' : $this->sortDirection;
 
-        if (!\in_array($sortField, self::SORT_FIELDS, true)) {
-            throw $context->error($where, \sprintf('Listings can\'t be sorted by "%s". Use one of: %s.', $sortField, implode(', ', self::SORT_FIELDS)));
-        }
-
-        if (!\in_array($sortDirection, ['asc', 'desc'], true)) {
+        if ('asc' !== $sortDirection && 'desc' !== $sortDirection) {
             throw $context->error($where, 'The sort direction is "asc" or "desc".');
         }
 
@@ -199,7 +255,7 @@ final class ContentType implements ExtenderInterface
         }
 
         if (null !== $this->label || null !== $this->capabilities || null !== $this->permalink || null !== $this->sortField) {
-            throw $context->error($where, 'Only capabilities can be added to a type registered elsewhere. Sites change permalinks in settings.');
+            throw $context->error($where, 'Only capabilities and fields can be added to a type registered elsewhere. Sites change permalinks in settings.');
         }
 
         /** @var array<string, mixed> $existing */
@@ -219,6 +275,134 @@ final class ContentType implements ExtenderInterface
             permalink: $type->permalink,
             sortField: $type->sortField,
             sortDirection: $type->sortDirection,
+            fields: $type->fields,
+        );
+    }
+
+    private function validateSort(ExtenderContext $context, ContentTypeDefinition $type): void
+    {
+        $where = \sprintf('Extend\ContentType("%s")::sortBy()', $this->id);
+
+        if (str_starts_with($type->sortField, 'fields.')) {
+            $field = $type->field(substr($type->sortField, \strlen('fields.')));
+
+            if (!$field instanceof FieldDefinition || !$field->sortable) {
+                throw $context->error($where, \sprintf('Listings can only be sorted by fields declared with "sortable: true", which "%s" isn\'t.', $type->sortField));
+            }
+        } elseif (!\in_array($type->sortField, self::SORT_FIELDS, true)) {
+            throw $context->error($where, \sprintf('Listings can\'t be sorted by "%s". Use one of: %s, or a sortable field as "fields.<name>".', $type->sortField, implode(', ', self::SORT_FIELDS)));
+        }
+    }
+
+    private function withFields(ExtenderContext $context, ContentTypeDefinition $type): ContentTypeDefinition
+    {
+        $fields = $type->fields;
+        $nextOrder = [] === $fields ? 0 : max(array_map(static fn (FieldDefinition $field): int => $field->order, $fields)) + 10;
+
+        foreach ($this->fields as $declaration) {
+            $field = $this->fieldDefinition($context, $declaration, $nextOrder);
+
+            if (isset($fields[$field->name])) {
+                throw $context->error(\sprintf('Extend\ContentType("%s")::field("%s")', $this->id, $field->name), \sprintf('The field is already declared by "%s".', $fields[$field->name]->owner));
+            }
+
+            $fields[$field->name] = $field;
+            $nextOrder = max($nextOrder, $field->order) + 10;
+        }
+
+        uasort($fields, static fn (FieldDefinition $a, FieldDefinition $b): int => $a->order <=> $b->order);
+
+        return new ContentTypeDefinition(
+            id: $type->id,
+            label: $type->label,
+            pluralLabel: $type->pluralLabel,
+            owner: $type->owner,
+            capabilities: $type->capabilities,
+            permalink: $type->permalink,
+            sortField: $type->sortField,
+            sortDirection: $type->sortDirection,
+            fields: $fields,
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $declaration As collected by {@see field()}
+     */
+    private function fieldDefinition(ExtenderContext $context, array $declaration, int $defaultOrder): FieldDefinition
+    {
+        /** @var array{name: string, type: FieldType|string, default: mixed, required: bool, choices: list<string|int>, min: int|float|null, max: int|float|null, maxLength: ?int, sortable: bool, filterable: bool, label: ?string, help: ?string, group: ?string, widget: ?string, order: ?int} $d */
+        $d = $declaration;
+        $where = \sprintf('Extend\ContentType("%s")::field("%s")', $this->id, $d['name']);
+        $typeName = $d['type'] instanceof FieldType ? $d['type']->value : $d['type'];
+        $type = FieldType::tryFrom($typeName) ?? throw $context->error($where, \sprintf('Unknown type "%s". Use one of: %s.', $typeName, implode(', ', array_map(static fn (FieldType $t): string => $t->value, FieldType::cases()))));
+
+        $error = match (true) {
+            1 !== preg_match(self::FIELD_PATTERN, $d['name']) => 'Field names start with a lowercase letter, followed by up to 63 lowercase letters, digits or underscores.',
+            FieldType::Enum === $type && [] === $d['choices'] => 'Fields of type "enum" need a list of choices.',
+            FieldType::Enum !== $type && [] !== $d['choices'] => 'Choices only apply to fields of type "enum".',
+            \count($d['choices']) !== \count(array_unique($d['choices'], \SORT_REGULAR)) => 'The choices must be different from each other.',
+            !$type->isNumeric() && (null !== $d['min'] || null !== $d['max']) => 'min and max only apply to "int" and "float" fields.',
+            null !== $d['min'] && null !== $d['max'] && $d['min'] > $d['max'] => 'min can\'t be larger than max.',
+            null !== $d['maxLength'] && !\in_array($type, [FieldType::String, FieldType::Text, FieldType::List], true) => 'maxLength only applies to "string", "text" and "list" fields.',
+            null !== $d['maxLength'] && $d['maxLength'] < 1 => 'maxLength must be at least 1.',
+            $d['sortable'] && !$type->canBeSorted() => \sprintf('Fields of type "%s" can\'t be sortable.', $type->value),
+            $d['filterable'] && !$type->canBeFiltered() => \sprintf('Fields of type "%s" can\'t be filterable.', $type->value),
+            ($d['sortable'] || $d['filterable']) && FieldType::String === $type && ($d['maxLength'] ?? 0) > self::MAX_INDEXED_LENGTH => \sprintf('Indexed string fields can have a maxLength of at most %d, so their index entries fit.', self::MAX_INDEXED_LENGTH),
+            default => null,
+        };
+
+        if (null !== $error) {
+            throw $context->error($where, $error);
+        }
+
+        $indexedString = ($d['sortable'] || $d['filterable']) && FieldType::String === $type;
+
+        $field = new FieldDefinition(
+            name: $d['name'],
+            type: $type,
+            owner: $context->id,
+            required: $d['required'],
+            choices: $d['choices'],
+            min: $d['min'],
+            max: $d['max'],
+            maxLength: $d['maxLength'] ?? ($indexedString ? self::DEFAULT_INDEXED_LENGTH : null),
+            sortable: $d['sortable'],
+            filterable: $d['filterable'],
+            label: $d['label'],
+            help: $d['help'],
+            group: $d['group'],
+            widget: $d['widget'],
+            order: $d['order'] ?? $defaultOrder,
+        );
+
+        if (null === $d['default']) {
+            return $field;
+        }
+
+        $default = $field->normalize($d['default']);
+        $defaultError = $field->validate($default);
+
+        if (null !== $defaultError) {
+            throw $context->error($where, \sprintf('The default value doesn\'t fit the field: %s', $defaultError));
+        }
+
+        return new FieldDefinition(
+            name: $field->name,
+            type: $field->type,
+            owner: $field->owner,
+            default: $default,
+            required: $field->required,
+            choices: $field->choices,
+            min: $field->min,
+            max: $field->max,
+            maxLength: $field->maxLength,
+            sortable: $field->sortable,
+            filterable: $field->filterable,
+            label: $field->label,
+            help: $field->help,
+            group: $field->group,
+            widget: $field->widget,
+            order: $field->order,
         );
     }
 

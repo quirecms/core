@@ -28,6 +28,7 @@ use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Exception\ContentOperationCancelledException;
 use Quire\Content\Exception\InvalidContentException;
 use Quire\Content\Exception\TransitionNotAllowedException;
+use Quire\Content\Internal\Fields;
 use Quire\Content\Internal\Locales;
 use Quire\Content\Internal\Row;
 use Quire\Content\Internal\Slugs;
@@ -95,6 +96,13 @@ final readonly class ContentWriter
                 'author_id' => $command->authorId,
             ]);
 
+            $fields = [];
+
+            if (!isset($violations['fields'])) {
+                $fields = Fields::withDefaults($type, Fields::normalize($type, $command->fields));
+                $violations += Fields::violations($type, null, $fields);
+            }
+
             if (null !== $command->slug && !Slugs::isValid($command->slug)) {
                 $violations['slug'] = $this->invalidSlugMessage();
             }
@@ -132,7 +140,7 @@ final readonly class ContentWriter
                     'excerpt' => $command->excerpt,
                     'body' => $command->body,
                     'format' => $command->bodyFormat,
-                    'fields' => $this->json($command->fields),
+                    'fields' => $this->json($fields),
                     'author' => $command->authorId,
                     'search' => Locales::searchConfiguration($locale),
                 ],
@@ -169,8 +177,14 @@ final readonly class ContentWriter
             }
 
             $type = $this->types->get($current->type);
-            $values = $this->changedValues($current, $command);
+            $values = $this->changedValues($current, $command, $type);
             $violations = $this->validate($type, $values);
+
+            if (\array_key_exists('fields', $values) && !isset($violations['fields']) && \is_array($values['fields'])) {
+                /** @var array<string, mixed> $newFields */
+                $newFields = $values['fields'];
+                $violations += Fields::violations($type, $current->fields, $newFields);
+            }
 
             if (\array_key_exists('slug', $values) && !Slugs::isValid($this->string($values, 'slug'))) {
                 $violations['slug'] = $this->invalidSlugMessage();
@@ -416,6 +430,11 @@ final readonly class ContentWriter
             throw InvalidContentException::single('revision', \sprintf('The item has no revision "%s".', $revisionId));
         }
 
+        // Fields declared now come from the revision; values of fields no longer declared stay as they are.
+        $current = $this->repository->get($contentId);
+        $type = $this->types->get($current->type);
+        $fields = array_diff_key($current->fields, $type->fields) + array_intersect_key($revision->fields, $type->fields);
+
         return $this->update(new UpdateContent(
             $contentId,
             $expectedVersion,
@@ -425,7 +444,7 @@ final readonly class ContentWriter
             ->title($revision->title)
             ->body($revision->body, $revision->bodyFormat)
             ->excerpt($revision->excerpt)
-            ->fields($revision->fields));
+            ->fields($fields));
     }
 
     /**
@@ -516,7 +535,7 @@ final readonly class ContentWriter
     /**
      * @return array<string, mixed> The requested values that differ from the item's, keyed by column
      */
-    private function changedValues(Content $current, UpdateContent $command): array
+    private function changedValues(Content $current, UpdateContent $command, ContentTypeDefinition $type): array
     {
         $values = $command->changes();
 
@@ -532,6 +551,12 @@ final readonly class ContentWriter
             }
 
             $values['fields'] = $fields;
+        }
+
+        if (\array_key_exists('fields', $values) && \is_array($values['fields']) && ([] === $values['fields'] || !array_is_list($values['fields']))) {
+            /** @var array<string, mixed> $requested */
+            $requested = $values['fields'];
+            $values['fields'] = Fields::normalize($type, $requested);
         }
 
         if (\array_key_exists('title', $values) && \is_string($values['title'])) {
@@ -763,7 +788,7 @@ final readonly class ContentWriter
     private function json(mixed $value): string
     {
         // An empty PHP array is a list for json_encode(); fields are always an object.
-        return [] === $value ? '{}' : json_encode($value, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
+        return [] === $value ? '{}' : json_encode($value, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES | \JSON_PRESERVE_ZERO_FRACTION);
     }
 
     /**

@@ -37,6 +37,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Settings/{SettingDefinition,SettingRecord,SettingType}.php',
             '../src/Maker/ExtensionSkeleton.php',
             '../src/Content/Type/{Capability,ContentTypeDefinition}.php',
+            '../src/Content/Field/{FieldDefinition,FieldExpression,FieldType}.php',
+            '../src/Content/Internal/Fields.php',
             '../src/Content/Type/Exception/',
             '../src/Content/{Content,Status}.php',
             '../src/Content/{Command,Event,Exception}/',

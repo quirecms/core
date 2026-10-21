@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Quire\Content\Type;
 
+use Quire\Content\Field\FieldDefinition;
+
 /**
  * A registered kind of content, such as "post", "page" or an extension's "product".
  *
@@ -12,11 +14,12 @@ namespace Quire\Content\Type;
 final readonly class ContentTypeDefinition
 {
     /**
-     * @param string       $owner         ID of the extension that registered it, or "core"
-     * @param list<string> $capabilities  See {@see Capability}; extensions can add their own flags
-     * @param string       $permalink     Default URL pattern, e.g. "/blog/{slug}"
-     * @param string       $sortField     Default sort for listings: a column such as "published_at"
-     * @param 'asc'|'desc' $sortDirection
+     * @param string                         $owner         ID of the extension that registered it, or "core"
+     * @param list<string>                   $capabilities  See {@see Capability}; extensions can add their own flags
+     * @param string                         $permalink     Default URL pattern, e.g. "/blog/{slug}"
+     * @param string                         $sortField     Default sort for listings: a column such as "published_at"
+     * @param 'asc'|'desc'                   $sortDirection
+     * @param array<string, FieldDefinition> $fields        Keyed by name, in form order
      */
     public function __construct(
         public string $id,
@@ -27,7 +30,13 @@ final readonly class ContentTypeDefinition
         public string $permalink,
         public string $sortField,
         public string $sortDirection,
+        public array $fields = [],
     ) {
+    }
+
+    public function field(string $name): ?FieldDefinition
+    {
+        return $this->fields[$name] ?? null;
     }
 
     public function has(string $capability): bool
@@ -51,6 +60,7 @@ final readonly class ContentTypeDefinition
             'permalink' => $this->permalink,
             'sort_field' => $this->sortField,
             'sort_direction' => $this->sortDirection,
+            'fields' => array_map(static fn (FieldDefinition $field): array => $field->toArray(), $this->fields),
         ];
     }
 
@@ -61,7 +71,7 @@ final readonly class ContentTypeDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{id: string, label: string, plural_label: string, owner: string, capabilities: list<string>, permalink: string, sort_field: string, sort_direction: 'asc'|'desc'} $type */
+        /** @var array{id: string, label: string, plural_label: string, owner: string, capabilities: list<string>, permalink: string, sort_field: string, sort_direction: 'asc'|'desc', fields?: array<string, array<string, mixed>>} $type */
         $type = $data;
 
         return new self(
@@ -73,6 +83,7 @@ final readonly class ContentTypeDefinition
             permalink: $type['permalink'],
             sortField: $type['sort_field'],
             sortDirection: $type['sort_direction'],
+            fields: array_map(FieldDefinition::fromArray(...), $type['fields'] ?? []),
         );
     }
 }

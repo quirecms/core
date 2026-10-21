@@ -10,13 +10,14 @@ use Doctrine\Migrations\MigratorConfiguration;
 use Doctrine\Migrations\Version\Direction;
 use Doctrine\Migrations\Version\Version;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Database\MigrationOrder;
 use Quire\Extension\Event\ExtensionPurging;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
- * Permanently deletes extensions' data: lets each one clean up, rolls back its migrations and
- * deletes its settings.
+ * Permanently deletes extensions' data: lets each one clean up, rolls back its migrations, and
+ * deletes its settings and the values of the content fields it declares.
  *
  * Only extensions that run in the current process can be purged, because their migrations must be
  * registered to be rolled back.
@@ -31,6 +32,7 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
         private DependencyFactory $migrations,
         private Connection $connection,
         private EventDispatcherInterface $dispatcher,
+        private ContentTypeRegistry $types,
         #[Autowire(param: MigrationOrder::PARAMETER)]
         private array $migrationNamespaces,
     ) {
@@ -55,6 +57,35 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
                 ['prefix' => addcslashes($extension->id, '%_\\').'.%'],
             );
             $output(\sprintf('  Deleted %d stored setting(s).', $deleted));
+
+            $this->deleteFieldValues($extension->id, $output);
+        }
+    }
+
+    /**
+     * @param \Closure(string): void $output
+     */
+    private function deleteFieldValues(string $owner, \Closure $output): void
+    {
+        foreach ($this->types->all() as $type) {
+            $names = array_keys(array_filter($type->fields, static fn (\Quire\Content\Field\FieldDefinition $field): bool => $field->owner === $owner));
+
+            if ([] === $names) {
+                continue;
+            }
+
+            $parameters = ['type' => $type->id, 'names' => '{'.implode(',', $names).'}'];
+            $items = $this->connection->executeStatement(
+                'UPDATE content SET fields = fields - CAST(:names AS text[]) WHERE type = :type AND jsonb_exists_any(fields, CAST(:names AS text[]))',
+                $parameters,
+            );
+            // Revisions are part of the item's data too.
+            $this->connection->executeStatement(
+                'UPDATE content_revision r SET fields = r.fields - CAST(:names AS text[])
+                 FROM content c WHERE c.id = r.content_id AND c.type = :type AND jsonb_exists_any(r.fields, CAST(:names AS text[]))',
+                $parameters,
+            );
+            $output(\sprintf('  Deleted the fields %s from %d %s.', implode(', ', $names), $items, 1 === $items ? strtolower($type->label) : strtolower($type->pluralLabel)));
         }
     }
 

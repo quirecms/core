@@ -24,6 +24,10 @@ return static function (ContainerConfigurator $container): void {
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',
+            '../src/Extension/Event/',
+            '../src/Extension/ResolvedExtensions.php',
+            // The state store is chosen in QuireBundle::loadExtension(), depending on "quire.extensions.pinned".
+            '../src/Extension/State/',
         ]);
 
     $services->set(InstalledExtensions::class)

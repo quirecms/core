@@ -21,6 +21,8 @@ use Quire\Formatter\Formatter;
 use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
+use Quire\Permission\Internal\ContentAbilities;
+use Quire\Permission\Internal\PermissionsPass;
 use Quire\Settings\SettingValidatorInterface;
 use Quire\Theme\Internal\AssetsPass;
 use Quire\Theme\Internal\SlotsPass;
@@ -50,6 +52,7 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new TemplatePathsPass());
         $container->addCompilerPass(new SlotsPass());
         $container->addCompilerPass(new AssetsPass());
+        $container->addCompilerPass(new PermissionsPass());
     }
 
     public function configure(DefinitionConfigurator $definition): void
@@ -200,6 +203,7 @@ final class QuireBundle extends AbstractBundle
             ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', ExtensionBooter::coreExtendFile(), $activeTheme);
 
         PermalinkSettings::declare($builder);
+        ContentAbilities::declare($builder);
 
         // Changes when the formatter setup or any installed package changes, so cached HTML is never stale.
         $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode($builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));

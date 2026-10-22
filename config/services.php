@@ -66,6 +66,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Backup/BackupContents.php',
             '../src/User/{User,Role,CreateUser,UpdateUser}.php',
             '../src/User/Exception/',
+            '../src/Permission/Internal/{ContentAbilities,PermissionsPass}.php',
             '../src/Backup/Exception/',
             '../src/Theme/{Exception,Event}/',
             '../src/Theme/Seo/SeoTags.php',

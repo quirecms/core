@@ -7,8 +7,10 @@ namespace Quire\Content\Permalink;
 use Doctrine\DBAL\Connection;
 use Quire\Content\Content;
 use Quire\Content\ContentRepository;
+use Quire\Content\Query\ContentQuery;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Permission\Internal\Viewer;
 use Quire\Settings\Settings;
 
 /**
@@ -30,6 +32,7 @@ final readonly class PermalinkResolver
         private ContentTypeRegistry $types,
         private Settings $settings,
         private Connection $connection,
+        private Viewer $viewer,
     ) {
     }
 
@@ -53,6 +56,15 @@ final readonly class PermalinkResolver
 
         foreach ($patterns as $type => $pattern) {
             $item = $this->find($type, $pattern, $normalized, earlier: false);
+
+            if ($item instanceof Content) {
+                return $this->permalinks->path($item) === $path ? Resolution::content($item) : Resolution::redirect($this->permalinks->url($item));
+            }
+        }
+
+        // Unpublished items, for those who may preview them.
+        foreach ($patterns as $type => $pattern) {
+            $item = $this->viewer->canPreviewType($type) ? $this->find($type, $pattern, $normalized, earlier: false, drafts: true) : null;
 
             if ($item instanceof Content) {
                 return $this->permalinks->path($item) === $path ? Resolution::content($item) : Resolution::redirect($this->permalinks->url($item));
@@ -91,8 +103,11 @@ final readonly class PermalinkResolver
 
     /**
      * The visible item of the type at the path, when the path fits the pattern.
+     *
+     * Items of types the viewer may not view are found too, so the page can ask them to sign in. With
+     * $drafts, unpublished items are found as well (not trashed ones).
      */
-    private function find(string $type, PermalinkPattern $pattern, string $path, bool $earlier): ?Content
+    private function find(string $type, PermalinkPattern $pattern, string $path, bool $earlier, bool $drafts = false): ?Content
     {
         $values = $pattern->match($path);
 
@@ -101,6 +116,13 @@ final readonly class PermalinkResolver
         }
 
         $query = $this->content->query($type);
+
+        if ($drafts) {
+            $query = $query->withoutVisibilityScope()->whereSql('c.deleted_at IS NULL');
+        } elseif (!$this->viewer->canViewType($type)) {
+            $public = ContentQuery::publicCondition();
+            $query = $query->withoutVisibilityScope()->whereSql($public['sql'], $public['params']);
+        }
 
         if (isset($values['id'])) {
             if ($earlier) {

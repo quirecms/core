@@ -2,8 +2,9 @@
     A content item. Override it for all types with templates/content/single.html.twig, for one type with
     templates/content/<type>/single.html.twig, or for one item with templates/content/<type>/<slug>.html.twig.
 
-    Variables: content (the item), type (its content type), body (the body as HTML), canonical_url, site,
-    theme, and anything ContentViewing listeners added.
+    Variables: content (the item), type (its content type), body (the body as HTML), canonical_url,
+    preview (true when the item isn't published and the viewer may preview it), site, theme, and anything
+    ContentViewing listeners added.
     Slots: content.before_title, content.after_title, content.before_body, content.after_body,
     content.footer, each with { content }
 #}
@@ -13,6 +14,9 @@
 
 {% block content %}
     <article>
+        {% if preview|default(false) %}
+            <p class="notice" role="status">{{ 'Preview: this isn\'t published, so only people who may see unpublished content see it.'|trans({}, 'quire') }}</p>
+        {% endif %}
         {{ quire_slot('content.before_title', { content }) }}
         <h1>{{ content.title }}</h1>
         {% if content.publishedAt and type.has('scheduling') %}

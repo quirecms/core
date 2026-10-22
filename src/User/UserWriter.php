@@ -7,6 +7,7 @@ namespace Quire\User;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Quire\Content\Internal\Slugs;
+use Quire\Permission\Permissions;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Exception\UserNotFoundException;
 use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactoryInterface;
@@ -32,6 +33,7 @@ final readonly class UserWriter
         private Connection $connection,
         private UserRepository $users,
         private PasswordHasherFactoryInterface $hashers,
+        private Permissions $permissions,
     ) {
     }
 
@@ -322,10 +324,11 @@ final readonly class UserWriter
      */
     private function roles(array $roles, array &$violations): array
     {
-        $unknown = array_diff($roles, Role::ALL);
+        $known = array_keys(array_diff_key($this->permissions->roles(), [Role::GUEST => true]));
+        $unknown = array_diff($roles, $known);
 
         if ([] !== $unknown) {
-            $violations['roles'] = \sprintf('Unknown role "%s". Roles: %s.', reset($unknown), implode(', ', Role::ALL));
+            $violations['roles'] = \sprintf('Unknown role "%s". Roles: %s.', reset($unknown), implode(', ', $known));
         }
 
         $roles = array_values(array_unique($roles));

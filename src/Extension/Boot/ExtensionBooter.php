@@ -9,6 +9,7 @@ use Quire\Extend\Assets;
 use Quire\Extend\ExtenderContext;
 use Quire\Extend\ExtenderException;
 use Quire\Extend\ExtenderInterface;
+use Quire\Extend\Permissions;
 use Quire\Extend\Routes;
 use Quire\Extend\Views;
 use Quire\Extension\DependencyResolver;
@@ -68,6 +69,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Views::PARAMETER, []);
         $container->setParameter(Slots::PARAMETER, []);
         $container->setParameter(Assets::PARAMETER, []);
+        $container->setParameter(Permissions::PARAMETER, ['roles' => [], 'abilities' => [], 'rules' => []]);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));

@@ -7,8 +7,10 @@ use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
 use Quire\Formatter\Format;
+use Quire\Permission\Permissions;
 use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
+use Quire\User\Role;
 use Quire\User\Security\SignInListener;
 
 /*
@@ -32,9 +34,16 @@ return [
         ->define('site.homepage_listing', 'string', 'post', label: 'Homepage list', help: 'The content type whose list the homepage shows, e.g. "post".', group: 'site')
         ->define('site.homepage_page', 'string', null, label: 'Homepage page', help: 'The page the homepage shows: its ID or its path, e.g. "home".', group: 'site', nullable: true)
         ->define('site.homepage_route', 'string', null, label: 'Homepage route', help: 'The name of the extension route the homepage shows. It must not need parameters.', group: 'site', nullable: true)
+        ->define(Permissions::SETTING, 'json', [], label: 'Permission changes', help: 'Abilities granted to or revoked from roles, on top of the defaults. Change them with "bin/console quire:permissions:grant" and "revoke".', group: 'users')
         ->define(SignInListener::PASSWORD_LOGIN_SETTING, 'bool', true, label: 'Password sign-in', help: 'Whether users can sign in with a password. Turn it off when everyone signs in another way, e.g. with single sign-on.', group: 'users')
         // Read when the application is built: changing it rebuilds the application (quire:theme:use does that right away).
         ->define(Themes::SETTING, 'string', Themes::DEFAULT, label: 'Theme', help: 'The ID of the site\'s theme, e.g. "acme-dark". Empty for Quire\'s built-in templates.', group: 'appearance', nullable: true),
+
+    // Visitors are guests; users have one or more of these roles. Extensions can add more.
+    new Extend\Permissions()
+        ->role(Role::MEMBER, 'Member')
+        ->role(Role::EDITOR, 'Editor')
+        ->role(Role::ADMIN, 'Admin'),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

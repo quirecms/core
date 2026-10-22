@@ -15,11 +15,13 @@ use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Permalink\Resolution;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Permission\Internal\Viewer;
 use Quire\Settings\Settings;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
+use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
@@ -53,6 +55,7 @@ final readonly class ContentController
         private HttpKernelInterface $kernel,
         private LoggerInterface $logger,
         private LocaleSwitcher $locales,
+        private Viewer $viewer,
     ) {
     }
 
@@ -78,6 +81,13 @@ final readonly class ContentController
 
     private function single(Request $request, Content $content): Response
     {
+        if (!$this->viewer->canViewType($content->type)) {
+            return $this->denied($request);
+        }
+
+        // Only those who may preview unpublished items get here with one.
+        $preview = !$content->isPublic();
+
         // The page is in the item's language, which a translation may have.
         $request->setLocale($content->locale);
         $this->locales->setLocale($content->locale);
@@ -95,17 +105,30 @@ final readonly class ContentController
             'content/single.html.twig',
         ]);
 
-        return new Response($template->render([
+        $response = new Response($template->render([
             ...$event->variables(),
             'content' => $content,
             'type' => $this->types->get($content->type),
             'body' => $this->renderer->body($content),
             'canonical_url' => $this->permalinks->url($content, UrlGeneratorInterface::ABSOLUTE_URL),
+            'preview' => $preview,
         ]));
+
+        if ($preview) {
+            // A preview is for the people who may see it: never cached, never indexed.
+            $response->headers->set('Cache-Control', 'private, no-store');
+            $response->headers->set('X-Robots-Tag', 'noindex');
+        }
+
+        return $response;
     }
 
     private function listing(Request $request, string $type, bool $isHome): Response
     {
+        if (!$this->viewer->canViewType($type)) {
+            return $this->denied($request);
+        }
+
         $page = 1;
         $requested = $request->query->get('page');
 
@@ -195,6 +218,19 @@ final readonly class ContentController
         $this->logger->warning('Quire shows its welcome page instead of the homepage: {problem} Check the "site.homepage" settings.', ['problem' => $problem]);
 
         return new Response($this->twig->render('@Quire/home.html.twig'));
+    }
+
+    /**
+     * Visitors who may not see a page are asked to sign in and come back; signed-in users who may not
+     * see it are refused.
+     */
+    private function denied(Request $request): RedirectResponse
+    {
+        if ($this->viewer->isSignedIn()) {
+            throw new AccessDeniedHttpException('The user may not view this content.');
+        }
+
+        return new RedirectResponse($this->router->generate(LoginController::LOGIN_ROUTE, ['next' => $request->getRequestUri()]));
     }
 
     private function redirect(Request $request, string $url, int $status, bool $keepQuery = true): RedirectResponse

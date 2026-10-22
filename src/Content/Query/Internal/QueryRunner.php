@@ -15,6 +15,7 @@ use Quire\Content\Query\ContentQuery;
 use Quire\Content\Query\Exception\InvalidQueryException;
 use Quire\Content\Query\RelationLoaderInterface;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Permission\Internal\Viewer;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
 /**
@@ -52,6 +53,7 @@ final readonly class QueryRunner
         #[Autowire(param: self::PARAMETER)]
         array $config,
         private ContainerInterface $services,
+        private Viewer $viewer,
     ) {
         /** @var Config $config */
         $config = [...['scopes' => [], 'visibility' => [], 'relations' => []], ...$config];
@@ -129,6 +131,13 @@ final readonly class QueryRunner
     public function visibilityConditions(array $types): array
     {
         $conditions = [ContentQuery::publicCondition()];
+
+        // Types the viewer may not view, e.g. members-only ones for visitors, aren't listed at all.
+        $hidden = array_values(array_filter($types, fn (string $type): bool => !$this->viewer->canViewType($type)));
+
+        if ([] !== $hidden) {
+            $conditions[] = ['sql' => \sprintf('c.type NOT IN (%s)', implode(', ', array_fill(0, \count($hidden), '?'))), 'params' => $hidden];
+        }
 
         foreach ($this->config['visibility'] as $rule) {
             $ruleTypes = null === $rule['types'] ? $types : array_values(array_intersect($types, $rule['types']));

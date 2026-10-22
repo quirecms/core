@@ -1,19 +1,19 @@
 {#
     The page around every page Quire renders. Themes replace it with their own layout.html.twig.
 
-    Variables: site (site.title, site.locale, site.url, site.description), theme, and canonical_url when
-    the page has one.
+    Variables: site (site.title, site.locale, site.url, site.description, site.direction), theme, and
+    canonical_url when the page has one (quire_seo() prints it with the other SEO tags).
     Blocks: title, head, content
     Slots: head, body_start, header.nav, sidebar, footer, body_end (every theme renders them; see
     Quire\Theme\Slots::STANDARD)
 #}
 <!doctype html>
-<html lang="{{ site.locale }}">
+<html lang="{{ app.request.locale|default(site.locale) }}" dir="{{ site.direction }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ site.title }}{% endblock %}</title>
-    {% if canonical_url is defined and canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+    {{ quire_seo() }}
     {% block head %}{% endblock %}
     {{ quire_slot('head') }}
 </head>

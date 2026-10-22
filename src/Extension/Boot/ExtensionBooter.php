@@ -89,6 +89,11 @@ final readonly class ExtensionBooter
         $themes = [];
         $themeProblem = null;
 
+        // The default theme is optional: without it, the built-in templates are used, and that's no problem.
+        if (Themes::DEFAULT === $activeTheme && !$this->installed->hasTheme(Themes::DEFAULT)) {
+            $activeTheme = null;
+        }
+
         if (null !== $activeTheme) {
             try {
                 $themes = ThemeChain::resolve($this->installed->themes(), $activeTheme, $bootOrder);
@@ -108,6 +113,8 @@ final readonly class ExtensionBooter
                 $this->run(new ExtenderContext($theme->id, $theme->path, $container, $bootOrder, theme: true), $file);
             }
         }
+
+        $this->addTranslations($container, $resolved, $themes);
 
         $container->setParameter(Themes::ACTIVE_PARAMETER, $activeTheme);
         $container->setParameter(Themes::CHAIN_PARAMETER, array_map(static fn (ExtensionManifest $theme): array => ['id' => $theme->id, 'path' => $theme->path], $themes));
@@ -157,6 +164,31 @@ final readonly class ExtensionBooter
             } catch (\Throwable $e) {
                 throw new ExtenderException(\sprintf('[%s] %s (item #%d in "%s") failed: %s', $context->id, $extender::class, $position, $file, $e->getMessage()), $e->getCode(), previous: $e);
             }
+        }
+    }
+
+    /**
+     * Loads the translations/ directories of the extensions that run and of the themes in use. Later ones
+     * win for the same message: extensions in boot order, then themes from the farthest parent to the
+     * active theme; the site's own translations/ come after all of them.
+     *
+     * @param list<ExtensionManifest> $themes The active theme first
+     */
+    private function addTranslations(ContainerBuilder $container, ResolvedExtensions $resolved, array $themes): void
+    {
+        $paths = [];
+
+        foreach ([...$resolved->bootOrder, ...array_reverse($themes)] as $manifest) {
+            $directory = $manifest->path.\DIRECTORY_SEPARATOR.'translations';
+            $container->addResource(new FileExistenceResource($directory));
+
+            if (is_dir($directory)) {
+                $paths[] = $directory;
+            }
+        }
+
+        if ([] !== $paths) {
+            $container->prependExtensionConfig('framework', ['translator' => ['paths' => $paths]]);
         }
     }
 }

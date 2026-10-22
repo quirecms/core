@@ -25,6 +25,7 @@ use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Routing\RouterInterface;
+use Symfony\Component\Translation\LocaleSwitcher;
 use Twig\Environment;
 
 /**
@@ -51,6 +52,7 @@ final readonly class ContentController
         private RouterInterface $router,
         private HttpKernelInterface $kernel,
         private LoggerInterface $logger,
+        private LocaleSwitcher $locales,
     ) {
     }
 
@@ -76,6 +78,10 @@ final readonly class ContentController
 
     private function single(Request $request, Content $content): Response
     {
+        // The page is in the item's language, which a translation may have.
+        $request->setLocale($content->locale);
+        $this->locales->setLocale($content->locale);
+
         $event = new ContentViewing($content, $request);
         $this->dispatcher->dispatch($event);
 

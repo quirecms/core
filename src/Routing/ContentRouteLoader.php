@@ -54,13 +54,13 @@ final class ContentRouteLoader extends Loader
 
         $collection->add(Permalinks::HOME_ROUTE, new Route(
             path: '' === $this->prefix ? '/' : $this->prefix,
-            defaults: ['_controller' => ContentController::class.'::home'],
+            defaults: ['_controller' => ContentController::class.'::home', ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY);
 
         $collection->add(Permalinks::CONTENT_ROUTE, new Route(
             path: $this->prefix.'/{path}',
-            defaults: ['_controller' => ContentController::class.'::show'],
+            defaults: ['_controller' => ContentController::class.'::show', ExtensionRouteLoader::QUIRE_ROUTE => true],
             requirements: ['path' => '.+'],
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY);

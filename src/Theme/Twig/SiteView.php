@@ -6,6 +6,7 @@ namespace Quire\Theme\Twig;
 
 use Quire\Content\Permalink\Permalinks;
 use Quire\Settings\Settings;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
@@ -17,9 +18,13 @@ use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
  */
 final readonly class SiteView
 {
+    /** Languages written from right to left */
+    private const array RTL_LANGUAGES = ['ar', 'arc', 'ckb', 'dv', 'fa', 'ha', 'he', 'khw', 'ks', 'ps', 'sd', 'ug', 'ur', 'yi'];
+
     public function __construct(
         private Settings $settings,
         private Permalinks $permalinks,
+        private RequestStack $requests,
     ) {
     }
 
@@ -39,6 +44,18 @@ final readonly class SiteView
     public function locale(): string
     {
         return $this->settings->getString('site.locale');
+    }
+
+    /**
+     * "rtl" when the page's language is written from right to left, e.g. Arabic or Hebrew; otherwise "ltr".
+     * For `<html dir="…">`.
+     */
+    public function direction(): string
+    {
+        $locale = $this->requests->getCurrentRequest()?->getLocale() ?? $this->locale();
+        $language = strtolower((string) preg_replace('/[-_].*$/', '', $locale));
+
+        return \in_array($language, self::RTL_LANGUAGES, true) ? 'rtl' : 'ltr';
     }
 
     /**

@@ -43,7 +43,7 @@ final class ViewsEventsConsoleTest extends ExtenderTestCase
         self::assertSame([
             ['slot' => 'content.after_body', 'template' => '@reviews/summary.html.twig', 'class' => null, 'priority' => 0, 'owner' => 'acme-reviews'],
             ['slot' => 'footer', 'template' => null, 'class' => FixtureSlot::class, 'priority' => 5, 'owner' => 'acme-reviews'],
-        ], $this->container->getParameter(Slots::PARAMETER));
+        ], $this->container->getParameterBag()->all()[Slots::PARAMETER]);
     }
 
     public function testViewsRejectInvalidSlots(): void

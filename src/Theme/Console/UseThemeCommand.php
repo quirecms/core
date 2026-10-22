@@ -74,7 +74,8 @@ final readonly class UseThemeCommand
             try {
                 $this->themes->use($previous);
             } catch (ThemeException) {
-                $this->themes->use(null);
+                // E.g. the default theme, which isn't installed: setting it again is refused.
+                Themes::DEFAULT === $previous ? $this->themes->useDefault() : $this->themes->use(null);
             }
 
             $io->error(\sprintf('%s The previous theme is back in use.', $e->getMessage()));

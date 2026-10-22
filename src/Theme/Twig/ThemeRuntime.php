@@ -8,9 +8,11 @@ use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Exception\AssetNotFoundException;
+use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Slots;
 use Quire\Theme\ThemeAssets;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\RequestStack;
 use Twig\Error\RuntimeError;
 use Twig\Extension\RuntimeExtensionInterface;
 
@@ -25,10 +27,12 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     public function __construct(
         private Slots $slots,
         private ThemeAssets $assets,
+        private SeoRenderer $seo,
         private Settings $settings,
         private SettingsSchema $schema,
         #[Autowire(param: ExtensionBooter::BOOT_ORDER_PARAMETER)]
         private array $extensions,
+        private RequestStack $requests,
     ) {
     }
 
@@ -74,6 +78,36 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
         } catch (AssetNotFoundException $e) {
             throw new RuntimeError($e->getMessage(), previous: $e);
         }
+    }
+
+    /**
+     * `{{ quire_seo() }}` in a layout's <head>: the description, canonical URL, Open Graph and Twitter
+     * tags and structured data of the page, from the template's variables.
+     *
+     * @param array<string, mixed> $context
+     */
+    public function seo(array $context): string
+    {
+        return $this->seo->render($context);
+    }
+
+    /**
+     * `{{ post.publishedAt|quire_date }}`: a date written the way the page's language writes it, e.g.
+     * "22 October 2026" in English and "22. Oktober 2026" in German.
+     *
+     * @param string $style "long" (default), "medium", "short" or "full"
+     */
+    public function date(?\DateTimeInterface $date, string $style = 'long'): string
+    {
+        if (!$date instanceof \DateTimeInterface) {
+            return '';
+        }
+
+        $styles = ['full' => \IntlDateFormatter::FULL, 'long' => \IntlDateFormatter::LONG, 'medium' => \IntlDateFormatter::MEDIUM, 'short' => \IntlDateFormatter::SHORT];
+        $locale = $this->requests->getCurrentRequest()?->getLocale() ?? $this->settings->getString('site.locale');
+        $formatter = new \IntlDateFormatter($locale, $styles[$style] ?? throw new RuntimeError(\sprintf('Unknown date style "%s". Use "full", "long", "medium" or "short".', $style)), \IntlDateFormatter::NONE, date_default_timezone_get());
+
+        return (string) $formatter->format($date);
     }
 
     /**

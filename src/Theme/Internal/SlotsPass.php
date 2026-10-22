@@ -25,7 +25,7 @@ final class SlotsPass implements CompilerPassInterface
         }
 
         /** @var list<array{slot: string, template: ?string, class: ?string, priority: int, owner: string}> $fragments */
-        $fragments = $container->getParameter(Slots::PARAMETER);
+        $fragments = $container->getParameterBag()->all()[Slots::PARAMETER];
         $order = array_flip(array_keys($fragments));
         uksort($fragments, static fn (int $a, int $b): int => [$fragments[$a]['slot'], -$fragments[$a]['priority'], $order[$a]] <=> [$fragments[$b]['slot'], -$fragments[$b]['priority'], $order[$b]]);
         $container->setParameter(Slots::PARAMETER, array_values($fragments));

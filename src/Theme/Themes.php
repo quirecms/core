@@ -27,8 +27,11 @@ final readonly class Themes
     /** The setting that holds the active theme's ID */
     public const string SETTING = 'theme.active';
 
-    /** The active theme of a new site; null for Quire's built-in templates */
-    public const ?string DEFAULT = null;
+    /**
+     * The theme of a site that hasn't chosen one. When it isn't installed, e.g. in an application that
+     * Quire was added to, the site uses Quire's built-in templates instead.
+     */
+    public const string DEFAULT = 'quire-theme-default';
 
     /** @internal The ID of the theme the application was built for (null for none) */
     public const string ACTIVE_PARAMETER = 'quire.theme.active';
@@ -131,6 +134,20 @@ final readonly class Themes
     public function check(string $id): array
     {
         return ThemeChain::resolve($this->installed->themes(), $id, $this->extensions->resolve()->bootOrderIds());
+    }
+
+    /**
+     * Goes back to the default theme, or to the built-in templates when it isn't installed.
+     */
+    public function useDefault(): void
+    {
+        $reason = $this->readOnlyReason();
+
+        if (null !== $reason) {
+            throw new ThemeException($reason);
+        }
+
+        $this->settings->restoreDefault(self::SETTING);
     }
 
     /**

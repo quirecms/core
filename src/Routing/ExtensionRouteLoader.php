@@ -22,6 +22,9 @@ final class ExtensionRouteLoader extends Loader
 {
     public const string TYPE = 'quire_extensions';
 
+    /** Route default marking the pages of Quire, its extensions and the site, as opposed to an application's own */
+    public const string QUIRE_ROUTE = '_quire';
+
     private bool $loaded = false;
 
     /**
@@ -59,6 +62,7 @@ final class ExtensionRouteLoader extends Loader
 
                 if ($imported instanceof RouteCollection) {
                     $imported->addPrefix(\is_string($route['prefix'] ?? null) ? $route['prefix'] : '');
+                    $imported->addDefaults([self::QUIRE_ROUTE => true]);
                     $collection->addCollection($imported);
                 }
 
@@ -70,7 +74,7 @@ final class ExtensionRouteLoader extends Loader
 
             $collection->add($definition['name'], new Route(
                 path: $definition['path'],
-                defaults: ['_controller' => $definition['controller'], ...$definition['defaults']],
+                defaults: ['_controller' => $definition['controller'], ...$definition['defaults'], self::QUIRE_ROUTE => true],
                 requirements: $definition['requirements'],
                 methods: $definition['methods'],
             ));

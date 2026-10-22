@@ -6,6 +6,7 @@ namespace Quire\Theme\Twig;
 
 use Twig\Extension\AbstractExtension;
 use Twig\Extension\GlobalsInterface;
+use Twig\TwigFilter;
 use Twig\TwigFunction;
 
 /**
@@ -21,6 +22,13 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
     ) {
     }
 
+    public function getFilters(): array
+    {
+        return [
+            new TwigFilter('quire_date', [ThemeRuntime::class, 'date']),
+        ];
+    }
+
     public function getFunctions(): array
     {
         return [
@@ -29,6 +37,7 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_setting', [ThemeRuntime::class, 'setting']),
             new TwigFunction('quire_extension_enabled', [ThemeRuntime::class, 'extensionEnabled']),
             new TwigFunction('quire_asset', [ThemeRuntime::class, 'asset']),
+            new TwigFunction('quire_seo', [ThemeRuntime::class, 'seo'], ['needs_context' => true, 'is_safe' => ['html']]),
         ];
     }
 

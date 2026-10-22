@@ -9,6 +9,7 @@ use Quire\Theme\Themes;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 
 /**
  * Sets the order in which Twig looks for templates, first match wins:
@@ -22,6 +23,9 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
  *
  * Each theme's templates are also available as "@<theme-id>/…", so a theme or the site can extend a
  * template it overrides, and each extension's as "@!<namespace>/…", without the overrides.
+ *
+ * Themes override templates of Symfony bundles like the site does, in templates/bundles/<Name>Bundle/,
+ * e.g. the error pages in templates/bundles/TwigBundle/Exception/error404.html.twig.
  *
  * TwigBundle adds configured paths before the site's templates/, so themes can't use them: this pass
  * appends to what TwigBundle set up.
@@ -65,6 +69,8 @@ final class TemplatePathsPass implements CompilerPassInterface
             }
         }
 
+        $this->addBundleOverrides($loader, $siteDirectory, $themeDirectories);
+
         // Last: Quire's minimal built-in templates, e.g. layout.html.twig, for what no theme provides.
         $loader->addMethodCall('addPath', [\dirname(__DIR__, 3).\DIRECTORY_SEPARATOR.'templates']);
 
@@ -81,5 +87,40 @@ final class TemplatePathsPass implements CompilerPassInterface
             $loader->addMethodCall('addPath', [$registered['directory'], $registered['namespace']]);
             $loader->addMethodCall('addPath', [$registered['directory'], '!'.$registered['namespace']]);
         }
+    }
+
+    /**
+     * Puts each theme's templates/bundles/<Name>Bundle/ after the site's and before the bundle's own.
+     *
+     * @param list<string> $themeDirectories The active theme's first
+     */
+    private function addBundleOverrides(Definition $loader, string $siteDirectory, array $themeDirectories): void
+    {
+        /** @var list<array{0: string, 1: list<mixed>}> $calls */
+        $calls = $loader->getMethodCalls();
+
+        foreach ($themeDirectories as $themeDirectory) {
+            $overrides = glob($themeDirectory.'/bundles/*Bundle', \GLOB_ONLYDIR);
+
+            foreach (false === $overrides ? [] : $overrides as $override) {
+                $namespace = substr(basename($override), 0, -\strlen('Bundle'));
+                $siteOverride = $siteDirectory.'/bundles/'.basename($override);
+
+                $position = \count($calls);
+
+                foreach ($calls as $index => [$method, $arguments]) {
+                    if ('addPath' === $method && ($arguments[1] ?? null) === $namespace && $arguments[0] !== $siteOverride) {
+                        $position = $index;
+
+                        break;
+                    }
+                }
+
+                // Before the bundle's own templates; TwigBundle has none, its error pages are only overrides.
+                array_splice($calls, $position, 0, [['addPath', [$override, $namespace]]]);
+            }
+        }
+
+        $loader->setMethodCalls($calls);
     }
 }

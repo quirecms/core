@@ -10,6 +10,7 @@ use Quire\Extend\Routes;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\InstalledExtensions;
 use Quire\Tests\Extension\FakeComposerInstallation;
+use Quire\Theme\Themes;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
@@ -134,12 +135,43 @@ final class ExtensionBooterTest extends TestCase
         }
     }
 
+    public function testTheDefaultThemeIsOptional(): void
+    {
+        $this->boot([], Themes::DEFAULT);
+        $parameters = $this->container->getParameterBag()->all();
+        self::assertNull($parameters[Themes::ACTIVE_PARAMETER], 'Not installed: the built-in templates, without a problem to report.');
+        self::assertNull($parameters[Themes::PROBLEM_PARAMETER]);
+
+        $this->boot([], 'acme-missing');
+        $parameters = $this->container->getParameterBag()->all();
+        self::assertSame('acme-missing', $parameters[Themes::ACTIVE_PARAMETER]);
+        self::assertIsString($parameters[Themes::PROBLEM_PARAMETER]);
+        self::assertStringStartsWith('No theme with ID "acme-missing" is installed.', $parameters[Themes::PROBLEM_PARAMETER], 'Any other theme that\'s missing is a problem.');
+    }
+
+    public function testThemesAndExtensionsBringTheirTranslations(): void
+    {
+        $this->composer->addPackage('acme/dark', 'quire-theme', ['extra' => ['quire' => ['theme' => ['parent' => 'acme-base']]]])
+            ->addFile('acme/dark', 'translations/messages.en.yaml', '')
+            ->addPackage('acme/base', 'quire-theme')
+            ->addFile('acme/base', 'translations/messages.en.yaml', '')
+            ->addFile('acme/reviews', 'translations/messages.en.yaml', '');
+
+        $this->boot(['acme-reviews', 'acme-comments'], 'acme-dark');
+
+        self::assertSame([['translator' => ['paths' => [
+            $this->composer->packagePath('acme/reviews').'/translations',
+            $this->composer->packagePath('acme/base').'/translations',
+            $this->composer->packagePath('acme/dark').'/translations',
+        ]]]], $this->container->getExtensionConfig('framework'), 'Later ones win: the active theme\'s over its parent\'s over the extensions\'.');
+    }
+
     /**
      * @param list<string> $enabledIds
      */
-    private function boot(array $enabledIds): \Quire\Extension\ResolvedExtensions
+    private function boot(array $enabledIds, ?string $activeTheme = null): \Quire\Extension\ResolvedExtensions
     {
         return new ExtensionBooter(new InstalledExtensions($this->composer->installedJsonPath()))
-            ->boot($this->container, $enabledIds, $this->composer->projectDir().'/extend.php');
+            ->boot($this->container, $enabledIds, $this->composer->projectDir().'/extend.php', activeTheme: $activeTheme);
     }
 }

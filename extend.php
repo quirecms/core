@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Quire\Content\Query\Relation;
 use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
@@ -49,4 +50,10 @@ return [
         ->capabilities(Capability::HIERARCHICAL, Capability::REVISIONS, Capability::SEARCHABLE, Capability::AUTHOR)
         ->permalink('/{path}')
         ->sortBy('position'),
+
+    // Relations every query can load with ->with(...).
+    new Extend\Query()
+        ->relation('parent', Relation\ParentLoader::class)
+        ->relation('children', Relation\ChildrenLoader::class)
+        ->relation('translations', Relation\TranslationsLoader::class),
 ];

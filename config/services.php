@@ -48,6 +48,9 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Revision/Revision.php',
             '../src/Content/Workflow/ContentSubject.php',
             '../src/Content/Console/ConsoleErrors.php',
+            '../src/Content/Query/{ContentPage,ContentQuery}.php',
+            '../src/Content/Query/Exception/',
+            '../src/Content/Query/Internal/{NoMatch,QueryFields,QueryServicesPass}.php',
         ]);
 
     $services->set(InstalledExtensions::class)

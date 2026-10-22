@@ -24,7 +24,7 @@ final class FieldExpression
         $text = \sprintf("(%s ->> '%s')", $column, $field->name);
 
         return match (true) {
-            $field->type->isNumeric(), FieldType::Enum === $field->type && self::hasOnlyIntChoices($field) => \sprintf('(%s::numeric)', $text),
+            self::isNumeric($field) => \sprintf('(%s::numeric)', $text),
             FieldType::Bool === $field->type => \sprintf('(%s::boolean)', $text),
             // Dates and date-times are stored as ISO 8601 text (date-times in UTC), so they sort as text.
             default => $text,
@@ -37,6 +37,14 @@ final class FieldExpression
     public static function json(FieldDefinition $field, string $column = 'fields'): string
     {
         return \sprintf("(%s -> '%s')", $column, $field->name);
+    }
+
+    /**
+     * Whether the field's values are compared as numbers: numeric fields, and enums whose choices are all integers.
+     */
+    public static function isNumeric(FieldDefinition $field): bool
+    {
+        return $field->type->isNumeric() || (FieldType::Enum === $field->type && self::hasOnlyIntChoices($field));
     }
 
     private static function hasOnlyIntChoices(FieldDefinition $field): bool

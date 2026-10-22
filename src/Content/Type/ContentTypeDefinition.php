@@ -13,6 +13,9 @@ use Quire\Content\Field\FieldDefinition;
  */
 final readonly class ContentTypeDefinition
 {
+    /** Columns that listings can be sorted by, besides sortable fields. */
+    public const array SORT_COLUMNS = ['published_at', 'created_at', 'updated_at', 'title', 'position'];
+
     /**
      * @param string                         $owner         ID of the extension that registered it, or "core"
      * @param list<string>                   $capabilities  See {@see Capability}; extensions can add their own flags

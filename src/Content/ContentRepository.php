@@ -7,19 +7,35 @@ namespace Quire\Content;
 use Doctrine\DBAL\Connection;
 use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Internal\Row;
+use Quire\Content\Query\ContentQuery;
+use Quire\Content\Query\Internal\QueryRunner;
 
 /**
- * Loads content items by ID, including those in the trash.
+ * Loads content items: one by ID (including those in the trash), or many with a {@see ContentQuery}.
  *
  * @api
  */
 final readonly class ContentRepository
 {
-    private const string COLUMNS = 'id, type, status, locale, translation_group_id, title, slug, parent_id, position, excerpt, body, body_format, fields, author_id, version, published_at, created_at, updated_at, deleted_at';
+    /** @internal */
+    public const string COLUMNS = 'id, type, status, locale, translation_group_id, title, slug, parent_id, position, excerpt, body, body_format, fields, author_id, version, published_at, created_at, updated_at, deleted_at';
 
     public function __construct(
         private Connection $connection,
+        private QueryRunner $queries,
     ) {
+    }
+
+    /**
+     * Starts a query for items of one or more types, e.g. `$content->query('post')->latest()->limit(5)->get()`.
+     *
+     * Only items visitors may see are returned, unless the query opts out: see {@see ContentQuery}.
+     *
+     * @throws Type\Exception\UnknownContentTypeException
+     */
+    public function query(string $type, string ...$types): ContentQuery
+    {
+        return $this->queries->query([$type, ...array_values($types)]);
     }
 
     public function find(string $id): ?Content
@@ -57,33 +73,6 @@ final readonly class ContentRepository
         $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM content WHERE id = ? FOR UPDATE', self::COLUMNS), [$id]);
 
         return false === $row ? throw ContentNotFoundException::forId($id) : self::hydrate($row);
-    }
-
-    /**
-     * The most recently created items, for the command line.
-     *
-     * @internal Sites and extensions will query content with the content query builder
-     *
-     * @return list<Content>
-     */
-    public function latest(?string $type = null, ?string $status = null, bool $trashed = false, int $limit = 50): array
-    {
-        $query = $this->connection->createQueryBuilder()
-            ->select(self::COLUMNS)
-            ->from('content')
-            ->where($trashed ? 'deleted_at IS NOT NULL' : 'deleted_at IS NULL')
-            ->orderBy('id', 'DESC')
-            ->setMaxResults($limit);
-
-        if (null !== $type) {
-            $query->andWhere('type = :type')->setParameter('type', $type);
-        }
-
-        if (null !== $status) {
-            $query->andWhere('status = :status')->setParameter('status', $status);
-        }
-
-        return array_values(array_map(self::hydrate(...), $query->fetchAllAssociative()));
     }
 
     /**

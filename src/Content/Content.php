@@ -15,6 +15,8 @@ final readonly class Content
 {
     /**
      * @param array<string, mixed> $fields
+     * @param array<string, mixed> $attributes What a query added: selected values (e.g. a comment count) and loaded
+     *                                         relations (e.g. "children"), by name. Read them as properties.
      */
     public function __construct(
         public string $id,
@@ -36,7 +38,49 @@ final readonly class Content
         public \DateTimeImmutable $createdAt,
         public \DateTimeImmutable $updatedAt,
         public ?\DateTimeImmutable $deletedAt,
+        public array $attributes = [],
     ) {
+    }
+
+    /**
+     * A value the query added, e.g. `$page->attribute('children')` or `$post->attribute('comment_count')`.
+     * Templates read them as properties: `{{ page.children }}`.
+     *
+     * @throws \LogicException when the query didn't select or load it
+     */
+    public function attribute(string $name): mixed
+    {
+        if (!\array_key_exists($name, $this->attributes)) {
+            throw new \LogicException(\sprintf('"%1$s" isn\'t loaded for this %2$s. Load relations with ->with("%1$s") on the content query, and select values with ->select("%1$s", ...).', $name, $this->type));
+        }
+
+        return $this->attributes[$name];
+    }
+
+    /**
+     * Lets templates read attributes as properties, e.g. `{{ post.comment_count }}`. In PHP, prefer
+     * {@see attribute()}, which static analysis understands.
+     *
+     * @throws \LogicException when the query didn't select or load it
+     */
+    public function __get(string $name): mixed
+    {
+        return $this->attribute($name);
+    }
+
+    public function __isset(string $name): bool
+    {
+        return \array_key_exists($name, $this->attributes);
+    }
+
+    /**
+     * @internal Used by the content query to add selected values and loaded relations
+     *
+     * @param array<string, mixed> $attributes
+     */
+    public function withAttributes(array $attributes): self
+    {
+        return clone ($this, ['attributes' => [...$this->attributes, ...$attributes]]);
     }
 
     public function field(string $name, mixed $default = null): mixed

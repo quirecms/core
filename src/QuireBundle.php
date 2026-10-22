@@ -8,6 +8,7 @@ use Composer\Autoload\ClassLoader;
 use Doctrine\Migrations\Version\Comparator;
 use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
 use Quire\Content\ContentRenderer;
+use Quire\Content\Query\Internal\QueryServicesPass;
 use Quire\Database\MigrationOrder;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
@@ -36,6 +37,11 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
  */
 final class QuireBundle extends AbstractBundle
 {
+    public function build(ContainerBuilder $container): void
+    {
+        $container->addCompilerPass(new QueryServicesPass());
+    }
+
     public function configure(DefinitionConfigurator $definition): void
     {
         $definition->rootNode()

@@ -50,8 +50,6 @@ final class ContentType implements ExtenderInterface
     /** At least one of these makes each item's URL unique. */
     private const array IDENTIFYING_PLACEHOLDERS = ['slug', 'path', 'id'];
 
-    private const array SORT_FIELDS = ['published_at', 'created_at', 'updated_at', 'title', 'position'];
-
     private ?string $label = null;
 
     private ?string $pluralLabel = null;
@@ -289,8 +287,8 @@ final class ContentType implements ExtenderInterface
             if (!$field instanceof FieldDefinition || !$field->sortable) {
                 throw $context->error($where, \sprintf('Listings can only be sorted by fields declared with "sortable: true", which "%s" isn\'t.', $type->sortField));
             }
-        } elseif (!\in_array($type->sortField, self::SORT_FIELDS, true)) {
-            throw $context->error($where, \sprintf('Listings can\'t be sorted by "%s". Use one of: %s, or a sortable field as "fields.<name>".', $type->sortField, implode(', ', self::SORT_FIELDS)));
+        } elseif (!\in_array($type->sortField, ContentTypeDefinition::SORT_COLUMNS, true)) {
+            throw $context->error($where, \sprintf('Listings can\'t be sorted by "%s". Use one of: %s, or a sortable field as "fields.<name>".', $type->sortField, implode(', ', ContentTypeDefinition::SORT_COLUMNS)));
         }
     }
 

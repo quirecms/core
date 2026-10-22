@@ -35,6 +35,14 @@ final readonly class ExtensionBooter
     }
 
     /**
+     * Quire core's own extend.php, which registers core's content types, settings and migrations.
+     */
+    public static function coreExtendFile(): string
+    {
+        return \dirname(__DIR__, 3).\DIRECTORY_SEPARATOR.'extend.php';
+    }
+
+    /**
      * @param list<string> $enabledIds
      * @param string       $siteExtendFile The project's own extend.php, which runs last
      * @param string|null  $coreExtendFile Quire core's own extend.php, which runs first

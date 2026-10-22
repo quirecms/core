@@ -60,6 +60,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Query/Internal/{NoMatch,QueryFields,QueryServicesPass}.php',
             '../src/Content/Permalink/{PermalinkPattern,Redirect,Resolution}.php',
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
+            '../src/Backup/BackupContents.php',
+            '../src/Backup/Exception/',
         ]);
 
     $services->set(InstalledExtensions::class)

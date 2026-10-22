@@ -163,7 +163,7 @@ final class QuireBundle extends AbstractBundle
         $builder->setParameter('quire.runtime.default_admin_url', 'http://localhost:2019');
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
-            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', \dirname(__DIR__).\DIRECTORY_SEPARATOR.'extend.php');
+            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', ExtensionBooter::coreExtendFile());
 
         PermalinkSettings::declare($builder);
 

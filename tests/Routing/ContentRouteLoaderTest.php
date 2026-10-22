@@ -6,6 +6,7 @@ namespace Quire\Tests\Routing;
 
 use PHPUnit\Framework\TestCase;
 use Quire\Content\Permalink\Permalinks;
+use Quire\Http\Controller\LoginController;
 use Quire\Routing\ContentRouteLoader;
 use Symfony\Component\Routing\Generator\UrlGenerator;
 use Symfony\Component\Routing\Matcher\UrlMatcher;
@@ -18,7 +19,7 @@ final class ContentRouteLoaderTest extends TestCase
     public function testContentRoutesMatchLastUnderThePrefix(): void
     {
         $routes = new RouteCollection();
-        $routes->addCollection(new ContentRouteLoader('/cms')->load('.', ContentRouteLoader::TYPE));
+        $routes->addCollection(new ContentRouteLoader('/cms', login: true)->load('.', ContentRouteLoader::TYPE));
         // An application route added afterwards still wins, even though it looks like content.
         $routes->add('app_tournaments', new Route('/cms/tournaments'));
 
@@ -35,9 +36,19 @@ final class ContentRouteLoaderTest extends TestCase
 
     public function testWithoutAPrefixTheHomepageIsTheRoot(): void
     {
-        $routes = new ContentRouteLoader('')->load('.', ContentRouteLoader::TYPE);
+        $routes = new ContentRouteLoader('', login: true)->load('.', ContentRouteLoader::TYPE);
 
         self::assertSame('/', $routes->get(Permalinks::HOME_ROUTE)?->getPath());
         self::assertSame('/{path}', $routes->get(Permalinks::CONTENT_ROUTE)?->getPath());
+        self::assertSame('/login', $routes->get(LoginController::LOGIN_ROUTE)?->getPath());
+    }
+
+    public function testApplicationsThatSignInTheirUsersHaveNoSignInPage(): void
+    {
+        $routes = new ContentRouteLoader('', login: false)->load('.', ContentRouteLoader::TYPE);
+
+        self::assertNull($routes->get(LoginController::LOGIN_ROUTE));
+        self::assertNull($routes->get(LoginController::LOGOUT_ROUTE));
+        self::assertNotNull($routes->get(Permalinks::CONTENT_ROUTE));
     }
 }

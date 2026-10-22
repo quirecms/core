@@ -9,6 +9,7 @@ use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterfa
 use Quire\Content\ContentRenderer;
 use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
+use Quire\Extend\Permissions;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\Boot\ExtensionStateResource;
@@ -28,9 +29,11 @@ use Quire\Theme\Internal\AssetsPass;
 use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
+use Quire\User\CurrentUser;
 use Quire\User\Security\UserProvider;
 use Quire\User\User;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
@@ -68,6 +71,37 @@ final class QuireBundle extends AbstractBundle
                             ->validate()
                                 ->ifTrue(static fn (mixed $prefix): bool => !\is_string($prefix) || 1 !== preg_match('#^(?:/[a-z0-9._~-]+)*$#', $prefix))
                                 ->thenInvalid('"quire.routing.prefix" must be empty or a path such as "/cms": starting with "/", in lowercase, without a trailing "/".')
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('users')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->booleanNode('login')
+                            ->info('Whether Quire\'s sign-in page and sign-out URL exist. Defaults to true, or to false with "host" users, who sign in through the application.')
+                            ->defaultNull()
+                        ->end()
+                        ->arrayNode('host')
+                            ->info('Use the users of the application Quire is installed in: whoever its firewall signs in gets a linked Quire user, with roles mapped from theirs on every request. See docs/users.md.')
+                            ->canBeEnabled()
+                            ->children()
+                                ->arrayNode('roles')
+                                    ->info('The application\'s Symfony roles and the Quire roles they give, e.g. {ROLE_ORGANIZER: editor, ROLE_SUPER_ADMIN: [admin]}. Role hierarchy applies.')
+                                    ->useAttributeAsKey('role')
+                                    ->arrayPrototype()
+                                        ->beforeNormalization()->castToArray()->end()
+                                        ->scalarPrototype()->cannotBeEmpty()->end()
+                                    ->end()
+                                ->end()
+                                ->scalarNode('display_name')
+                                    ->info('Property path of the name to show for the application\'s users, e.g. "fullName"; their user identifier by default.')
+                                    ->defaultNull()
+                                ->end()
+                                ->scalarNode('email')
+                                    ->info('Property path of the email of the application\'s users, e.g. "email"; none by default.')
+                                    ->defaultNull()
+                                ->end()
                             ->end()
                         ->end()
                     ->end()
@@ -143,6 +177,11 @@ final class QuireBundle extends AbstractBundle
         $routing = $config['routing'];
         $builder->setParameter('quire.routing.prefix', $routing['prefix']);
 
+        /** @var array{login: ?bool, host: array{enabled: bool, roles: array<string, list<string>>, display_name: ?string, email: ?string}} $users */
+        $users = $config['users'];
+        $builder->setParameter(CurrentUser::LOGIN_PARAMETER, $users['login'] ?? !$users['host']['enabled']);
+        $builder->setParameter(CurrentUser::HOST_PARAMETER, $users['host']['enabled'] ? $this->hostUsers($users['host'], $builder) : null);
+
         $container->import('../config/services.php');
 
         // The formatter finds its services by this tag, however they were registered.
@@ -161,6 +200,27 @@ final class QuireBundle extends AbstractBundle
             $services->set(ExtensionStateStoreInterface::class, DatabaseExtensionStateStore::class)
                 ->autowire();
         }
+    }
+
+    /**
+     * @param array{roles: array<string, list<string>>, display_name: ?string, email: ?string} $host
+     *
+     * @return array{roles: array<string, list<string>>, display_name: ?string, email: ?string}
+     */
+    private function hostUsers(array $host, ContainerBuilder $builder): array
+    {
+        $permissions = $builder->getParameterBag()->all()[Permissions::PARAMETER] ?? null;
+        $known = \is_array($permissions) && \is_array($permissions['roles'] ?? null) ? $permissions['roles'] : [];
+
+        foreach ($host['roles'] as $hostRole => $roles) {
+            foreach ($roles as $role) {
+                if (!isset($known[$role])) {
+                    throw new InvalidConfigurationException(\sprintf('"quire.users.host.roles.%s" gives the unknown role "%s". Roles: %s.', $hostRole, $role, implode(', ', array_keys($known))));
+                }
+            }
+        }
+
+        return ['roles' => $host['roles'], 'display_name' => $host['display_name'], 'email' => $host['email']];
     }
 
     private function bootExtensions(ContainerBuilder $builder): void

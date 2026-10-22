@@ -7,6 +7,7 @@ namespace Quire\Routing;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Http\Controller\ContentController;
 use Quire\Http\Controller\LoginController;
+use Quire\User\CurrentUser;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\Config\ContainerParametersResource;
@@ -33,6 +34,8 @@ final class ContentRouteLoader extends Loader
     public function __construct(
         #[Autowire(param: 'quire.routing.prefix')]
         private readonly string $prefix,
+        #[Autowire(param: CurrentUser::LOGIN_PARAMETER)]
+        private readonly bool $login,
         #[Autowire(param: 'kernel.environment')]
         ?string $env = null,
     ) {
@@ -59,7 +62,27 @@ final class ContentRouteLoader extends Loader
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY);
 
-        // Signing in and out: above content URLs, below every route of the application.
+        // Signing in and out: above content URLs, below every route of the application. Not there when
+        // the application signs its users in itself.
+        if ($this->login) {
+            $this->addLoginRoutes($collection);
+        }
+
+        $collection->add(Permalinks::CONTENT_ROUTE, new Route(
+            path: $this->prefix.'/{path}',
+            defaults: ['_controller' => ContentController::class.'::show', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            requirements: ['path' => '.+'],
+            methods: ['GET', 'HEAD'],
+        ), self::PRIORITY);
+
+        // Rebuild the route cache in development when the prefix changes.
+        $collection->addResource(new ContainerParametersResource(['quire.routing.prefix' => $this->prefix, CurrentUser::LOGIN_PARAMETER => $this->login]));
+
+        return $collection;
+    }
+
+    private function addLoginRoutes(RouteCollection $collection): void
+    {
         $collection->add(LoginController::LOGIN_ROUTE, new Route(
             path: $this->prefix.'/login',
             defaults: ['_controller' => LoginController::class.'::login', ExtensionRouteLoader::QUIRE_ROUTE => true],
@@ -71,17 +94,5 @@ final class ContentRouteLoader extends Loader
             defaults: ['_controller' => LoginController::class.'::logout', ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['GET', 'POST'],
         ), self::PRIORITY + 1);
-
-        $collection->add(Permalinks::CONTENT_ROUTE, new Route(
-            path: $this->prefix.'/{path}',
-            defaults: ['_controller' => ContentController::class.'::show', ExtensionRouteLoader::QUIRE_ROUTE => true],
-            requirements: ['path' => '.+'],
-            methods: ['GET', 'HEAD'],
-        ), self::PRIORITY);
-
-        // Rebuild the route cache in development when the prefix changes.
-        $collection->addResource(new ContainerParametersResource(['quire.routing.prefix' => $this->prefix]));
-
-        return $collection;
     }
 }

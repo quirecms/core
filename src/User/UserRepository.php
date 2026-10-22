@@ -64,6 +64,24 @@ final readonly class UserRepository
     }
 
     /**
+     * What the provider said about a linked identity when it was last used.
+     *
+     * @return array<string, mixed>|null Null when no user has the identity
+     */
+    public function identityClaims(string $provider, string $subject): ?array
+    {
+        $claims = $this->connection->fetchOne('SELECT claims FROM quire.user_identity WHERE provider = ? AND subject = ?', [$provider, $subject]);
+
+        if (!\is_string($claims)) {
+            return null;
+        }
+
+        $decoded = json_decode($claims, true, flags: \JSON_THROW_ON_ERROR);
+
+        return \is_array($decoded) ? array_filter($decoded, \is_string(...), \ARRAY_FILTER_USE_KEY) : [];
+    }
+
+    /**
      * @param string|null $role Only users with this role
      *
      * @return list<User> Oldest first

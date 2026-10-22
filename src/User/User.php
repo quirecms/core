@@ -54,6 +54,19 @@ final readonly class User implements UserInterface, PasswordAuthenticatedUserInt
         return \in_array($role, $this->roles, true);
     }
 
+    /**
+     * The same user with other roles, e.g. those mapped from a host application's user.
+     *
+     * @param list<string> $roles
+     */
+    public function withRoles(array $roles): self
+    {
+        $roles = array_values(array_unique($roles));
+        sort($roles);
+
+        return clone ($this, ['roles' => $roles]);
+    }
+
     public function getUserIdentifier(): string
     {
         \assert('' !== $this->id);

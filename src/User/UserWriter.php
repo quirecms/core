@@ -8,9 +8,13 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Quire\Content\Internal\Slugs;
 use Quire\Permission\Permissions;
+use Quire\User\Event\IdentityLinking;
+use Quire\User\Event\UserDeleting;
+use Quire\User\Exception\IdentityLinkRefusedException;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Exception\UserNotFoundException;
 use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactoryInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Creates and changes users. Every change of a user goes through here, so the rules hold: emails and
@@ -34,6 +38,7 @@ final readonly class UserWriter
         private UserRepository $users,
         private PasswordHasherFactoryInterface $hashers,
         private Permissions $permissions,
+        private EventDispatcherInterface $dispatcher,
     ) {
     }
 
@@ -191,21 +196,88 @@ final readonly class UserWriter
      *
      * @param array<string, mixed> $claims What the provider says about the identity
      *
-     * @throws InvalidUserException when the identity belongs to another user
+     * @throws InvalidUserException         when the identity belongs to another user
+     * @throws IdentityLinkRefusedException when a listener of IdentityLinking refuses it
      */
     public function linkIdentity(string $id, string $provider, string $subject, array $claims = []): void
     {
-        $owner = $this->users->findByIdentity($provider, $subject);
+        $this->transactional(function () use ($id, $provider, $subject, $claims): void {
+            $user = $this->get($id);
+            $owner = $this->users->findByIdentity($provider, $subject);
 
-        if ($owner instanceof User && $owner->id !== $id) {
-            throw InvalidUserException::single('identity', \sprintf('This %s identity is linked to another user.', $provider));
-        }
+            if ($owner instanceof User && $owner->id !== $id) {
+                throw InvalidUserException::single('identity', \sprintf('This %s identity is linked to another user.', $provider));
+            }
 
+            if (!$owner instanceof User) {
+                $event = new IdentityLinking($user, $provider, $subject, $claims);
+                $this->dispatcher->dispatch($event);
+
+                if ($event->isCancelled()) {
+                    throw new IdentityLinkRefusedException($event->cancelReason() ?? 'Linking the identity was refused.');
+                }
+            }
+
+            // Linked to another user meanwhile: nothing changes, and that's refused below.
+            $linked = $this->connection->executeStatement(
+                'INSERT INTO quire.user_identity (user_id, provider, subject, claims) VALUES (?, ?, ?, ?::jsonb)
+                 ON CONFLICT (provider, subject) DO UPDATE SET claims = EXCLUDED.claims, last_used_at = now()
+                 WHERE quire.user_identity.user_id = EXCLUDED.user_id',
+                [$id, $provider, $subject, json_encode((object) $claims, \JSON_THROW_ON_ERROR)],
+            );
+
+            if (0 === $linked) {
+                throw InvalidUserException::single('identity', \sprintf('This %s identity is linked to another user.', $provider));
+            }
+        });
+    }
+
+    /**
+     * Keeps what the provider says about a linked identity up to date, and when it was last used.
+     *
+     * @param array<string, mixed> $claims
+     */
+    public function updateIdentity(string $provider, string $subject, array $claims): void
+    {
         $this->connection->executeStatement(
-            'INSERT INTO quire.user_identity (user_id, provider, subject, claims) VALUES (?, ?, ?, ?::jsonb)
-             ON CONFLICT (provider, subject) DO UPDATE SET claims = EXCLUDED.claims, last_used_at = now()',
-            [$id, $provider, $subject, json_encode((object) $claims, \JSON_THROW_ON_ERROR)],
+            'UPDATE quire.user_identity SET claims = ?::jsonb, last_used_at = now() WHERE provider = ? AND subject = ?',
+            [json_encode((object) $claims, \JSON_THROW_ON_ERROR), $provider, $subject],
         );
+    }
+
+    /**
+     * Deletes a user. Their content goes to $reassignTo, or, with null, stays without an author; either
+     * way, revisions forget who made them. Extensions deal with their data on {@see UserDeleting}.
+     *
+     * @param string|null $reassignTo The ID of the user who gets their content
+     *
+     * @throws UserNotFoundException
+     * @throws InvalidUserException  When $reassignTo is the user
+     */
+    public function delete(string $id, ?string $reassignTo = null): void
+    {
+        $this->transactional(function () use ($id, $reassignTo): void {
+            $user = $this->get($id);
+            $heir = null === $reassignTo ? null : $this->get($reassignTo);
+
+            if ($heir?->id === $user->id) {
+                throw InvalidUserException::single('reassignTo', 'Choose another user to give the content to.');
+            }
+
+            $this->connection->executeStatement('UPDATE quire.content SET author_id = ? WHERE author_id = ?', [$heir?->id, $user->id]);
+            $this->dispatcher->dispatch(new UserDeleting($user, $heir));
+            $this->connection->executeStatement('DELETE FROM quire.app_user WHERE id = ?', [$user->id]);
+        });
+    }
+
+    /**
+     * How many content items the user is the author of, trashed ones included.
+     */
+    public function contentCount(string $id): int
+    {
+        $count = $this->connection->fetchOne('SELECT count(*) FROM quire.content WHERE author_id = ?', [$id]);
+
+        return \is_int($count) ? $count : (int) (\is_string($count) ? $count : 0);
     }
 
     public function unlinkIdentity(string $id, string $provider, string $subject): void

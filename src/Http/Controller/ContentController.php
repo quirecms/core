@@ -15,18 +15,19 @@ use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Permalink\Resolution;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\Viewer;
 use Quire\Settings\Settings;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Attribute\AsController;
-use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Routing\RouterInterface;
+use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Symfony\Component\Translation\LocaleSwitcher;
 use Twig\Environment;
 
@@ -82,7 +83,7 @@ final readonly class ContentController
     private function single(Request $request, Content $content): Response
     {
         if (!$this->viewer->canViewType($content->type)) {
-            return $this->denied($request);
+            throw $this->denied(ContentAbilities::name($content->type, 'view'));
         }
 
         // Only those who may preview unpublished items get here with one.
@@ -126,7 +127,7 @@ final readonly class ContentController
     private function listing(Request $request, string $type, bool $isHome): Response
     {
         if (!$this->viewer->canViewType($type)) {
-            return $this->denied($request);
+            throw $this->denied(ContentAbilities::name($type, 'view'));
         }
 
         $page = 1;
@@ -221,16 +222,15 @@ final readonly class ContentController
     }
 
     /**
-     * Visitors who may not see a page are asked to sign in and come back; signed-in users who may not
-     * see it are refused.
+     * Refused through Symfony's security: the firewall asks visitors to sign in (on Quire's sign-in page,
+     * or the host application's) and brings them back; signed-in users get 403.
      */
-    private function denied(Request $request): RedirectResponse
+    private function denied(string $ability): AccessDeniedException
     {
-        if ($this->viewer->isSignedIn()) {
-            throw new AccessDeniedHttpException('The user may not view this content.');
-        }
+        $exception = new AccessDeniedException('The user may not view this content.');
+        $exception->setAttributes([$ability]);
 
-        return new RedirectResponse($this->router->generate(LoginController::LOGIN_ROUTE, ['next' => $request->getRequestUri()]));
+        return $exception;
     }
 
     private function redirect(Request $request, string $url, int $status, bool $keepQuery = true): RedirectResponse

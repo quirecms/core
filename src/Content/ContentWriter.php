@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Content;
 
 use Doctrine\DBAL\Connection;
+use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Quire\Content\Command\CreateContent;
@@ -32,12 +33,14 @@ use Quire\Content\Internal\Fields;
 use Quire\Content\Internal\Locales;
 use Quire\Content\Internal\Row;
 use Quire\Content\Internal\Slugs;
+use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Revision\RevisionRepository;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Content\Workflow\ContentWorkflow;
 use Quire\Formatter\Formatter;
+use Quire\Routing\RouteCollisions;
 use Quire\Settings\Settings;
 
 /**
@@ -67,6 +70,8 @@ final readonly class ContentWriter
         private Slugs $slugs,
         private Formatter $formatter,
         private EventDispatcherInterface $dispatcher,
+        private Permalinks $permalinks,
+        private RouteCollisions $routes,
     ) {
     }
 
@@ -152,6 +157,7 @@ final readonly class ContentWriter
                 $this->saveRevision($content, $command->revisionMessage, $command->actorId);
             }
 
+            $this->assertReachable($content);
             $events->append(new ContentCreated($content));
 
             return $content;
@@ -230,6 +236,7 @@ final readonly class ContentWriter
                 $this->saveRevision($after, $command->revisionMessage, $command->actorId);
             }
 
+            $this->assertReachable($after);
             $events->append(new ContentUpdated($current, $after));
 
             return $after;
@@ -287,6 +294,8 @@ final readonly class ContentWriter
 
             $status = $this->workflow->apply($current, $transition);
             $after = $this->saveChanges($current, ['status' => $status, 'published_at' => $publishedAt]);
+            // The publication date can be part of the URL.
+            $this->assertReachable($after);
 
             $events->append(new ContentStatusChanged($current, $after, $transition));
 
@@ -463,6 +472,13 @@ final readonly class ContentWriter
 
         try {
             $result = $this->connection->transactional(static fn (): mixed => $operation($events));
+        } catch (ForeignKeyConstraintViolationException $e) {
+            // An author deleted meanwhile, or who made the change: a user who doesn't exist.
+            throw match (true) {
+                str_contains($e->getMessage(), 'content_author_fk') => InvalidContentException::single('author_id', 'No user has this ID.'),
+                str_contains($e->getMessage(), 'content_revision_author_fk') => InvalidContentException::single('actor_id', 'No user has this ID.'),
+                default => $e,
+            };
         } catch (UniqueConstraintViolationException $e) {
             // The checks above make these unlikely; this covers concurrent writers that got past them.
             throw match (true) {
@@ -485,6 +501,19 @@ final readonly class ContentWriter
 
         if ($event->isCancelled()) {
             throw new ContentOperationCancelledException($event->cancelReason() ?? 'The change was cancelled.');
+        }
+    }
+
+    /**
+     * Refuses URLs that a route of the site takes, where visitors would never reach the item.
+     */
+    private function assertReachable(Content $content): void
+    {
+        $url = $this->permalinks->url($content);
+        $route = '/' === $this->permalinks->path($content) ? null : $this->routes->routeTaking($url);
+
+        if (null !== $route) {
+            throw InvalidContentException::single('slug', \sprintf('The URL %s is taken by a page of the site itself (the route "%s"). Choose another slug.', $url, $route));
         }
     }
 
@@ -596,7 +625,12 @@ final readonly class ContentWriter
                 'locale' => \is_string($value) && Locales::isValid($value) ? null : 'Use a language tag such as "en", "de" or "pt-BR".',
                 'body_format' => \is_string($value) && \in_array($value, $this->formatter->profile('content')->formats, true) ? null : \sprintf('Unknown format. Use one of: %s.', implode(', ', $this->formatter->profile('content')->formats)),
                 'excerpt' => null === $value || $type->has(Capability::EXCERPT) ? null : \sprintf('%s have no excerpt.', $type->pluralLabel),
-                'author_id' => null === $value || $type->has(Capability::AUTHOR) ? null : \sprintf('%s have no author.', $type->pluralLabel),
+                'author_id' => match (true) {
+                    null === $value => null,
+                    !$type->has(Capability::AUTHOR) => \sprintf('%s have no author.', $type->pluralLabel),
+                    !\is_string($value) || !Row::isUuid($value) || false === $this->connection->fetchOne('SELECT 1 FROM quire.app_user WHERE id = ?', [$value]) => 'No user has this ID.',
+                    default => null,
+                },
                 'fields' => \is_array($value) && ([] === $value || !array_is_list($value)) ? null : 'Fields must be an object of names and values.',
                 'position' => \is_int($value) ? null : 'The position must be a whole number.',
                 default => null,

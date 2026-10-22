@@ -35,13 +35,18 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
         ?\Closure $run = null,
         #[Autowire(service: 'asset_mapper.compiled_asset_mapper_config_reader')]
         private ?CompiledAssetMapperConfigReader $compiledAssets = null,
+        #[Autowire(param: 'kernel.debug')]
+        private bool $debug = false,
     ) {
         $this->run = $run ?? $this->runProcess(...);
     }
 
     public function rebuild(bool $migrate, \Closure $output): void
     {
-        $this->console(['cache:clear'], $output);
+        // In debug mode, booting rebuilds a stale build next to the current one, which processes still
+        // running (like the command that asked for this rebuild) keep using. cache:clear would delete it
+        // under them.
+        $this->console([$this->debug ? 'cache:warmup' : 'cache:clear'], $output);
 
         if ($migrate) {
             $this->console(['quire:migrations:migrate', '--no-interaction', '--allow-no-migration'], $output);

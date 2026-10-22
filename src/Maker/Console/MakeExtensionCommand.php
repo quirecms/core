@@ -11,8 +11,10 @@ use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\ConsoleEvents;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Filesystem\Path;
 use Symfony\Component\Process\Process;
@@ -39,7 +41,8 @@ final readonly class MakeExtensionCommand
     private \Closure $run;
 
     /**
-     * @param (\Closure(list<string>, \Closure(string): void): int)|null $run Runs a command and returns its exit code; replaceable in tests
+     * @param (\Closure(list<string>, \Closure(string): void): int)|null $run        Runs a command and returns its exit code; replaceable in tests
+     * @param EventDispatcherInterface|null                              $dispatcher To load the console's listeners before the application is rebuilt
      */
     public function __construct(
         private ExtensionManager $extensions,
@@ -48,6 +51,7 @@ final readonly class MakeExtensionCommand
         #[Autowire(param: 'kernel.environment')]
         private string $environment,
         ?\Closure $run = null,
+        private ?EventDispatcherInterface $dispatcher = null,
     ) {
         $this->run = $run ?? $this->runProcess(...);
     }
@@ -130,6 +134,7 @@ final readonly class MakeExtensionCommand
 
     private function install(SymfonyStyle $io, ExtensionSkeleton $skeleton, string $parentDirectory): bool
     {
+        $this->keepEndOfCommandListenersLoaded();
         $io->section('Installing the extension with Composer');
 
         // A path repository makes Composer install the extension from the local directory, as a symlink.
@@ -137,7 +142,9 @@ final readonly class MakeExtensionCommand
 
         foreach ([
             ['composer', 'config', 'repositories.'.str_replace('/', '-', $parentDirectory), $repository],
-            ['composer', 'require', $skeleton->package.':*@dev', '--no-interaction'],
+            // Without the project's scripts: their cache:clear would delete the build this command runs on,
+            // and the next step rebuilds the application anyway.
+            ['composer', 'require', $skeleton->package.':*@dev', '--no-interaction', '--no-scripts'],
         ] as $command) {
             if (0 !== ($this->run)($command, $io->write(...))) {
                 $io->error(\sprintf('"%s" failed; see the output above. The extension\'s files were kept, so you can retry.', implode(' ', $command)));
@@ -166,5 +173,17 @@ final readonly class MakeExtensionCommand
         return new Process($command, $this->projectDir, timeout: 900)->run(static function (string $type, string $buffer) use ($output): void {
             $output($buffer);
         });
+    }
+
+    /**
+     * Rebuilding the application in other processes, as installing does more than once, deletes the
+     * build this command runs on, while it still has to run the console's listeners when it ends.
+     * Loading them now keeps them working.
+     */
+    private function keepEndOfCommandListenersLoaded(): void
+    {
+        foreach ([ConsoleEvents::TERMINATE, ConsoleEvents::ERROR] as $event) {
+            $this->dispatcher?->getListeners($event);
+        }
     }
 }

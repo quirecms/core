@@ -48,7 +48,7 @@ final class MakeExtensionCommandTest extends TestCase
         self::assertFileExists($this->projectDir.'/extensions/reviews/tests/MessagesTest.php');
         self::assertSame([
             'composer config repositories.extensions {"type":"path","url":"extensions/*"}',
-            'composer require acme/reviews:*@dev --no-interaction',
+            'composer require acme/reviews:*@dev --no-interaction --no-scripts',
             'bin/console quire:extension:enable acme-reviews --no-interaction --env=test',
         ], $this->commands);
         self::assertStringContainsString('Reviews is ready. Open /reviews on your site', preg_replace('/\s+/', ' ', $tester->getDisplay()) ?? '');

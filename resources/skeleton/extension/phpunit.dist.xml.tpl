@@ -11,6 +11,8 @@
     <php>
         <!-- Used unless DATABASE_URL is already set; "_test" is added to the database name. -->
         <env name="DATABASE_URL" value="postgresql://app:!ChangeMe!@database:5432/app?serverVersion=18"/>
+        <!-- Keeps the log of console commands that tests run out of the test output. -->
+        <server name="SHELL_VERBOSITY" value="-1"/>
     </php>
 
     <testsuites>

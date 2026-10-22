@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Maker;
 
 use Quire\Extension\ManifestParser;
+use Quire\Maker\Internal\SkeletonFiles;
 
 /**
  * Renders the files of a new extension from the templates in resources/skeleton/extension.
@@ -75,24 +76,7 @@ final readonly class ExtensionSkeleton
             '@@VERSION@@' => $version,
         ];
 
-        $root = \dirname(__DIR__, 2).'/resources/skeleton/extension';
-        $files = [];
-        $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($root, \FilesystemIterator::SKIP_DOTS));
-
-        foreach ($iterator as $file) {
-            if (!$file instanceof \SplFileInfo || !$file->isFile()) {
-                continue;
-            }
-
-            // Templates end in ".tpl", so tools don't analyse them as code.
-            $relative = substr($file->getPathname(), \strlen($root) + 1, -\strlen('.tpl'));
-            $relative = str_replace('Version.php', $version.'.php', $relative);
-            $files[$relative] = strtr((string) file_get_contents($file->getPathname()), $replacements);
-        }
-
-        ksort($files);
-
-        return $files;
+        return SkeletonFiles::render('extension', $replacements, ['Version.php' => $version.'.php']);
     }
 
     private function studly(string $name): string

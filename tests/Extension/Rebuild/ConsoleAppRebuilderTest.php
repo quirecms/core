@@ -63,6 +63,19 @@ final class ConsoleAppRebuilderTest extends TestCase
         self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console asset-map:compile --env=prod'], $this->commands);
     }
 
+    public function testInDebugModeTheBuildIsWarmedUpRatherThanDeleted(): void
+    {
+        $rebuilder = new ConsoleAppRebuilder($this->workers, '/app', 'dev', function (array $command): int {
+            $this->commands[] = implode(' ', \array_slice($command, 1));
+
+            return 0;
+        }, debug: true);
+
+        $rebuilder->rebuild(false, static function (): void {});
+
+        self::assertSame(['/app/bin/console cache:warmup --env=dev'], $this->commands, 'A running process keeps using the build it started with.');
+    }
+
     public function testReportsWhenThereAreNoWorkers(): void
     {
         $this->workers = new FakeWorkerRestarter(hasWorkers: false);

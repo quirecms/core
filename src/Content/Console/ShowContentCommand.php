@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Content\Console;
 
 use Quire\Content\ContentRepository;
+use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Workflow\ContentWorkflow;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -17,6 +18,7 @@ final readonly class ShowContentCommand
     public function __construct(
         private ContentRepository $repository,
         private ContentWorkflow $workflow,
+        private Permalinks $permalinks,
     ) {
     }
 
@@ -34,6 +36,7 @@ final readonly class ShowContentCommand
                 ['Type' => $content->type],
                 ['Title' => $content->title],
                 ['Slug' => $content->slug],
+                ['URL' => $this->permalinks->path($content).($content->isPublic() ? '' : ' (not public)')],
                 ['Status' => $content->status.($content->isTrashed() ? ' (in the trash)' : '')],
                 ['Transitions' => $content->isTrashed() ? '' : implode(', ', $this->workflow->enabledTransitions($content))],
                 ['Locale' => $content->locale],

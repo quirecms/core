@@ -7,6 +7,7 @@ namespace Quire;
 use Composer\Autoload\ClassLoader;
 use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
 use Quire\Content\ContentRenderer;
+use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
@@ -20,6 +21,7 @@ use Quire\Formatter\Formatter;
 use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
+use Quire\Settings\SettingValidatorInterface;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileResource;
@@ -44,6 +46,19 @@ final class QuireBundle extends AbstractBundle
     {
         $definition->rootNode()
             ->children()
+                ->arrayNode('routing')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->scalarNode('prefix')
+                            ->info('Path that the homepage and all content URLs are under, e.g. "/cms" when Quire is added to an existing application. Empty for the root of the site.')
+                            ->defaultValue('')
+                            ->validate()
+                                ->ifTrue(static fn (mixed $prefix): bool => !\is_string($prefix) || 1 !== preg_match('#^(?:/[a-z0-9._~-]+)*$#', $prefix))
+                                ->thenInvalid('"quire.routing.prefix" must be empty or a path such as "/cms": starting with "/", in lowercase, without a trailing "/".')
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
                 ->arrayNode('extensions')
                     ->addDefaultsIfNotSet()
                     ->children()
@@ -93,10 +108,15 @@ final class QuireBundle extends AbstractBundle
     {
         /** @var array{pinned: bool, enabled: list<string>} $extensions */
         $extensions = $config['extensions'];
+        /** @var array{prefix: string} $routing */
+        $routing = $config['routing'];
+        $builder->setParameter('quire.routing.prefix', $routing['prefix']);
 
         $container->import('../config/services.php');
 
         // The formatter finds its services by this tag, however they were registered.
+        $builder->registerForAutoconfiguration(SettingValidatorInterface::class)->addTag(SettingValidatorInterface::TAG);
+
         foreach ([FormatInterface::class, ShortcodeInterface::class, SourceProcessorInterface::class, HtmlProcessorInterface::class, CommonMarkExtensionInterface::class] as $interface) {
             $builder->registerForAutoconfiguration($interface)->addTag(Formatter::SERVICE_TAG);
         }
@@ -144,6 +164,8 @@ final class QuireBundle extends AbstractBundle
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
             ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', \dirname(__DIR__).\DIRECTORY_SEPARATOR.'extend.php');
+
+        PermalinkSettings::declare($builder);
 
         // Changes when the formatter setup or any installed package changes, so cached HTML is never stale.
         $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode($builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));

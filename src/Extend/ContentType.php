@@ -6,6 +6,7 @@ namespace Quire\Extend;
 
 use Quire\Content\Field\FieldDefinition;
 use Quire\Content\Field\FieldType;
+use Quire\Content\Permalink\PermalinkPattern;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
@@ -41,14 +42,6 @@ final class ContentType implements ExtenderInterface
     private const int MAX_INDEXED_LENGTH = 1000;
 
     private const int DEFAULT_INDEXED_LENGTH = 255;
-
-    /** Segments of static text and placeholders, e.g. "/blog/{year}/{slug}". */
-    private const string PERMALINK_PATTERN = '#^(?:/(?:[a-z0-9._~-]|\{[a-z]+\})+)+$#';
-
-    private const array PLACEHOLDERS = ['slug', 'path', 'id', 'year', 'month', 'day'];
-
-    /** At least one of these makes each item's URL unique. */
-    private const array IDENTIFYING_PLACEHOLDERS = ['slug', 'path', 'id'];
 
     private ?string $label = null;
 
@@ -422,29 +415,10 @@ final class ContentType implements ExtenderInterface
 
     private function validatePermalink(ExtenderContext $context, string $where, string $pattern, bool $hierarchical): void
     {
-        if (1 !== preg_match(self::PERMALINK_PATTERN, $pattern)) {
-            throw $context->error($where, \sprintf('The permalink "%s" must start with "/" and contain only lowercase letters, digits, "-", "_", ".", "~" and placeholders such as {slug}.', $pattern));
-        }
-
-        preg_match_all('/\{([a-z]+)\}/', $pattern, $matches);
-        $placeholders = $matches[1];
-
-        foreach ($placeholders as $placeholder) {
-            if (!\in_array($placeholder, self::PLACEHOLDERS, true)) {
-                throw $context->error($where, \sprintf('The permalink "%s" uses the unknown placeholder {%s}. Use: {%s}.', $pattern, $placeholder, implode('}, {', self::PLACEHOLDERS)));
-            }
-        }
-
-        if (\count($placeholders) !== \count(array_unique($placeholders))) {
-            throw $context->error($where, \sprintf('The permalink "%s" uses a placeholder more than once.', $pattern));
-        }
-
-        if ([] === array_intersect($placeholders, self::IDENTIFYING_PLACEHOLDERS)) {
-            throw $context->error($where, \sprintf('The permalink "%s" needs {slug}, {path} or {id}, so each item gets its own URL.', $pattern));
-        }
-
-        if (\in_array('path', $placeholders, true) && !$hierarchical) {
-            throw $context->error($where, \sprintf('The permalink "%s" uses {path}, which only hierarchical types have. Use {slug}.', $pattern));
+        try {
+            PermalinkPattern::parse($pattern, $hierarchical);
+        } catch (\InvalidArgumentException $e) {
+            throw $context->error($where, $e->getMessage());
         }
     }
 }

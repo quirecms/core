@@ -20,6 +20,11 @@ final class ContentExtension extends AbstractExtension
     {
         return [
             new TwigFunction('quire_content', [ContentRuntime::class, 'query']),
+            new TwigFunction('quire_url', [ContentRuntime::class, 'url']),
+            new TwigFunction('quire_listing_url', [ContentRuntime::class, 'listingUrl']),
+            new TwigFunction('quire_home_url', [ContentRuntime::class, 'homeUrl']),
+            new TwigFunction('quire_body', [ContentRuntime::class, 'body'], ['is_safe' => ['html']]),
+            new TwigFunction('quire_excerpt', [ContentRuntime::class, 'excerpt']),
         ];
     }
 }

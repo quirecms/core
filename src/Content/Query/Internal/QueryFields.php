@@ -28,6 +28,7 @@ final readonly class QueryFields
     private const array FILTER_COLUMNS = [
         'id' => 'uuid',
         'slug' => 'string',
+        'path' => 'string',
         'locale' => 'string',
         'status' => 'string',
         'parent_id' => 'uuid',

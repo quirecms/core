@@ -1,0 +1,24 @@
+{#
+    The page layout of Quire's own templates. Themes replace these templates.
+
+    Variables: site_title, site_locale, and canonical_url when the page has one.
+    Blocks: title, head, content
+#}
+<!doctype html>
+<html lang="{{ site_locale }}">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}{{ site_title }}{% endblock %}</title>
+    {% if canonical_url is defined and canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+    {% block head %}{% endblock %}
+</head>
+<body>
+    <header>
+        <a href="{{ quire_home_url() }}">{{ site_title }}</a>
+    </header>
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>

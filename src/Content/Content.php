@@ -26,6 +26,8 @@ final readonly class Content
         public ?string $translationGroupId,
         public string $title,
         public string $slug,
+        /** The slug, below the parent's path for hierarchical types, e.g. "about/team". Permalinks use it as {path}. */
+        public string $path,
         public ?string $parentId,
         public int $position,
         public ?string $excerpt,

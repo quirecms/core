@@ -1,0 +1,32 @@
+{#
+    A list of items of one content type, one page at a time. Override it for all types with
+    templates/content/list.html.twig, or for one type with templates/content/<type>/list.html.twig.
+
+    Variables: type (the content type), page (a ContentPage: iterate it for the items; page.page,
+    page.pageCount), is_home (whether it's the homepage), previous_url, next_url (null when there's no
+    such page), canonical_url, site_title.
+#}
+{% extends '@Quire/layout.html.twig' %}
+
+{% block title %}{{ is_home ? site_title : type.pluralLabel ~ ' – ' ~ site_title }}{% endblock %}
+
+{% block content %}
+    {% if not is_home %}<h1>{{ type.pluralLabel }}</h1>{% endif %}
+
+    {% for item in page %}
+        <article>
+            <h2><a href="{{ quire_url(item) }}">{{ item.title }}</a></h2>
+            {% if item.publishedAt %}<p><time datetime="{{ item.publishedAt|date('c') }}">{{ item.publishedAt|date('j F Y') }}</time></p>{% endif %}
+            <p>{{ quire_excerpt(item) }}</p>
+        </article>
+    {% else %}
+        <p>No {{ type.pluralLabel|lower }} yet.</p>
+    {% endfor %}
+
+    {% if previous_url or next_url %}
+        <nav aria-label="Pages">
+            {% if next_url %}<a href="{{ next_url }}" rel="next">Older {{ type.pluralLabel|lower }}</a>{% endif %}
+            {% if previous_url %}<a href="{{ previous_url }}" rel="prev">Newer {{ type.pluralLabel|lower }}</a>{% endif %}
+        </nav>
+    {% endif %}
+{% endblock %}

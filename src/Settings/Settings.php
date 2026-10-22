@@ -9,6 +9,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Quire\Settings\Event\SettingChanged;
 use Quire\Settings\Exception\InvalidSettingValueException;
 use Quire\Settings\Exception\UnknownSettingException;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 use Symfony\Contracts\Service\ResetInterface;
 
 /**
@@ -27,13 +28,16 @@ final class Settings implements ResetInterface
     private ?array $stored = null;
 
     /**
-     * @param array<string, mixed>|null $environment Environment variables; null reads the real environment
+     * @param array<string, mixed>|null           $environment Environment variables; null reads the real environment
+     * @param iterable<SettingValidatorInterface> $validators
      */
     public function __construct(
         private readonly SettingsSchema $schema,
         private readonly Connection $connection,
         private readonly EventDispatcherInterface $dispatcher,
         private readonly ?array $environment = null,
+        #[AutowireIterator(SettingValidatorInterface::TAG)]
+        private readonly iterable $validators = [],
     ) {
     }
 
@@ -150,6 +154,14 @@ final class Settings implements ResetInterface
 
         if (null !== $error) {
             throw new InvalidSettingValueException(\sprintf('Invalid value for setting "%s": %s, got %s.', $key, $error, get_debug_type($value)));
+        }
+
+        foreach ($this->validators as $validator) {
+            $error = $validator->validate($key, $value, $this);
+
+            if (null !== $error) {
+                throw new InvalidSettingValueException(\sprintf('Invalid value for setting "%s": %s', $key, $error));
+            }
         }
 
         $old = $this->get($key);

@@ -18,7 +18,7 @@ use Quire\Content\Query\Internal\QueryRunner;
 final readonly class ContentRepository
 {
     /** @internal */
-    public const string COLUMNS = 'id, type, status, locale, translation_group_id, title, slug, parent_id, position, excerpt, body, body_format, fields, author_id, version, published_at, created_at, updated_at, deleted_at';
+    public const string COLUMNS = 'id, type, status, locale, translation_group_id, title, slug, path, parent_id, position, excerpt, body, body_format, fields, author_id, version, published_at, created_at, updated_at, deleted_at';
 
     public function __construct(
         private Connection $connection,
@@ -92,6 +92,7 @@ final readonly class ContentRepository
             translationGroupId: $row->nullableString('translation_group_id'),
             title: $row->string('title'),
             slug: $row->string('slug'),
+            path: $row->string('path'),
             parentId: $row->nullableString('parent_id'),
             position: $row->int('position'),
             excerpt: $row->nullableString('excerpt'),

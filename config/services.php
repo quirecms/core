@@ -8,6 +8,7 @@ use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
+use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 
@@ -57,12 +58,17 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Query/{ContentPage,ContentQuery}.php',
             '../src/Content/Query/Exception/',
             '../src/Content/Query/Internal/{NoMatch,QueryFields,QueryServicesPass}.php',
+            '../src/Content/Permalink/{PermalinkPattern,Redirect,Resolution}.php',
+            '../src/Content/Permalink/Internal/PermalinkSettings.php',
         ]);
 
     $services->set(InstalledExtensions::class)
         ->arg('$installedJsonPath', param('quire.composer.installed_json'));
 
     $services->set(ExtensionRouteLoader::class)
+        ->tag('routing.loader');
+
+    $services->set(ContentRouteLoader::class)
         ->tag('routing.loader');
 
     $services->set(SchemaAssetFilter::class)

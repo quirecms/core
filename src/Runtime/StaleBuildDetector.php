@@ -56,7 +56,7 @@ final class StaleBuildDetector
 
         try {
             /** @var list<string> $enabledIds */
-            $enabledIds = $this->connection->fetchFirstColumn('SELECT id FROM extension WHERE enabled ORDER BY id');
+            $enabledIds = $this->connection->fetchFirstColumn('SELECT id FROM quire.extension WHERE enabled ORDER BY id');
         } catch (\Throwable) {
             // The database is unreachable; serving with the current build is the best option.
             return;

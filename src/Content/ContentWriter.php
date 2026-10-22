@@ -125,7 +125,7 @@ final readonly class ContentWriter
             $position = $command->position ?? ($type->has(Capability::HIERARCHICAL) ? $this->nextPosition($type->id, $command->parentId, $locale) : 0);
 
             $id = $this->connection->fetchOne(
-                'INSERT INTO content (type, status, locale, translation_group_id, title, slug, parent_id, position, excerpt, body, body_format, fields, author_id, search_config)
+                'INSERT INTO quire.content (type, status, locale, translation_group_id, title, slug, parent_id, position, excerpt, body, body_format, fields, author_id, search_config)
                  VALUES (:type, :status, :locale, :group, :title, :slug, :parent, :position, :excerpt, :body, :format, :fields, :author, CAST(:search AS regconfig))
                  RETURNING id',
                 [
@@ -311,7 +311,7 @@ final readonly class ContentWriter
     public function publishDue(int $limit = 100): array
     {
         $due = $this->connection->fetchAllAssociative(
-            'SELECT id, version, published_at FROM content
+            'SELECT id, version, published_at FROM quire.content
              WHERE status = ? AND published_at <= now() AND deleted_at IS NULL
              ORDER BY published_at LIMIT ?',
             [Status::SCHEDULED, $limit],
@@ -408,7 +408,7 @@ final readonly class ContentWriter
             }
 
             $this->dispatchCancellable(new ContentPurging($current));
-            $this->connection->executeStatement('DELETE FROM content WHERE id = ?', [$current->id]);
+            $this->connection->executeStatement('DELETE FROM quire.content WHERE id = ?', [$current->id]);
             $events->append(new ContentPurged($current));
 
             return $current;
@@ -521,7 +521,7 @@ final readonly class ContentWriter
         }
 
         $updated = $this->connection->executeStatement(
-            \sprintf('UPDATE content SET %s, version = version + 1, updated_at = now() WHERE id = :id AND version = :version', implode(', ', $assignments)),
+            \sprintf('UPDATE quire.content SET %s, version = version + 1, updated_at = now() WHERE id = :id AND version = :version', implode(', ', $assignments)),
             $parameters,
         );
 
@@ -637,9 +637,9 @@ final readonly class ContentWriter
     {
         return false !== $this->connection->fetchOne(
             'WITH RECURSIVE ancestor AS (
-                 SELECT id, parent_id FROM content WHERE id = :of
+                 SELECT id, parent_id FROM quire.content WHERE id = :of
                  UNION ALL
-                 SELECT c.id, c.parent_id FROM content c JOIN ancestor a ON c.id = a.parent_id
+                 SELECT c.id, c.parent_id FROM quire.content c JOIN ancestor a ON c.id = a.parent_id
              )
              SELECT 1 FROM ancestor WHERE id = :id',
             ['id' => $id, 'of' => $of],
@@ -670,12 +670,12 @@ final readonly class ContentWriter
 
         if (null === $source->translationGroupId) {
             // The first translation starts the group, named after the original. Not a content change: no new version.
-            $this->connection->executeStatement('UPDATE content SET translation_group_id = id WHERE id = ?', [$source->id]);
+            $this->connection->executeStatement('UPDATE quire.content SET translation_group_id = id WHERE id = ?', [$source->id]);
 
             return [$source->id, []];
         }
 
-        $taken = $this->connection->fetchOne('SELECT id FROM content WHERE translation_group_id = ? AND locale = ?', [$source->translationGroupId, $locale]);
+        $taken = $this->connection->fetchOne('SELECT id FROM quire.content WHERE translation_group_id = ? AND locale = ?', [$source->translationGroupId, $locale]);
 
         return [$source->translationGroupId, false === $taken ? [] : ['locale' => \sprintf('The item already has a translation in %s.', $locale)]];
     }
@@ -708,7 +708,7 @@ final readonly class ContentWriter
     private function nextPosition(string $type, ?string $parentId, string $locale): int
     {
         $next = $this->connection->fetchOne(
-            'SELECT COALESCE(MAX(position) + 1, 0) FROM content
+            'SELECT COALESCE(MAX(position) + 1, 0) FROM quire.content
              WHERE type = :type AND parent_id IS NOT DISTINCT FROM CAST(:parent AS uuid) AND locale = :locale AND deleted_at IS NULL',
             ['type' => $type, 'parent' => $parentId, 'locale' => $locale],
         );
@@ -719,7 +719,7 @@ final readonly class ContentWriter
     private function hasChildren(string $id, bool $includeTrashed): bool
     {
         return false !== $this->connection->fetchOne(
-            'SELECT 1 FROM content WHERE parent_id = ?'.($includeTrashed ? '' : ' AND deleted_at IS NULL').' LIMIT 1',
+            'SELECT 1 FROM quire.content WHERE parent_id = ?'.($includeTrashed ? '' : ' AND deleted_at IS NULL').' LIMIT 1',
             [$id],
         );
     }
@@ -727,7 +727,7 @@ final readonly class ContentWriter
     private function saveRevision(Content $content, ?string $message, ?string $actorId): void
     {
         $this->connection->executeStatement(
-            'INSERT INTO content_revision (content_id, content_version, title, excerpt, body, body_format, fields, author_id, message)
+            'INSERT INTO quire.content_revision (content_id, content_version, title, excerpt, body, body_format, fields, author_id, message)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
             [$content->id, $content->version, $content->title, $content->excerpt, $content->body, $content->bodyFormat, $this->json($content->fields), $actorId, $message],
         );
@@ -736,8 +736,8 @@ final readonly class ContentWriter
 
         if ($keep > 0) {
             $this->connection->executeStatement(
-                'DELETE FROM content_revision WHERE content_id = :id AND content_version < (
-                     SELECT content_version FROM content_revision WHERE content_id = :id ORDER BY content_version DESC OFFSET :offset LIMIT 1
+                'DELETE FROM quire.content_revision WHERE content_id = :id AND content_version < (
+                     SELECT content_version FROM quire.content_revision WHERE content_id = :id ORDER BY content_version DESC OFFSET :offset LIMIT 1
                  )',
                 ['id' => $content->id, 'offset' => $keep - 1],
             );

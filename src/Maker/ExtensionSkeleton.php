@@ -27,7 +27,7 @@ final readonly class ExtensionSkeleton
     /** URL path of the generated page, e.g. "/hello-world" */
     public string $path;
 
-    /** Database table of the generated migration */
+    /** Database table of the generated migration, in Quire's schema */
     public string $table;
 
     private string $snakeId;
@@ -52,7 +52,7 @@ final readonly class ExtensionSkeleton
         $this->namespace = $this->studly($vendor).'\\'.$this->studly($name);
         $this->title = $title ?? ManifestParser::titleFromPackageName($package);
         $this->path = '/'.trim((string) preg_replace('/[^a-z0-9]+/', '-', $name), '-');
-        $this->table = $this->snakeId.'_message';
+        $this->table = 'quire.'.$this->snakeId.'_message';
     }
 
     /**

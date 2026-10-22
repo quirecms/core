@@ -31,7 +31,7 @@ final readonly class RevisionRepository
         }
 
         $rows = $this->connection->fetchAllAssociative(
-            \sprintf('SELECT %s FROM content_revision WHERE content_id = ? ORDER BY content_version DESC LIMIT ?', self::COLUMNS),
+            \sprintf('SELECT %s FROM quire.content_revision WHERE content_id = ? ORDER BY content_version DESC LIMIT ?', self::COLUMNS),
             [$contentId, $limit],
         );
 
@@ -44,7 +44,7 @@ final readonly class RevisionRepository
             return null;
         }
 
-        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM content_revision WHERE id = ?', self::COLUMNS), [$id]);
+        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM quire.content_revision WHERE id = ?', self::COLUMNS), [$id]);
 
         return false === $row ? null : $this->hydrate($row);
     }

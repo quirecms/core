@@ -11,9 +11,11 @@ use Quire\Database\MigrationOrder;
  *
  *     new Extend\Migrations('Acme\\Reviews\\Migrations', __DIR__.'/migrations');
  *
- * They run when the extension is enabled, and are rolled back when it's disabled with --purge.
- * Generate a migration class with "bin/console doctrine:migrations:generate", then move it into
- * your extension's migrations directory and namespace.
+ * They run when the extension is enabled (or with "bin/console quire:migrations:migrate"), and are
+ * rolled back when it's disabled with --purge. Create the tables in Quire's schema, named after the
+ * extension: "CREATE TABLE quire.acme_reviews_review (…)" (see {@see \Quire\Database\DatabaseSchema}).
+ * Generate a migration class with "bin/console doctrine:migrations:generate", then move it into your
+ * extension's migrations directory and namespace.
  *
  * @api
  */
@@ -52,7 +54,6 @@ final readonly class Migrations implements ExtenderInterface
             }
         }
 
-        $context->prependConfig('doctrine_migrations', ['migrations_paths' => [$namespace => $this->directory]]);
-        $context->appendToParameter(MigrationOrder::PARAMETER, ['namespace' => $namespace, 'owner' => $context->id]);
+        $context->appendToParameter(MigrationOrder::PARAMETER, ['namespace' => $namespace, 'directory' => $this->directory, 'owner' => $context->id]);
     }
 }

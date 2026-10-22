@@ -44,7 +44,7 @@ final readonly class ContentRepository
             return null;
         }
 
-        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM content WHERE id = ?', self::COLUMNS), [$id]);
+        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM quire.content WHERE id = ?', self::COLUMNS), [$id]);
 
         return false === $row ? null : self::hydrate($row);
     }
@@ -70,7 +70,7 @@ final readonly class ContentRepository
             throw ContentNotFoundException::forId($id);
         }
 
-        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM content WHERE id = ? FOR UPDATE', self::COLUMNS), [$id]);
+        $row = $this->connection->fetchAssociative(\sprintf('SELECT %s FROM quire.content WHERE id = ? FOR UPDATE', self::COLUMNS), [$id]);
 
         return false === $row ? throw ContentNotFoundException::forId($id) : self::hydrate($row);
     }

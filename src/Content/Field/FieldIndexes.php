@@ -7,6 +7,7 @@ namespace Quire\Content\Field;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception as DbalException;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Database\DatabaseSchema;
 
 /**
  * Keeps one database index per sortable or filterable field, matching what the enabled extensions declare.
@@ -44,8 +45,8 @@ final readonly class FieldIndexes
                 // List fields are filtered by containment (@>), which needs GIN. Other fields get a B-tree
                 // on (type, value): it serves both filters and sorting within a type.
                 $definition = FieldType::List === $field->type
-                    ? \sprintf('ON content USING GIN (%s)', FieldExpression::json($field))
-                    : \sprintf('ON content (type, %s)', FieldExpression::value($field));
+                    ? \sprintf('ON quire.content USING GIN (%s)', FieldExpression::json($field))
+                    : \sprintf('ON quire.content (type, %s)', FieldExpression::value($field));
 
                 // The name carries a hash of the definition, so a changed declaration replaces the index.
                 $name = \sprintf('%s%s_%s_%s', self::PREFIX, substr($type->id, 0, 16), substr($field->name, 0, 16), substr(hash('sha256', $definition), 0, 8));
@@ -67,10 +68,10 @@ final readonly class FieldIndexes
              FROM pg_index i
              JOIN pg_class idx ON idx.oid = i.indexrelid
              JOIN pg_class tbl ON tbl.oid = i.indrelid
-             WHERE tbl.relname = 'content' AND tbl.relnamespace = current_schema()::regnamespace
+             WHERE tbl.relname = 'content' AND tbl.relnamespace = CAST(? AS regnamespace)
                AND starts_with(idx.relname, ?)
              ORDER BY idx.relname",
-            [self::PREFIX],
+            [DatabaseSchema::NAME, self::PREFIX],
         );
 
         return $indexes;
@@ -97,7 +98,7 @@ final readonly class FieldIndexes
             $output(\sprintf('%s %s%s', $dryRun ? 'Would drop' : 'Dropping', $name, $valid ? '' : ' (invalid: a build failed)'));
 
             if (!$dryRun) {
-                $this->connection->executeStatement(\sprintf('DROP INDEX CONCURRENTLY IF EXISTS %s', $this->connection->quoteSingleIdentifier($name)));
+                $this->connection->executeStatement(\sprintf('DROP INDEX CONCURRENTLY IF EXISTS %s.%s', DatabaseSchema::NAME, $this->connection->quoteSingleIdentifier($name)));
             }
 
             $result['dropped'][] = $name;

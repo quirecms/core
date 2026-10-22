@@ -20,7 +20,7 @@ final class ExtensionSkeletonTest extends TestCase
         self::assertSame('Acme\StarReviews', $skeleton->namespace);
         self::assertSame('Star Reviews', $skeleton->title);
         self::assertSame('/star-reviews', $skeleton->path);
-        self::assertSame('acme_star_reviews_message', $skeleton->table);
+        self::assertSame('quire.acme_star_reviews_message', $skeleton->table);
     }
 
     public function testCustomTitle(): void

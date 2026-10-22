@@ -13,8 +13,9 @@ final class MigrationsTest extends ExtenderTestCase
     {
         $this->apply(new Migrations('\\Acme\\Reviews\\Migrations\\', __DIR__));
 
-        self::assertSame([['migrations_paths' => ['Acme\Reviews\Migrations' => __DIR__]]], $this->container->getExtensionConfig('doctrine_migrations'));
-        self::assertSame([['namespace' => 'Acme\Reviews\Migrations', 'owner' => 'acme-reviews']], $this->container->getParameterBag()->all()[MigrationOrder::PARAMETER]);
+        // Quire's migrations are kept apart from the application's: nothing is added to its configuration.
+        self::assertSame([], $this->container->getExtensionConfig('doctrine_migrations'));
+        self::assertSame([['namespace' => 'Acme\Reviews\Migrations', 'directory' => __DIR__, 'owner' => 'acme-reviews']], $this->container->getParameterBag()->all()[MigrationOrder::PARAMETER]);
     }
 
     public function testRejectsInvalidInput(): void

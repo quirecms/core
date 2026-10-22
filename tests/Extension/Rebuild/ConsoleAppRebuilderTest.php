@@ -27,7 +27,7 @@ final class ConsoleAppRebuilderTest extends TestCase
 
         self::assertSame([
             '/app/bin/console cache:clear --env=prod',
-            '/app/bin/console doctrine:migrations:migrate --no-interaction --all-or-nothing --allow-no-migration --env=prod',
+            '/app/bin/console quire:migrations:migrate --no-interaction --allow-no-migration --env=prod',
             '/app/bin/console quire:content:sync-indexes --env=prod',
         ], $this->commands);
         self::assertSame(1, $this->workers->restarts);

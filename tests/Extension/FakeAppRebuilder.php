@@ -24,7 +24,7 @@ final class FakeAppRebuilder implements AppRebuilderInterface
         if ($this->failNext) {
             $this->failNext = false;
 
-            throw new RebuildFailedException('"bin/console doctrine:migrations:migrate" failed with exit code 1.');
+            throw new RebuildFailedException('"bin/console quire:migrations:migrate" failed with exit code 1.');
         }
     }
 }

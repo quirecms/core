@@ -513,7 +513,7 @@ final class ContentQuery implements \IteratorAggregate
             $columns[] = 'count(*) OVER () AS "_total"';
         }
 
-        $sql = \sprintf('SELECT %s FROM content c', 'count' === $mode ? 'count(*)' : implode(', ', $columns));
+        $sql = \sprintf('SELECT %s FROM quire.content c', 'count' === $mode ? 'count(*)' : implode(', ', $columns));
 
         if ('count' === $mode) {
             $params = [];

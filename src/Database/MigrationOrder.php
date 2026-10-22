@@ -27,7 +27,7 @@ final readonly class MigrationOrder implements Comparator
     private array $namespaces;
 
     /**
-     * @param list<array{namespace: string, owner: string}> $namespaces
+     * @param list<array{namespace: string, directory: string, owner: string}> $namespaces
      */
     public function __construct(
         #[Autowire(param: self::PARAMETER)]

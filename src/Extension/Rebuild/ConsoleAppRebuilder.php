@@ -40,7 +40,7 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
         $this->console(['cache:clear'], $output);
 
         if ($migrate) {
-            $this->console(['doctrine:migrations:migrate', '--no-interaction', '--all-or-nothing', '--allow-no-migration'], $output);
+            $this->console(['quire:migrations:migrate', '--no-interaction', '--allow-no-migration'], $output);
             $this->console(['quire:content:sync-indexes'], $output);
         }
 

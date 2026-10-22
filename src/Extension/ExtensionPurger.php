@@ -12,6 +12,7 @@ use Doctrine\Migrations\Version\Version;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Database\MigrationOrder;
+use Quire\Database\MigrationsFactory;
 use Quire\Extension\Event\ExtensionPurging;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -25,10 +26,10 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
 final readonly class ExtensionPurger implements ExtensionPurgerInterface
 {
     /**
-     * @param list<array{namespace: string, owner: string}> $migrationNamespaces
+     * @param list<array{namespace: string, directory: string, owner: string}> $migrationNamespaces
      */
     public function __construct(
-        #[Autowire(service: 'doctrine.migrations.dependency_factory')]
+        #[Autowire(service: MigrationsFactory::SERVICE)]
         private DependencyFactory $migrations,
         private Connection $connection,
         private EventDispatcherInterface $dispatcher,
@@ -53,7 +54,7 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
             $output(\sprintf('  Rolled back %d migration(s).', $rolledBack));
 
             $deleted = $this->connection->executeStatement(
-                'DELETE FROM setting WHERE name LIKE :prefix',
+                'DELETE FROM quire.setting WHERE name LIKE :prefix',
                 ['prefix' => addcslashes($extension->id, '%_\\').'.%'],
             );
             $output(\sprintf('  Deleted %d stored setting(s).', $deleted));
@@ -76,13 +77,13 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
 
             $parameters = ['type' => $type->id, 'names' => '{'.implode(',', $names).'}'];
             $items = $this->connection->executeStatement(
-                'UPDATE content SET fields = fields - CAST(:names AS text[]) WHERE type = :type AND jsonb_exists_any(fields, CAST(:names AS text[]))',
+                'UPDATE quire.content SET fields = fields - CAST(:names AS text[]) WHERE type = :type AND jsonb_exists_any(fields, CAST(:names AS text[]))',
                 $parameters,
             );
             // Revisions are part of the item's data too.
             $this->connection->executeStatement(
-                'UPDATE content_revision r SET fields = r.fields - CAST(:names AS text[])
-                 FROM content c WHERE c.id = r.content_id AND c.type = :type AND jsonb_exists_any(r.fields, CAST(:names AS text[]))',
+                'UPDATE quire.content_revision r SET fields = r.fields - CAST(:names AS text[])
+                 FROM quire.content c WHERE c.id = r.content_id AND c.type = :type AND jsonb_exists_any(r.fields, CAST(:names AS text[]))',
                 $parameters,
             );
             $output(\sprintf('  Deleted the fields %s from %d %s.', implode(', ', $names), $items, 1 === $items ? strtolower($type->label) : strtolower($type->pluralLabel)));

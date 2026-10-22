@@ -86,7 +86,7 @@ final readonly class Slugs
 
         /** @var list<string> $slugs */
         $slugs = $this->connection->fetchFirstColumn(
-            'SELECT slug FROM content
+            'SELECT slug FROM quire.content
              WHERE type = :type AND parent_id IS NOT DISTINCT FROM CAST(:parent AS uuid) AND locale = :locale
                AND deleted_at IS NULL AND (slug = :slug OR slug LIKE :prefix)
                AND id IS DISTINCT FROM CAST(:except AS uuid)',

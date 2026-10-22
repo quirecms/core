@@ -5,11 +5,9 @@ declare(strict_types=1);
 namespace Quire;
 
 use Composer\Autoload\ClassLoader;
-use Doctrine\Migrations\Version\Comparator;
 use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
 use Quire\Content\ContentRenderer;
 use Quire\Content\Query\Internal\QueryServicesPass;
-use Quire\Database\MigrationOrder;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\Boot\ExtensionStateResource;
@@ -78,26 +76,6 @@ final class QuireBundle extends AbstractBundle
 
     public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void
     {
-        $builder->prependExtensionConfig('doctrine', [
-            'orm' => [
-                'mappings' => [
-                    'Quire' => [
-                        'type' => 'attribute',
-                        'is_bundle' => false,
-                        'dir' => __DIR__,
-                        'prefix' => 'Quire',
-                        'alias' => 'Quire',
-                    ],
-                ],
-            ],
-        ]);
-
-        // Core first, then extensions in boot order: see MigrationOrder. Core's own migrations are
-        // registered by its extend.php, like an extension's.
-        $builder->prependExtensionConfig('doctrine_migrations', [
-            'services' => [Comparator::class => MigrationOrder::class],
-        ]);
-
         // Rendered content is cached in its own pool, so it can be cleared on its own.
         $builder->prependExtensionConfig('framework', [
             'cache' => ['pools' => [ContentRenderer::CACHE_POOL => ['adapter' => 'cache.app']]],

@@ -16,11 +16,11 @@ final class Version20261021120000 extends AbstractMigration
 
     public function up(Schema $schema): void
     {
-        $this->addSql('CREATE TABLE extension (id VARCHAR(100) NOT NULL, enabled BOOLEAN DEFAULT false NOT NULL, updated_at TIMESTAMP(0) WITH TIME ZONE NOT NULL, PRIMARY KEY (id))');
+        $this->addSql('CREATE TABLE quire.extension (id VARCHAR(100) NOT NULL, enabled BOOLEAN DEFAULT false NOT NULL, updated_at TIMESTAMP(0) WITH TIME ZONE NOT NULL, PRIMARY KEY (id))');
     }
 
     public function down(Schema $schema): void
     {
-        $this->addSql('DROP TABLE extension');
+        $this->addSql('DROP TABLE quire.extension');
     }
 }

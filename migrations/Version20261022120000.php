@@ -19,7 +19,7 @@ final class Version20261022120000 extends AbstractMigration
         // IDs are UUIDv7 (time-ordered, like ULIDs), so the database can generate them for raw inserts too.
         // The search vector is a generated column: it can never go stale, whoever writes the row.
         $this->addSql(<<<'SQL'
-            CREATE TABLE content (
+            CREATE TABLE quire.content (
                 id UUID DEFAULT uuidv7() NOT NULL,
                 type VARCHAR(64) NOT NULL,
                 status VARCHAR(32) NOT NULL,
@@ -46,7 +46,7 @@ final class Version20261022120000 extends AbstractMigration
                 updated_at TIMESTAMP(0) WITH TIME ZONE DEFAULT now() NOT NULL,
                 deleted_at TIMESTAMP(0) WITH TIME ZONE DEFAULT NULL,
                 PRIMARY KEY (id),
-                CONSTRAINT content_parent_fk FOREIGN KEY (parent_id) REFERENCES content (id),
+                CONSTRAINT content_parent_fk FOREIGN KEY (parent_id) REFERENCES quire.content (id),
                 CONSTRAINT content_slug_check CHECK (slug <> '' AND strpos(slug, '/') = 0),
                 CONSTRAINT content_version_check CHECK (version > 0),
                 CONSTRAINT content_fields_check CHECK (jsonb_typeof(fields) = 'object'),
@@ -55,15 +55,15 @@ final class Version20261022120000 extends AbstractMigration
             SQL);
 
         // Slugs are unique among siblings of the same type and language. Items in the trash don't hold on to theirs.
-        $this->addSql('CREATE UNIQUE INDEX content_slug_unique ON content (type, parent_id, locale, slug) NULLS NOT DISTINCT WHERE deleted_at IS NULL');
-        $this->addSql('CREATE UNIQUE INDEX content_translation_unique ON content (translation_group_id, locale)');
-        $this->addSql('CREATE INDEX content_listing_idx ON content (type, status, published_at DESC) WHERE deleted_at IS NULL');
-        $this->addSql('CREATE INDEX content_children_idx ON content (parent_id, position) WHERE parent_id IS NOT NULL');
-        $this->addSql('CREATE INDEX content_author_idx ON content (author_id) WHERE author_id IS NOT NULL');
-        $this->addSql('CREATE INDEX content_search_idx ON content USING GIN (search)');
+        $this->addSql('CREATE UNIQUE INDEX content_slug_unique ON quire.content (type, parent_id, locale, slug) NULLS NOT DISTINCT WHERE deleted_at IS NULL');
+        $this->addSql('CREATE UNIQUE INDEX content_translation_unique ON quire.content (translation_group_id, locale)');
+        $this->addSql('CREATE INDEX content_listing_idx ON quire.content (type, status, published_at DESC) WHERE deleted_at IS NULL');
+        $this->addSql('CREATE INDEX content_children_idx ON quire.content (parent_id, position) WHERE parent_id IS NOT NULL');
+        $this->addSql('CREATE INDEX content_author_idx ON quire.content (author_id) WHERE author_id IS NOT NULL');
+        $this->addSql('CREATE INDEX content_search_idx ON quire.content USING GIN (search)');
 
         $this->addSql(<<<'SQL'
-            CREATE TABLE content_revision (
+            CREATE TABLE quire.content_revision (
                 id UUID DEFAULT uuidv7() NOT NULL,
                 content_id UUID NOT NULL,
                 content_version INT NOT NULL,
@@ -76,7 +76,7 @@ final class Version20261022120000 extends AbstractMigration
                 message TEXT DEFAULT NULL,
                 created_at TIMESTAMP(0) WITH TIME ZONE DEFAULT now() NOT NULL,
                 PRIMARY KEY (id),
-                CONSTRAINT content_revision_content_fk FOREIGN KEY (content_id) REFERENCES content (id) ON DELETE CASCADE,
+                CONSTRAINT content_revision_content_fk FOREIGN KEY (content_id) REFERENCES quire.content (id) ON DELETE CASCADE,
                 CONSTRAINT content_revision_version_unique UNIQUE (content_id, content_version)
             )
             SQL);
@@ -84,7 +84,7 @@ final class Version20261022120000 extends AbstractMigration
 
     public function down(Schema $schema): void
     {
-        $this->addSql('DROP TABLE content_revision');
-        $this->addSql('DROP TABLE content');
+        $this->addSql('DROP TABLE quire.content_revision');
+        $this->addSql('DROP TABLE quire.content');
     }
 }

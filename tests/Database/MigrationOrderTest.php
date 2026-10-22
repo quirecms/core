@@ -13,9 +13,9 @@ final class MigrationOrderTest extends TestCase
     public function testCoreThenExtensionsInBootOrderThenTheRest(): void
     {
         $order = new MigrationOrder([
-            ['namespace' => 'Quire\Migrations', 'owner' => 'core'],
-            ['namespace' => 'Zed\Comments\Migrations', 'owner' => 'zed-comments'],
-            ['namespace' => 'Acme\Reviews\Migrations', 'owner' => 'acme-reviews'],
+            ['namespace' => 'Quire\Migrations', 'directory' => '/migrations', 'owner' => 'core'],
+            ['namespace' => 'Zed\Comments\Migrations', 'directory' => '/migrations', 'owner' => 'zed-comments'],
+            ['namespace' => 'Acme\Reviews\Migrations', 'directory' => '/migrations', 'owner' => 'acme-reviews'],
         ]);
 
         $versions = [
@@ -42,7 +42,7 @@ final class MigrationOrderTest extends TestCase
 
     public function testNamespacePrefixesMatchWholeSegments(): void
     {
-        $order = new MigrationOrder([['namespace' => 'Acme\Reviews', 'owner' => 'acme-reviews']]);
+        $order = new MigrationOrder([['namespace' => 'Acme\Reviews', 'directory' => '/migrations', 'owner' => 'acme-reviews']]);
 
         // "Acme\ReviewsExtra" is not inside "Acme\Reviews", so it sorts with the unknown namespaces.
         self::assertSame(-1, $order->compare(new Version('Acme\Reviews\Version2'), new Version('Acme\ReviewsExtra\Version1')));

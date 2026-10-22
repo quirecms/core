@@ -155,7 +155,7 @@ final class Settings implements ResetInterface
         $old = $this->get($key);
 
         $this->connection->executeStatement(
-            'INSERT INTO setting (name, value, updated_at) VALUES (:name, :value, now())
+            'INSERT INTO quire.setting (name, value, updated_at) VALUES (:name, :value, now())
              ON CONFLICT (name) DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at',
             ['name' => $key, 'value' => json_encode($value, \JSON_THROW_ON_ERROR)],
         );
@@ -178,7 +178,7 @@ final class Settings implements ResetInterface
         $this->assertNotOverridden($definition);
 
         $old = $this->get($key);
-        $this->connection->executeStatement('DELETE FROM setting WHERE name = :name', ['name' => $key]);
+        $this->connection->executeStatement('DELETE FROM quire.setting WHERE name = :name', ['name' => $key]);
         $this->stored = null;
 
         if ($old !== $definition->default) {
@@ -205,7 +205,7 @@ final class Settings implements ResetInterface
 
         $stored = [];
 
-        foreach ($this->connection->fetchAllKeyValue('SELECT name, value FROM setting') as $name => $json) {
+        foreach ($this->connection->fetchAllKeyValue('SELECT name, value FROM quire.setting') as $name => $json) {
             $stored[(string) $name] = \is_string($json) ? json_decode($json, true, flags: \JSON_THROW_ON_ERROR) : null;
         }
 

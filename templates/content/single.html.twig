@@ -5,7 +5,7 @@
     Variables: content (the item), type (its content type), body (the body as HTML), canonical_url,
     site_title, and anything ContentViewing listeners added.
 #}
-{% extends '@Quire/layout.html.twig' %}
+{% extends 'layout.html.twig' %}
 
 {% block title %}{{ content.title }} – {{ site_title }}{% endblock %}
 

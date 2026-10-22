@@ -87,7 +87,6 @@ final readonly class ContentController
             \sprintf('content/%s/%s.html.twig', $content->type, $content->slug),
             \sprintf('content/%s/single.html.twig', $content->type),
             'content/single.html.twig',
-            '@Quire/content/single.html.twig',
         ]);
 
         return new Response($template->render([
@@ -132,7 +131,6 @@ final readonly class ContentController
         $template = $this->twig->resolveTemplate([
             \sprintf('content/%s/list.html.twig', $type),
             'content/list.html.twig',
-            '@Quire/content/list.html.twig',
         ]);
 
         return new Response($template->render([

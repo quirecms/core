@@ -75,6 +75,15 @@ final class ManifestParserTest extends TestCase
         self::assertSame(['quire-taxonomy'], $manifest->optional);
     }
 
+    public function testReadsTheParentOfATheme(): void
+    {
+        $manifest = $this->parse($this->package('acme/reviews', ['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'quire-theme-default']]]]));
+
+        self::assertSame(ExtensionType::Theme, $manifest?->type);
+        self::assertSame('quire-theme-default', $manifest->parent);
+        self::assertNull($this->parse($this->package('acme/reviews'))?->parent);
+    }
+
     public function testAcceptsAnEmptyManifestObject(): void
     {
         self::assertNotNull($this->parse($this->package('acme/reviews', ['extra' => ['quire' => []]])));
@@ -95,6 +104,11 @@ final class ManifestParserTest extends TestCase
         yield 'package name instead of ID' => [['extra' => ['quire' => ['requires' => ['quire/comments']]]], 'not package names like "quire/comments"'];
         yield 'requires itself' => [['extra' => ['quire' => ['requires' => ['acme-reviews']]]], 'lists the extension itself ("acme-reviews")'];
         yield 'both required and optional' => [['extra' => ['quire' => ['requires' => ['quire-tags'], 'optional' => ['quire-tags']]]], '"quire-tags" is listed in both'];
+        yield 'theme section in an extension' => [['extra' => ['quire' => ['theme' => ['parent' => 'acme-base']]]], '"extra.quire.theme" is only for packages of type "quire-theme"'];
+        yield 'theme section is a list' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['acme-base']]]], '"extra.quire.theme" must be a JSON object'];
+        yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent.'];
+        yield 'parent is a package name' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme/base']]]], '"extra.quire.theme.parent" must be the ID of a theme'];
+        yield 'parent is the theme itself' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme-reviews']]]], 'is the theme itself'];
     }
 
     /**

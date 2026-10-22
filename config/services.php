@@ -62,6 +62,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
             '../src/Backup/BackupContents.php',
             '../src/Backup/Exception/',
+            '../src/Theme/Exception/',
+            '../src/Theme/Internal/{ThemeChain,TemplatePathsPass}.php',
         ]);
 
     $services->set(InstalledExtensions::class)

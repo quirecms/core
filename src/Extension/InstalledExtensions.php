@@ -17,7 +17,7 @@ use Symfony\Contracts\Service\ResetInterface;
  */
 final class InstalledExtensions implements ResetInterface
 {
-    /** @var array<string, ExtensionManifest>|null */
+    /** @var array<string, ExtensionManifest>|null Extensions and themes */
     private ?array $manifests = null;
 
     public function __construct(
@@ -27,16 +27,31 @@ final class InstalledExtensions implements ResetInterface
     }
 
     /**
+     * The installed extensions. Themes aren't included: see {@see themes()}.
+     *
      * @return array<string, ExtensionManifest> Keyed and sorted by extension ID
      */
     public function all(): array
     {
-        return $this->manifests ??= $this->discover();
+        return array_filter($this->manifests(), static fn (ExtensionManifest $m): bool => ExtensionType::Extension === $m->type);
+    }
+
+    /**
+     * @return array<string, ExtensionManifest> Keyed and sorted by theme ID
+     */
+    public function themes(): array
+    {
+        return array_filter($this->manifests(), static fn (ExtensionManifest $m): bool => ExtensionType::Theme === $m->type);
     }
 
     public function has(string $id): bool
     {
         return isset($this->all()[$id]);
+    }
+
+    public function hasTheme(string $id): bool
+    {
+        return isset($this->themes()[$id]);
     }
 
     /**
@@ -45,6 +60,14 @@ final class InstalledExtensions implements ResetInterface
     public function get(string $id): ExtensionManifest
     {
         return $this->all()[$id] ?? throw UnknownExtensionException::forId($id, array_keys($this->all()));
+    }
+
+    /**
+     * @return array<string, ExtensionManifest>
+     */
+    private function manifests(): array
+    {
+        return $this->manifests ??= $this->discover();
     }
 
     /**
@@ -74,7 +97,7 @@ final class InstalledExtensions implements ResetInterface
             }
 
             if (isset($manifests[$manifest->id])) {
-                throw new ExtensionDiscoveryException(\sprintf('The packages "%s" and "%s" both use the extension ID "%s". Extension IDs must be unique; set a different "extra.quire.id" in one of them.', $manifests[$manifest->id]->packageName, $manifest->packageName, $manifest->id));
+                throw new ExtensionDiscoveryException(\sprintf('The packages "%s" and "%s" both use the ID "%s". IDs of extensions and themes must be unique; set a different "extra.quire.id" in one of them.', $manifests[$manifest->id]->packageName, $manifest->packageName, $manifest->id));
             }
 
             $manifests[$manifest->id] = $manifest;

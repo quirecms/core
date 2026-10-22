@@ -17,7 +17,9 @@ final class ManifestParser
 {
     private const string ID_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
-    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional'];
+    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme'];
+
+    private const array KNOWN_THEME_KEYS = ['parent'];
 
     /**
      * @param array<mixed> $package           One entry of Composer's installed.json
@@ -54,6 +56,8 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, \sprintf('"%s" is listed in both "extra.quire.requires" and "extra.quire.optional". Keep it in only one of them.', $overlap[0]));
         }
 
+        $parent = $this->themeParent($name, $type, $manifest, $id);
+
         return new ExtensionManifest(
             id: $id,
             packageName: $name,
@@ -67,6 +71,7 @@ final class ManifestParser
             icon: $this->optionalString($name, $manifest, 'icon'),
             requires: $requires,
             optional: $optional,
+            parent: $parent,
         );
     }
 
@@ -134,6 +139,46 @@ final class ManifestParser
         }
 
         return $message.\sprintf(' Known keys: "%s".', implode('", "', self::KNOWN_KEYS));
+    }
+
+    /**
+     * Reads "extra.quire.theme", which only themes have: {"parent": "quire-theme-default"}.
+     *
+     * @param array<string, mixed> $manifest
+     */
+    private function themeParent(string $name, ExtensionType $type, array $manifest, string $ownId): ?string
+    {
+        if (!\array_key_exists('theme', $manifest)) {
+            return null;
+        }
+
+        if (ExtensionType::Theme !== $type) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme" is only for packages of type "%s".', ExtensionType::Theme->value));
+        }
+
+        $theme = $manifest['theme'];
+
+        if (!\is_array($theme) || ([] !== $theme && array_is_list($theme))) {
+            throw InvalidManifestException::forPackage($name, '"extra.quire.theme" must be a JSON object, e.g. {"parent": "quire-theme-default"}.');
+        }
+
+        foreach (array_keys($theme) as $key) {
+            if (!\in_array($key, self::KNOWN_THEME_KEYS, true)) {
+                throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme.%s" is not a known key. Known keys: %s.', $key, implode(', ', self::KNOWN_THEME_KEYS)));
+            }
+        }
+
+        $parent = $theme['parent'] ?? null;
+
+        if (null !== $parent && (!\is_string($parent) || 1 !== preg_match(self::ID_PATTERN, $parent))) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme.parent" must be the ID of a theme, e.g. "quire-theme-default"; got %s.', json_encode($parent)));
+        }
+
+        if ($parent === $ownId) {
+            throw InvalidManifestException::forPackage($name, '"extra.quire.theme.parent" is the theme itself.');
+        }
+
+        return $parent;
     }
 
     /**

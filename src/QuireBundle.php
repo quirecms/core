@@ -22,6 +22,8 @@ use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Theme\Internal\TemplatePathsPass;
+use Quire\Theme\Themes;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileResource;
@@ -40,6 +42,7 @@ final class QuireBundle extends AbstractBundle
     public function build(ContainerBuilder $container): void
     {
         $container->addCompilerPass(new QueryServicesPass());
+        $container->addCompilerPass(new TemplatePathsPass());
     }
 
     public function configure(DefinitionConfigurator $definition): void
@@ -71,6 +74,10 @@ final class QuireBundle extends AbstractBundle
                             ->example(['quire-admin', 'acme-reviews'])
                             ->scalarPrototype()->cannotBeEmpty()->end()
                         ->end()
+                        ->scalarNode('theme')
+                            ->info('ID of the site\'s theme when "pinned" is true; null for Quire\'s built-in templates. Otherwise the theme is a site setting: use "bin/console quire:theme:use".')
+                            ->defaultNull()
+                        ->end()
                         ->scalarNode('installed_json')
                             ->info('Path to Composer\'s installed.json, which lists the installed extensions. Defaults to the one in the vendor directory; tests point it at fixtures.')
                             ->defaultNull()
@@ -84,6 +91,10 @@ final class QuireBundle extends AbstractBundle
                     ->validate()
                         ->ifTrue(static fn (array $extensions): bool => !$extensions['pinned'] && [] !== $extensions['enabled'])
                         ->thenInvalid('"quire.extensions.enabled" only applies when "quire.extensions.pinned" is true. Set "pinned: true", or remove the list and use "bin/console quire:extension:enable" instead.')
+                    ->end()
+                    ->validate()
+                        ->ifTrue(static fn (array $extensions): bool => !$extensions['pinned'] && null !== $extensions['theme'])
+                        ->thenInvalid('"quire.extensions.theme" only applies when "quire.extensions.pinned" is true. Set "pinned: true", or remove it and use "bin/console quire:theme:use" instead.')
                     ->end()
                 ->end()
             ->end();
@@ -143,11 +154,13 @@ final class QuireBundle extends AbstractBundle
 
         if ($config['pinned']) {
             $enabledIds = $config['enabled'];
+            $activeTheme = $config['theme'];
             $stateAvailable = true;
             $stateHash = null;
         } else {
             $state = CompileTimeState::read();
             $enabledIds = $state->enabledIds;
+            $activeTheme = $state->activeTheme;
             $stateAvailable = $state->available;
             $stateHash = $state->hash();
             $builder->addResource(new ExtensionStateResource($stateHash));
@@ -160,10 +173,11 @@ final class QuireBundle extends AbstractBundle
         // What the build was made for, so workers notice changes made elsewhere (null when pinned).
         $builder->setParameter('quire.extensions.state_hash', $stateHash);
         $builder->setParameter('quire.extensions.check_interval', $config['check_interval']);
+        $builder->setParameter(Themes::PINNED_PARAMETER, $config['pinned']);
         $builder->setParameter('quire.runtime.default_admin_url', 'http://localhost:2019');
 
         new ExtensionBooter(new InstalledExtensions($installedJson))
-            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', ExtensionBooter::coreExtendFile());
+            ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', ExtensionBooter::coreExtendFile(), $activeTheme);
 
         PermalinkSettings::declare($builder);
 
@@ -174,7 +188,7 @@ final class QuireBundle extends AbstractBundle
     /**
      * The "quire.extensions" configuration, processed early: it's needed before the regular loading phase.
      *
-     * @return array{pinned: bool, enabled: list<string>, installed_json: ?string, check_interval: int}
+     * @return array{pinned: bool, enabled: list<string>, theme: ?string, installed_json: ?string, check_interval: int}
      */
     private function extensionsConfig(ContainerBuilder $builder): array
     {
@@ -193,7 +207,7 @@ final class QuireBundle extends AbstractBundle
         /** @var list<array<mixed>> $configs */
         $configs = $builder->getParameterBag()->resolveValue($builder->getExtensionConfig($extension->getAlias()));
 
-        /** @var array{extensions: array{pinned: bool, enabled: list<string>, installed_json: ?string, check_interval: int}} $processed */
+        /** @var array{extensions: array{pinned: bool, enabled: list<string>, theme: ?string, installed_json: ?string, check_interval: int}} $processed */
         $processed = new Processor()->processConfiguration($configuration, $configs);
 
         return $processed['extensions'];

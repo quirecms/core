@@ -15,14 +15,12 @@ use Symfony\Component\HttpKernel\Event\RequestEvent;
 
 final class ViewsEventsConsoleTest extends ExtenderTestCase
 {
-    public function testViewsPrependTwigPathsAndGlobals(): void
+    public function testViewsRegisterNamespacesAndGlobals(): void
     {
         $this->apply(new Views()->namespace('reviews', __DIR__)->global('per_page', 20)->global('labels', ['a' => 'A']));
 
-        self::assertSame([
-            ['globals' => ['per_page' => 20, 'labels' => ['a' => 'A']]],
-            ['paths' => [__DIR__ => 'reviews']],
-        ], $this->container->getExtensionConfig('twig'));
+        self::assertSame([['globals' => ['per_page' => 20, 'labels' => ['a' => 'A']]]], $this->container->getExtensionConfig('twig'));
+        self::assertSame([['namespace' => 'reviews', 'directory' => __DIR__, 'owner' => 'acme-reviews']], $this->container->getParameter(Views::PARAMETER), 'The template paths are set up with the theme\'s, after all extenders ran.');
     }
 
     public function testViewsRejectInvalidNamespaces(): void
@@ -30,6 +28,9 @@ final class ViewsEventsConsoleTest extends ExtenderTestCase
         $this->assertExtenderFails(new Views()->namespace('my-reviews', __DIR__), 'Namespaces must start with a letter');
         $this->assertExtenderFails(new Views()->namespace('Quire', __DIR__), 'reserved for core templates');
         $this->assertExtenderFails(new Views()->namespace('reviews', __DIR__.'/missing'), 'doesn\'t exist');
+
+        $this->apply(new Views()->namespace('reviews', __DIR__));
+        $this->assertExtenderFails(new Views()->namespace('reviews', __DIR__), 'The namespace is already used by "acme-reviews".');
     }
 
     public function testViewsRejectObjectGlobals(): void

@@ -21,8 +21,11 @@ final class InstalledExtensionsTest extends TestCase
 
         $extensions = new InstalledExtensions($composer->installedJsonPath());
 
-        self::assertSame(['acme-dark', 'quire-comments', 'quire-reviews'], array_keys($extensions->all()));
+        self::assertSame(['quire-comments', 'quire-reviews'], array_keys($extensions->all()));
+        self::assertSame(['acme-dark'], array_keys($extensions->themes()), 'Themes are listed apart.');
         self::assertTrue($extensions->has('quire-comments'));
+        self::assertFalse($extensions->has('acme-dark'));
+        self::assertTrue($extensions->hasTheme('acme-dark'));
         self::assertFalse($extensions->has('symfony-console'));
         self::assertSame('quire/reviews', $extensions->get('quire-reviews')->packageName);
     }
@@ -51,7 +54,7 @@ final class InstalledExtensionsTest extends TestCase
             ->addPackage('other/reviews', overrides: ['extra' => ['quire' => ['id' => 'acme-reviews']]]);
 
         $this->expectException(ExtensionDiscoveryException::class);
-        $this->expectExceptionMessageIsOrContains('The packages "acme/reviews" and "other/reviews" both use the extension ID "acme-reviews"');
+        $this->expectExceptionMessageIsOrContains('The packages "acme/reviews" and "other/reviews" both use the ID "acme-reviews"');
 
         new InstalledExtensions($composer->installedJsonPath())->all();
     }

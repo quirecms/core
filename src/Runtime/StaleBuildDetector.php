@@ -25,7 +25,7 @@ final class StaleBuildDetector
     private int $nextCheckAt = 0;
 
     /**
-     * @param string|null $builtForHash Fingerprint of the enabled extensions the build was made for; null when pinned
+     * @param string|null $builtForHash Fingerprint of the enabled extensions and the theme the build was made for; null when pinned
      * @param int         $interval     Seconds between checks; 0 disables checking
      */
     public function __construct(
@@ -57,12 +57,13 @@ final class StaleBuildDetector
         try {
             /** @var list<string> $enabledIds */
             $enabledIds = $this->connection->fetchFirstColumn('SELECT id FROM quire.extension WHERE enabled ORDER BY id');
+            $activeTheme = CompileTimeState::activeThemeIn($this->connection);
         } catch (\Throwable) {
             // The database is unreachable; serving with the current build is the best option.
             return;
         }
 
-        if (CompileTimeState::hashOf($enabledIds) !== $this->builtForHash) {
+        if (CompileTimeState::hashOf($enabledIds, $activeTheme) !== $this->builtForHash) {
             $this->refresher->trigger();
         }
     }

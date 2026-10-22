@@ -6,7 +6,7 @@
     page.pageCount), is_home (whether it's the homepage), previous_url, next_url (null when there's no
     such page), canonical_url, site_title.
 #}
-{% extends '@Quire/layout.html.twig' %}
+{% extends 'layout.html.twig' %}
 
 {% block title %}{{ is_home ? site_title : type.pluralLabel ~ ' – ' ~ site_title }}{% endblock %}
 

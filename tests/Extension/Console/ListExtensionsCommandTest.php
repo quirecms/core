@@ -67,28 +67,28 @@ final class ListExtensionsCommandTest extends TestCase
 
     public function testJsonFormat(): void
     {
-        $composer = new FakeComposerInstallation()->addPackage('acme/dark', 'quire-theme');
-        $tester = $this->tester($composer, new InMemoryExtensionStateStore(['acme-dark', 'gone']));
+        $composer = new FakeComposerInstallation()->addPackage('acme/seo');
+        $tester = $this->tester($composer, new InMemoryExtensionStateStore(['acme-seo', 'gone']));
 
         self::assertSame(Command::SUCCESS, $tester->execute(['--format' => 'json']));
         $data = json_decode($tester->getDisplay(), true, flags: \JSON_THROW_ON_ERROR);
 
         self::assertSame([
             [
-                'id' => 'acme-dark',
+                'id' => 'acme-seo',
                 'status' => 'enabled',
                 'position' => 1,
                 'problem' => null,
-                'package' => 'acme/dark',
-                'type' => 'quire-theme',
+                'package' => 'acme/seo',
+                'type' => 'quire-extension',
                 'version' => '1.2.3',
-                'title' => 'Dark',
+                'title' => 'Seo',
                 'description' => null,
                 'category' => null,
                 'icon' => null,
                 'requires' => [],
                 'optional' => [],
-                'path' => $composer->packagePath('acme/dark'),
+                'path' => $composer->packagePath('acme/seo'),
             ],
             ['id' => 'gone', 'status' => 'missing', 'position' => null, 'problem' => 'enabled, but no longer installed'],
         ], $data);

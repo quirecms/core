@@ -7,6 +7,7 @@ use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
 use Quire\Formatter\Format;
+use Quire\Theme\Themes;
 
 /*
  * Quire core uses the same extenders as extensions. This file runs first, before any extension.
@@ -24,7 +25,9 @@ return [
         ->define('site.homepage', 'enum', 'listing', label: 'Homepage', help: 'What the homepage shows: the list of a content type (see "Homepage list"), a page (see "Homepage page"), or a page of an extension (see "Homepage route").', group: 'site', choices: ['listing', 'page', 'route'])
         ->define('site.homepage_listing', 'string', 'post', label: 'Homepage list', help: 'The content type whose list the homepage shows, e.g. "post".', group: 'site')
         ->define('site.homepage_page', 'string', null, label: 'Homepage page', help: 'The page the homepage shows: its ID or its path, e.g. "home".', group: 'site', nullable: true)
-        ->define('site.homepage_route', 'string', null, label: 'Homepage route', help: 'The name of the extension route the homepage shows. It must not need parameters.', group: 'site', nullable: true),
+        ->define('site.homepage_route', 'string', null, label: 'Homepage route', help: 'The name of the extension route the homepage shows. It must not need parameters.', group: 'site', nullable: true)
+        // Read when the application is built: changing it rebuilds the application (quire:theme:use does that right away).
+        ->define(Themes::SETTING, 'string', Themes::DEFAULT, label: 'Theme', help: 'The ID of the site\'s theme, e.g. "acme-dark". Empty for Quire\'s built-in templates.', group: 'appearance', nullable: true),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

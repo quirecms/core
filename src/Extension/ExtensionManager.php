@@ -58,6 +58,8 @@ final readonly class ExtensionManager
      */
     public function planEnable(array $ids): array
     {
+        $this->assertNoThemes($ids);
+
         return $this->resolver->planEnable($this->installed->all(), $this->state->enabledIds(), $ids);
     }
 
@@ -101,6 +103,8 @@ final readonly class ExtensionManager
      */
     public function planDisable(array $ids): array
     {
+        $this->assertNoThemes($ids);
+
         return $this->resolver->planDisable($this->installed->all(), $this->state->enabledIds(), $ids);
     }
 
@@ -136,6 +140,20 @@ final readonly class ExtensionManager
         }
 
         return $plan;
+    }
+
+    /**
+     * @param list<string> $ids
+     *
+     * @throws UnknownExtensionException
+     */
+    private function assertNoThemes(array $ids): void
+    {
+        foreach ($ids as $id) {
+            if ($this->installed->hasTheme($id)) {
+                throw new UnknownExtensionException(\sprintf('"%s" is a theme, not an extension. Make it the site\'s theme with "bin/console quire:theme:use %1$s".', $id));
+            }
+        }
     }
 
     private function assertWritable(): void

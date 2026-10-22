@@ -9,16 +9,22 @@ use Quire\Extend\ExtenderContext;
 use Quire\Extend\ExtenderException;
 use Quire\Extend\ExtenderInterface;
 use Quire\Extend\Routes;
+use Quire\Extend\Views;
 use Quire\Extension\DependencyResolver;
+use Quire\Extension\ExtensionManifest;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\ResolvedExtensions;
 use Quire\Settings\SettingsSchema;
+use Quire\Theme\Exception\ThemeException;
+use Quire\Theme\Internal\ThemeChain;
+use Quire\Theme\Themes;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
- * Runs the extenders of the enabled extensions, then of the site, while the container is being built.
+ * Runs the extenders of the enabled extensions, then of the active theme and the themes it inherits
+ * from, then of the site, while the container is being built.
  *
  * @internal
  */
@@ -46,8 +52,9 @@ final readonly class ExtensionBooter
      * @param list<string> $enabledIds
      * @param string       $siteExtendFile The project's own extend.php, which runs last
      * @param string|null  $coreExtendFile Quire core's own extend.php, which runs first
+     * @param string|null  $activeTheme    ID of the site's theme; when it can't be used, the site is built without one
      */
-    public function boot(ContainerBuilder $container, array $enabledIds, string $siteExtendFile, ?string $coreExtendFile = null): ResolvedExtensions
+    public function boot(ContainerBuilder $container, array $enabledIds, string $siteExtendFile, ?string $coreExtendFile = null, ?string $activeTheme = null): ResolvedExtensions
     {
         $resolved = $this->resolver->resolve($this->installed->all(), $enabledIds);
         $bootOrder = $resolved->bootOrderIds();
@@ -56,6 +63,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Routes::PARAMETER, []);
         $container->setParameter(SettingsSchema::PARAMETER, []);
         $container->setParameter(MigrationOrder::PARAMETER, []);
+        $container->setParameter(Views::PARAMETER, []);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));
@@ -73,6 +81,33 @@ final readonly class ExtensionBooter
                 $container->addResource(new FileExistenceResource($file));
             }
         }
+
+        $themes = [];
+        $themeProblem = null;
+
+        if (null !== $activeTheme) {
+            try {
+                $themes = ThemeChain::resolve($this->installed->themes(), $activeTheme, $bootOrder);
+            } catch (ThemeException $e) {
+                $themeProblem = $e->getMessage();
+            }
+        }
+
+        // Parents first, so a theme's extenders can build on its parent's.
+        foreach (array_reverse($themes) as $theme) {
+            $file = $theme->path.\DIRECTORY_SEPARATOR.'extend.php';
+            $files[] = $file;
+            $container->addResource(new FileExistenceResource($file));
+
+            if (is_file($file)) {
+                $container->addResource(new FileResource($file));
+                $this->run(new ExtenderContext($theme->id, $theme->path, $container, $bootOrder), $file);
+            }
+        }
+
+        $container->setParameter(Themes::ACTIVE_PARAMETER, $activeTheme);
+        $container->setParameter(Themes::CHAIN_PARAMETER, array_map(static fn (ExtensionManifest $theme): array => ['id' => $theme->id, 'path' => $theme->path], $themes));
+        $container->setParameter(Themes::PROBLEM_PARAMETER, $themeProblem);
 
         $files[] = $siteExtendFile;
         $container->addResource(new FileExistenceResource($siteExtendFile));

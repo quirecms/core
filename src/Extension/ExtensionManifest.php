@@ -17,6 +17,7 @@ final readonly class ExtensionManifest
      * @param string       $path        Absolute path to the installed package
      * @param list<string> $requires    IDs of extensions that must be enabled first
      * @param list<string> $optional    IDs of extensions that load first when enabled, but aren't required
+     * @param string|null  $parent      For themes: ID of the theme this one inherits from
      */
     public function __construct(
         public string $id,
@@ -30,6 +31,7 @@ final readonly class ExtensionManifest
         public ?string $icon = null,
         public array $requires = [],
         public array $optional = [],
+        public ?string $parent = null,
     ) {
     }
 }

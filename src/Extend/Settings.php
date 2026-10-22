@@ -132,7 +132,7 @@ final class Settings implements ExtenderInterface
     private function ownedPrefixes(string $owner): array
     {
         return match ($owner) {
-            ExtenderContext::CORE => ['site.', 'quire.'],
+            ExtenderContext::CORE => ['site.', 'quire.', 'theme.'],
             ExtenderContext::SITE => ['custom.'],
             default => [$owner.'.'],
         };

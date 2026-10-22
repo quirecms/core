@@ -15,6 +15,7 @@ final readonly class SettingDefinition
      * @param string           $owner     ID of the extension that declared it, "core" or "site"
      * @param list<string|int> $choices   Allowed values for {@see SettingType::Enum}
      * @param bool             $sensitive Hidden in listings, e.g. API keys
+     * @param bool             $exposed   Readable by templates with quire_setting()
      */
     public function __construct(
         public string $key,
@@ -28,6 +29,7 @@ final readonly class SettingDefinition
         public array $choices = [],
         public bool $nullable = false,
         public bool $sensitive = false,
+        public bool $exposed = false,
     ) {
     }
 
@@ -71,6 +73,7 @@ final readonly class SettingDefinition
             'choices' => $this->choices,
             'nullable' => $this->nullable,
             'sensitive' => $this->sensitive,
+            'exposed' => $this->exposed,
         ];
     }
 
@@ -81,7 +84,7 @@ final readonly class SettingDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool} $definition */
+        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool} $definition */
         $definition = $data;
 
         return new self(
@@ -96,6 +99,7 @@ final readonly class SettingDefinition
             choices: $definition['choices'],
             nullable: $definition['nullable'],
             sensitive: $definition['sensitive'],
+            exposed: $definition['exposed'] ?? false,
         );
     }
 }

@@ -26,12 +26,14 @@ final readonly class ExtenderContext
      * @param string       $id        ID of the extension being loaded, or {@see SITE}
      * @param string       $path      Root directory of the extension (or of the project, for the site)
      * @param list<string> $bootOrder IDs of the extensions that run, in boot order
+     * @param bool         $theme     Whether this is a theme's extend.php
      */
     public function __construct(
         public string $id,
         public string $path,
         private ContainerBuilder $container,
         private array $bootOrder,
+        public bool $theme = false,
     ) {
     }
 

@@ -52,6 +52,22 @@ final class SettingsTest extends ExtenderTestCase
         $this->assertExtenderFails(new Settings()->define('acme-reviews.sort', 'string', 'a', choices: ['a']), 'Choices only apply to settings of type "enum".');
         $this->assertExtenderFails(new Settings()->define('acme-reviews.per_page', 'int', '20'), 'The default value doesn\'t fit the setting: expected an integer.');
         $this->assertExtenderFails(new Settings()->define('acme-reviews.api_key', 'string', null), 'can\'t be empty (null)');
+        $this->assertExtenderFails(new Settings()->define('acme-reviews.api_key', 'string', '', sensitive: true, exposed: true), 'Sensitive settings can\'t be exposed to templates.');
+    }
+
+    public function testExposedSettingsAndThemeSettings(): void
+    {
+        $this->apply(new Settings()->define('acme-reviews.footer', 'string', '', exposed: true)->define('acme-reviews.limit', 'int', 5));
+        new Settings()->define('theme.acme-dark.accent', 'string', 'navy')
+            ->extend(new ExtenderContext('acme-dark', __DIR__, $this->container, [], theme: true));
+
+        self::assertTrue($this->schema()->get('acme-reviews.footer')->exposed);
+        self::assertFalse($this->schema()->get('acme-reviews.limit')->exposed);
+        self::assertTrue($this->schema()->get('theme.acme-dark.accent')->exposed, 'A theme\'s settings are for its templates.');
+
+        $this->expectExceptionMessageIsOrContains('Keys declared here must start with "theme.acme-dark."');
+        new Settings()->define('acme-dark.accent', 'string', '')
+            ->extend(new ExtenderContext('acme-dark', __DIR__, $this->container, [], theme: true));
     }
 
     public function testDuplicateKeysAreRejected(): void

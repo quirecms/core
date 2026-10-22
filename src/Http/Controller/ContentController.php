@@ -95,8 +95,6 @@ final readonly class ContentController
             'type' => $this->types->get($content->type),
             'body' => $this->renderer->body($content),
             'canonical_url' => $this->permalinks->url($content, UrlGeneratorInterface::ABSOLUTE_URL),
-            'site_title' => $this->settings->getString('site.title'),
-            'site_locale' => $this->settings->getString('site.locale'),
         ]));
     }
 
@@ -140,8 +138,6 @@ final readonly class ContentController
             'canonical_url' => $this->permalinks->listingUrl($type, $page, UrlGeneratorInterface::ABSOLUTE_URL),
             'previous_url' => $items->hasPreviousPage() ? $this->permalinks->listingUrl($type, $page - 1) : null,
             'next_url' => $items->hasNextPage() ? $this->permalinks->listingUrl($type, $page + 1) : null,
-            'site_title' => $this->settings->getString('site.title'),
-            'site_locale' => $this->settings->getString('site.locale'),
         ]));
     }
 
@@ -192,10 +188,7 @@ final readonly class ContentController
     {
         $this->logger->warning('Quire shows its welcome page instead of the homepage: {problem} Check the "site.homepage" settings.', ['problem' => $problem]);
 
-        return new Response($this->twig->render('@Quire/home.html.twig', [
-            'site_title' => $this->settings->getString('site.title'),
-            'site_locale' => $this->settings->getString('site.locale'),
-        ]));
+        return new Response($this->twig->render('@Quire/home.html.twig'));
     }
 
     private function redirect(Request $request, string $url, int $status, bool $keepQuery = true): RedirectResponse

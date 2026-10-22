@@ -17,6 +17,7 @@ use Quire\Extension\ResolvedExtensions;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Exception\ThemeException;
 use Quire\Theme\Internal\ThemeChain;
+use Quire\Theme\Slots;
 use Quire\Theme\Themes;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
@@ -64,6 +65,7 @@ final readonly class ExtensionBooter
         $container->setParameter(SettingsSchema::PARAMETER, []);
         $container->setParameter(MigrationOrder::PARAMETER, []);
         $container->setParameter(Views::PARAMETER, []);
+        $container->setParameter(Slots::PARAMETER, []);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));
@@ -101,7 +103,7 @@ final readonly class ExtensionBooter
 
             if (is_file($file)) {
                 $container->addResource(new FileResource($file));
-                $this->run(new ExtenderContext($theme->id, $theme->path, $container, $bootOrder), $file);
+                $this->run(new ExtenderContext($theme->id, $theme->path, $container, $bootOrder, theme: true), $file);
             }
         }
 

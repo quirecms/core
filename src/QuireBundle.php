@@ -22,6 +22,7 @@ use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
@@ -43,6 +44,7 @@ final class QuireBundle extends AbstractBundle
     {
         $container->addCompilerPass(new QueryServicesPass());
         $container->addCompilerPass(new TemplatePathsPass());
+        $container->addCompilerPass(new SlotsPass());
     }
 
     public function configure(DefinitionConfigurator $definition): void

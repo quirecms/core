@@ -16,7 +16,9 @@ use Quire\Settings\SettingType;
  *         ->define('acme-reviews.per_page', 'int', 20)
  *         ->define('acme-reviews.sort', 'enum', 'newest', choices: ['newest', 'oldest']);
  *
- * Keys start with the extension's ID and a dot. Read values with {@see \Quire\Settings\Settings}.
+ * Keys start with the extension's ID and a dot; a theme's start with "theme.", its ID and a dot, e.g.
+ * "theme.acme-dark.accent". Read values with {@see \Quire\Settings\Settings}, and in templates with
+ * quire_setting() when the setting is exposed. A theme's settings are always exposed.
  *
  * @api
  */
@@ -24,7 +26,7 @@ final class Settings implements ExtenderInterface
 {
     private const string KEY_PATTERN = '/^[a-z0-9]+(?:[-_][a-z0-9]+)*(?:\.[a-z0-9]+(?:[-_][a-z0-9]+)*)+$/';
 
-    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool}> */
+    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed: bool}> */
     private array $definitions = [];
 
     /**
@@ -32,6 +34,7 @@ final class Settings implements ExtenderInterface
      * @param list<string|int>   $choices   Allowed values, for the "enum" type
      * @param string|null        $widget    Hint for admin interfaces, e.g. "textarea" or "color"
      * @param bool               $sensitive Hide the value in listings, e.g. for API keys
+     * @param bool               $exposed   Let templates read it with quire_setting(), e.g. a footer text
      */
     public function define(
         string $key,
@@ -44,6 +47,7 @@ final class Settings implements ExtenderInterface
         array $choices = [],
         bool $nullable = false,
         bool $sensitive = false,
+        bool $exposed = false,
     ): self {
         $this->definitions[] = [
             'key' => $key,
@@ -56,6 +60,7 @@ final class Settings implements ExtenderInterface
             'choices' => $choices,
             'nullable' => $nullable,
             'sensitive' => $sensitive,
+            'exposed' => $exposed,
         ];
 
         return $this;
@@ -80,10 +85,14 @@ final class Settings implements ExtenderInterface
                 throw $context->error($where, 'Keys are lowercase words separated by dots, e.g. "acme-reviews.per_page".');
             }
 
-            $prefixes = $this->ownedPrefixes($context->id);
+            $prefixes = $this->ownedPrefixes($context);
 
             if (!array_any($prefixes, static fn (string $prefix): bool => str_starts_with($definition['key'], $prefix))) {
                 throw $context->error($where, \sprintf('Keys declared here must start with "%s", so they can\'t clash with other extensions\' settings.', implode('" or "', $prefixes)));
+            }
+
+            if ($definition['exposed'] && $definition['sensitive']) {
+                throw $context->error($where, 'Sensitive settings can\'t be exposed to templates.');
             }
 
             if (SettingType::Enum === $type && [] === $definition['choices']) {
@@ -106,6 +115,8 @@ final class Settings implements ExtenderInterface
                 choices: $definition['choices'],
                 nullable: $definition['nullable'],
                 sensitive: $definition['sensitive'],
+                // A theme's settings exist for its templates.
+                exposed: $definition['exposed'] || $context->theme,
             );
 
             $error = $setting->validate($definition['default']);
@@ -129,12 +140,13 @@ final class Settings implements ExtenderInterface
     /**
      * @return list<string>
      */
-    private function ownedPrefixes(string $owner): array
+    private function ownedPrefixes(ExtenderContext $context): array
     {
-        return match ($owner) {
-            ExtenderContext::CORE => ['site.', 'quire.', 'theme.'],
-            ExtenderContext::SITE => ['custom.'],
-            default => [$owner.'.'],
+        return match (true) {
+            ExtenderContext::CORE === $context->id => ['site.', 'quire.', 'theme.'],
+            ExtenderContext::SITE === $context->id => ['custom.'],
+            $context->theme => ['theme.'.$context->id.'.'],
+            default => [$context->id.'.'],
         };
     }
 }

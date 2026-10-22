@@ -4,11 +4,11 @@
 
     Variables: type (the content type), page (a ContentPage: iterate it for the items; page.page,
     page.pageCount), is_home (whether it's the homepage), previous_url, next_url (null when there's no
-    such page), canonical_url, site_title.
+    such page), canonical_url, site, theme.
 #}
 {% extends 'layout.html.twig' %}
 
-{% block title %}{{ is_home ? site_title : type.pluralLabel ~ ' – ' ~ site_title }}{% endblock %}
+{% block title %}{{ is_home ? site.title : type.pluralLabel ~ ' – ' ~ site.title }}{% endblock %}
 
 {% block content %}
     {% if not is_home %}<h1>{{ type.pluralLabel }}</h1>{% endif %}

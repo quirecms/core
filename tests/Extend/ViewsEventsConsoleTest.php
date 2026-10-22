@@ -8,9 +8,11 @@ use Quire\Extend\Console;
 use Quire\Extend\Events;
 use Quire\Extend\Views;
 use Quire\Tests\Extend\Fixtures\FixtureCommand;
+use Quire\Tests\Extend\Fixtures\FixtureSlot;
 use Quire\Tests\Extend\Fixtures\FixtureSubscriber;
 use Quire\Tests\Extend\Fixtures\InvokableController;
 use Quire\Tests\Extend\Fixtures\NotInvokable;
+use Quire\Theme\Slots;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 
 final class ViewsEventsConsoleTest extends ExtenderTestCase
@@ -31,6 +33,22 @@ final class ViewsEventsConsoleTest extends ExtenderTestCase
 
         $this->apply(new Views()->namespace('reviews', __DIR__));
         $this->assertExtenderFails(new Views()->namespace('reviews', __DIR__), 'The namespace is already used by "acme-reviews".');
+    }
+
+    public function testViewsFillSlots(): void
+    {
+        $this->apply(new Views()->slot('content.after_body', '@reviews/summary.html.twig')->slot('footer', FixtureSlot::class, priority: 5));
+
+        self::assertSame([
+            ['slot' => 'content.after_body', 'template' => '@reviews/summary.html.twig', 'class' => null, 'priority' => 0, 'owner' => 'acme-reviews'],
+            ['slot' => 'footer', 'template' => null, 'class' => FixtureSlot::class, 'priority' => 5, 'owner' => 'acme-reviews'],
+        ], $this->container->getParameter(Slots::PARAMETER));
+    }
+
+    public function testViewsRejectInvalidSlots(): void
+    {
+        $this->assertExtenderFails(new Views()->slot('Content.AfterBody', '@reviews/x.html.twig'), 'Slot names are lowercase words separated by dots');
+        $this->assertExtenderFails(new Views()->slot('footer', NotInvokable::class), 'a template name ending in ".twig", or a class implementing Quire\Theme\SlotRendererInterface');
     }
 
     public function testViewsRejectObjectGlobals(): void

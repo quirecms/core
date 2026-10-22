@@ -1,24 +1,33 @@
 {#
-    The page layout of Quire's own templates. Themes replace these templates.
+    The page around every page Quire renders. Themes replace it with their own layout.html.twig.
 
-    Variables: site_title, site_locale, and canonical_url when the page has one.
+    Variables: site (site.title, site.locale, site.url, site.description), theme, and canonical_url when
+    the page has one.
     Blocks: title, head, content
+    Slots: head, body_start, header.nav, sidebar, footer, body_end (every theme renders them; see
+    Quire\Theme\Slots::STANDARD)
 #}
 <!doctype html>
-<html lang="{{ site_locale }}">
+<html lang="{{ site.locale }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}{{ site_title }}{% endblock %}</title>
+    <title>{% block title %}{{ site.title }}{% endblock %}</title>
     {% if canonical_url is defined and canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
     {% block head %}{% endblock %}
+    {{ quire_slot('head') }}
 </head>
 <body>
+    {{ quire_slot('body_start') }}
     <header>
-        <a href="{{ quire_home_url() }}">{{ site_title }}</a>
+        <a href="{{ quire_home_url() }}">{{ site.title }}</a>
+        {% if quire_slot_filled('header.nav') %}<nav aria-label="Site">{{ quire_slot('header.nav') }}</nav>{% endif %}
     </header>
     <main>
         {% block content %}{% endblock %}
     </main>
+    {% if quire_slot_filled('sidebar') %}<aside>{{ quire_slot('sidebar') }}</aside>{% endif %}
+    {% if quire_slot_filled('footer') %}<footer>{{ quire_slot('footer') }}</footer>{% endif %}
+    {{ quire_slot('body_end') }}
 </body>
 </html>

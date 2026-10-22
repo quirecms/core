@@ -63,7 +63,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Backup/BackupContents.php',
             '../src/Backup/Exception/',
             '../src/Theme/Exception/',
-            '../src/Theme/Internal/{ThemeChain,TemplatePathsPass}.php',
+            '../src/Theme/Internal/{ThemeChain,TemplatePathsPass,SlotsPass}.php',
         ]);
 
     $services->set(InstalledExtensions::class)

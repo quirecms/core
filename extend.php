@@ -16,9 +16,9 @@ return [
     new Extend\Migrations('Quire\\Migrations', __DIR__.'/migrations'),
 
     new Extend\Settings()
-        ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site')
-        ->define('site.description', 'string', '', label: 'Site description', help: 'A short description of the site, used by search engines and when the site is shared.', group: 'site', widget: 'textarea')
-        ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site')
+        ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)
+        ->define('site.description', 'string', '', label: 'Site description', help: 'A short description of the site, used by search engines and when the site is shared.', group: 'site', widget: 'textarea', exposed: true)
+        ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site', exposed: true)
         ->define('quire.content.revisions_keep', 'int', 50, label: 'Revisions to keep', help: 'How many revisions to keep per content item. Older ones are deleted. 0 keeps all.', group: 'content')
         ->define('quire.content.per_page', 'int', 10, label: 'Items per page', help: 'How many items lists such as the blog show per page (1 to 100).', group: 'content')
         // What the homepage shows. The URL patterns of each content type are settings too: quire.permalinks.<type>.

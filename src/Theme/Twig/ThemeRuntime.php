@@ -7,7 +7,9 @@ namespace Quire\Theme\Twig;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
+use Quire\Theme\Exception\AssetNotFoundException;
 use Quire\Theme\Slots;
+use Quire\Theme\ThemeAssets;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Twig\Error\RuntimeError;
 use Twig\Extension\RuntimeExtensionInterface;
@@ -22,6 +24,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
      */
     public function __construct(
         private Slots $slots,
+        private ThemeAssets $assets,
         private Settings $settings,
         private SettingsSchema $schema,
         #[Autowire(param: ExtensionBooter::BOOT_ORDER_PARAMETER)]
@@ -58,6 +61,19 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
         }
 
         return $this->settings->get($key);
+    }
+
+    /**
+     * `{{ quire_asset('theme/logo.svg') }}`: the versioned URL of an asset; "theme/…" is the active theme's
+     * file, or its parent's.
+     */
+    public function asset(string $path): string
+    {
+        try {
+            return $this->assets->url($path);
+        } catch (AssetNotFoundException $e) {
+            throw new RuntimeError($e->getMessage(), previous: $e);
+        }
     }
 
     /**

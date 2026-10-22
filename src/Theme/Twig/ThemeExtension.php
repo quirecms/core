@@ -28,6 +28,7 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_slot_filled', [ThemeRuntime::class, 'slotFilled']),
             new TwigFunction('quire_setting', [ThemeRuntime::class, 'setting']),
             new TwigFunction('quire_extension_enabled', [ThemeRuntime::class, 'extensionEnabled']),
+            new TwigFunction('quire_asset', [ThemeRuntime::class, 'asset']),
         ];
     }
 

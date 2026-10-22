@@ -44,6 +44,14 @@ final class InstalledExtensions implements ResetInterface
         return array_filter($this->manifests(), static fn (ExtensionManifest $m): bool => ExtensionType::Theme === $m->type);
     }
 
+    /**
+     * @return array<string, ExtensionManifest> The installed extensions and themes, by ID
+     */
+    public function extensionsAndThemes(): array
+    {
+        return $this->manifests();
+    }
+
     public function has(string $id): bool
     {
         return isset($this->all()[$id]);

@@ -22,11 +22,13 @@ use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Theme\Internal\AssetsPass;
 use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\Definition\Processor;
+use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ConfigurationExtensionInterface;
@@ -45,6 +47,7 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new QueryServicesPass());
         $container->addCompilerPass(new TemplatePathsPass());
         $container->addCompilerPass(new SlotsPass());
+        $container->addCompilerPass(new AssetsPass());
     }
 
     public function configure(DefinitionConfigurator $definition): void
@@ -178,13 +181,39 @@ final class QuireBundle extends AbstractBundle
         $builder->setParameter(Themes::PINNED_PARAMETER, $config['pinned']);
         $builder->setParameter('quire.runtime.default_admin_url', 'http://localhost:2019');
 
-        new ExtensionBooter(new InstalledExtensions($installedJson))
+        $installed = new InstalledExtensions($installedJson);
+        $this->mapAssets($builder, $installed);
+
+        new ExtensionBooter($installed)
             ->boot($builder, $enabledIds, $projectDir.\DIRECTORY_SEPARATOR.'extend.php', ExtensionBooter::coreExtendFile(), $activeTheme);
 
         PermalinkSettings::declare($builder);
 
         // Changes when the formatter setup or any installed package changes, so cached HTML is never stale.
         $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode($builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));
+    }
+
+    /**
+     * Makes the assets/ directory of every installed extension and theme available to AssetMapper as
+     * "<id>/…", e.g. "acme-reviews/reviews.css". Installed, not only enabled: a production image compiles
+     * its assets while it's built, without the database, so it must include those of every package.
+     */
+    private function mapAssets(ContainerBuilder $builder, InstalledExtensions $installed): void
+    {
+        $paths = [];
+
+        foreach ($installed->extensionsAndThemes() as $manifest) {
+            $directory = $manifest->path.\DIRECTORY_SEPARATOR.'assets';
+            $builder->addResource(new FileExistenceResource($directory));
+
+            if (is_dir($directory)) {
+                $paths[$directory] = $manifest->id;
+            }
+        }
+
+        if ([] !== $paths) {
+            $builder->prependExtensionConfig('framework', ['asset_mapper' => ['paths' => $paths]]);
+        }
     }
 
     /**

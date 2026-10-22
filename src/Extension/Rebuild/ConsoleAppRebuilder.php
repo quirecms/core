@@ -6,6 +6,7 @@ namespace Quire\Extension\Rebuild;
 
 use Quire\Runtime\PhpBinary;
 use Quire\Runtime\WorkerRestarterInterface;
+use Symfony\Component\AssetMapper\CompiledAssetMapperConfigReader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Process\Process;
 
@@ -22,7 +23,8 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
     private \Closure $run;
 
     /**
-     * @param (\Closure(list<string>, \Closure(string): void): int)|null $run Runs a command and returns its exit code; replaceable in tests
+     * @param (\Closure(list<string>, \Closure(string): void): int)|null $run            Runs a command and returns its exit code; replaceable in tests
+     * @param CompiledAssetMapperConfigReader|null                       $compiledAssets Where compiled assets are, to know whether the site serves them
      */
     public function __construct(
         private WorkerRestarterInterface $workers,
@@ -31,6 +33,8 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
         #[Autowire(param: 'kernel.environment')]
         private string $environment,
         ?\Closure $run = null,
+        #[Autowire(service: 'asset_mapper.compiled_asset_mapper_config_reader')]
+        private ?CompiledAssetMapperConfigReader $compiledAssets = null,
     ) {
         $this->run = $run ?? $this->runProcess(...);
     }
@@ -42,6 +46,11 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
         if ($migrate) {
             $this->console(['quire:migrations:migrate', '--no-interaction', '--allow-no-migration'], $output);
             $this->console(['quire:content:sync-indexes'], $output);
+        }
+
+        // Compiled assets are part of the build: the importmap includes the enabled extensions' scripts.
+        if ($this->compiledAssets?->configExists('manifest.json') ?? false) {
+            $this->console(['asset-map:compile'], $output);
         }
 
         $output($this->workers->restart() ? "Restarted the PHP workers.\n" : "No PHP workers to restart on this machine.\n");

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Tests\Extend;
 
+use Quire\Extend\Assets;
 use Quire\Extend\Console;
 use Quire\Extend\Events;
 use Quire\Extend\Views;
@@ -49,6 +50,27 @@ final class ViewsEventsConsoleTest extends ExtenderTestCase
     {
         $this->assertExtenderFails(new Views()->slot('Content.AfterBody', '@reviews/x.html.twig'), 'Slot names are lowercase words separated by dots');
         $this->assertExtenderFails(new Views()->slot('footer', NotInvokable::class), 'a template name ending in ".twig", or a class implementing Quire\Theme\SlotRendererInterface');
+    }
+
+    public function testAssetsAreRegisteredInOrderWithTheirGroup(): void
+    {
+        $this->apply(new Assets()->stylesheet('theme/style.css')->script('acme-reviews/reviews.js', group: 'admin')->entrypoint('app'));
+
+        self::assertSame([
+            ['type' => 'stylesheet', 'path' => 'theme/style.css', 'group' => 'site', 'owner' => 'acme-reviews'],
+            ['type' => 'script', 'path' => 'acme-reviews/reviews.js', 'group' => 'admin', 'owner' => 'acme-reviews'],
+            ['type' => 'entrypoint', 'path' => 'app', 'group' => 'site', 'owner' => 'acme-reviews'],
+        ], $this->container->getParameter(Assets::PARAMETER));
+    }
+
+    public function testAssetsRejectInvalidDeclarations(): void
+    {
+        $this->assertExtenderFails(new Assets()->stylesheet('/acme-reviews/style.css'), 'Use a logical path such as "acme-reviews/styles.css"');
+        $this->assertExtenderFails(new Assets()->stylesheet('acme-reviews/style.scss'), 'Stylesheets must be .css files.');
+        $this->assertExtenderFails(new Assets()->script('acme-reviews/app.ts'), 'Scripts must be .js or .mjs files.');
+        $this->assertExtenderFails(new Assets()->stylesheet('other/style.css', group: 'backend'), 'Unknown group "backend". Use one of: site, admin.');
+        $this->assertExtenderFails(new Assets()->entrypoint('app.js?x'), 'Use the name of an entrypoint in importmap.php');
+        $this->assertExtenderFails(new Assets()->stylesheet('acme-reviews/missing.css'), 'The file "'.__DIR__.'/assets/missing.css" doesn\'t exist.');
     }
 
     public function testViewsRejectObjectGlobals(): void

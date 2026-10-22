@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Extension\Boot;
 
 use Quire\Database\MigrationOrder;
+use Quire\Extend\Assets;
 use Quire\Extend\ExtenderContext;
 use Quire\Extend\ExtenderException;
 use Quire\Extend\ExtenderInterface;
@@ -66,6 +67,7 @@ final readonly class ExtensionBooter
         $container->setParameter(MigrationOrder::PARAMETER, []);
         $container->setParameter(Views::PARAMETER, []);
         $container->setParameter(Slots::PARAMETER, []);
+        $container->setParameter(Assets::PARAMETER, []);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));

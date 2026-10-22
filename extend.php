@@ -7,6 +7,7 @@ use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
 use Quire\Formatter\Format;
+use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
 
 /*
@@ -14,6 +15,10 @@ use Quire\Theme\Themes;
  */
 return [
     new Extend\Migrations('Quire\\Migrations', __DIR__.'/migrations'),
+
+    // The stylesheets and scripts of Extend\Assets, before other fragments of the "head" slot.
+    new Extend\Views()
+        ->slot('head', AssetsSlot::class, priority: 1000),
 
     new Extend\Settings()
         ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)

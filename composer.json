@@ -18,6 +18,8 @@
         "doctrine/migrations": "^3.9",
         "league/commonmark": "^2.7",
         "psr/event-dispatcher": "^1.0",
+        "symfony/asset": "^8.1",
+        "symfony/asset-mapper": "^8.1",
         "symfony/cache": "^8.1",
         "symfony/config": "^8.1",
         "symfony/console": "^8.1",

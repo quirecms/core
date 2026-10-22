@@ -8,6 +8,8 @@ use PHPUnit\Framework\TestCase;
 use Quire\Extension\Rebuild\ConsoleAppRebuilder;
 use Quire\Extension\Rebuild\RebuildFailedException;
 use Quire\Tests\Runtime\FakeWorkerRestarter;
+use Symfony\Component\AssetMapper\CompiledAssetMapperConfigReader;
+use Symfony\Component\Filesystem\Filesystem;
 
 final class ConsoleAppRebuilderTest extends TestCase
 {
@@ -41,6 +43,26 @@ final class ConsoleAppRebuilderTest extends TestCase
         self::assertSame(['/app/bin/console cache:clear --env=prod'], $this->commands);
     }
 
+    public function testRecompilesAssetsWhenTheSiteServesCompiledOnes(): void
+    {
+        $directory = sys_get_temp_dir().'/quire-compiled-'.bin2hex(random_bytes(4));
+        $compiled = new CompiledAssetMapperConfigReader($directory);
+
+        $this->rebuild(migrate: false, compiledAssets: $compiled);
+        self::assertSame(['/app/bin/console cache:clear --env=prod'], $this->commands, 'Not in development, where assets are served as they are.');
+
+        $compiled->saveConfig('manifest.json', []);
+        $this->commands = [];
+
+        try {
+            $this->rebuild(migrate: false, compiledAssets: $compiled);
+        } finally {
+            new Filesystem()->remove($directory);
+        }
+
+        self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console asset-map:compile --env=prod'], $this->commands);
+    }
+
     public function testReportsWhenThereAreNoWorkers(): void
     {
         $this->workers = new FakeWorkerRestarter(hasWorkers: false);
@@ -60,14 +82,14 @@ final class ConsoleAppRebuilderTest extends TestCase
         }
     }
 
-    private function rebuild(bool $migrate, ?string $failing = null): string
+    private function rebuild(bool $migrate, ?string $failing = null, ?CompiledAssetMapperConfigReader $compiledAssets = null): string
     {
         $rebuilder = new ConsoleAppRebuilder($this->workers, '/app', 'prod', function (array $command, \Closure $output) use ($failing): int {
             $this->commands[] = implode(' ', \array_slice($command, 1));
             $output('ran '.$command[2]."\n");
 
             return $command[2] === $failing ? 1 : 0;
-        });
+        }, $compiledAssets);
 
         $output = '';
         $rebuilder->rebuild($migrate, static function (string $text) use (&$output): void {

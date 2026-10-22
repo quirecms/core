@@ -8,9 +8,11 @@ use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
+use Quire\Http\Session\SessionHandlerFactory;
 use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+use Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler;
 
 use function Symfony\Component\DependencyInjection\Loader\Configurator\param;
 use function Symfony\Component\DependencyInjection\Loader\Configurator\service;
@@ -81,6 +83,10 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(SchemaAssetFilter::class)
         ->tag(SchemaAssetFilter::TAG);
+
+    // Sessions in PostgreSQL, for applications that choose them (framework.session.handler_id).
+    $services->set(SessionHandlerFactory::SERVICE, PdoSessionHandler::class)
+        ->factory([service(SessionHandlerFactory::class), 'create']);
 
     // Quire's migrations have their own Doctrine Migrations setup and commands, next to the application's.
     $services->set(MigrationsFactory::SERVICE, DependencyFactory::class)

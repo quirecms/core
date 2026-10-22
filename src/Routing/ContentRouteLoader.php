@@ -6,6 +6,7 @@ namespace Quire\Routing;
 
 use Quire\Content\Permalink\Permalinks;
 use Quire\Http\Controller\ContentController;
+use Quire\Http\Controller\LoginController;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\Config\ContainerParametersResource;
@@ -57,6 +58,19 @@ final class ContentRouteLoader extends Loader
             defaults: ['_controller' => ContentController::class.'::home', ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY);
+
+        // Signing in and out: above content URLs, below every route of the application.
+        $collection->add(LoginController::LOGIN_ROUTE, new Route(
+            path: $this->prefix.'/login',
+            defaults: ['_controller' => LoginController::class.'::login', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            methods: ['GET', 'HEAD', 'POST'],
+        ), self::PRIORITY + 1);
+
+        $collection->add(LoginController::LOGOUT_ROUTE, new Route(
+            path: $this->prefix.'/logout',
+            defaults: ['_controller' => LoginController::class.'::logout', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            methods: ['GET', 'POST'],
+        ), self::PRIORITY + 1);
 
         $collection->add(Permalinks::CONTENT_ROUTE, new Route(
             path: $this->prefix.'/{path}',

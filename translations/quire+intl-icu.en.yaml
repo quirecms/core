@@ -1,0 +1,9 @@
+# The texts of Quire's own pages, in ICU MessageFormat. Translate them in a file per language, e.g.
+# quire+intl-icu.fr.yaml; a site overrides them in its own translations/ directory.
+'Sign in': 'Sign in'
+'Sign out': 'Sign out'
+'Email or username': 'Email or username'
+'Password': 'Password'
+'Keep me signed in on this device': 'Keep me signed in on this device'
+"You're signed in as {name}.": "You're signed in as {name}."
+'Signing in with a password is turned off.': 'Signing in with a password is turned off.'

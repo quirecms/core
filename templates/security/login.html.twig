@@ -1,0 +1,53 @@
+{#
+    The sign-in page. Themes restyle it through the layout and CSS, or replace it with their own
+    templates/security/login.html.twig.
+
+    Variables: user (when someone is signed in already), error (why the last attempt failed),
+    last_username, password_login (whether signing in with a password is on), target_path (where to go
+    afterwards, or null)
+    Slots: auth.login_options, with { target_path }: other ways to sign in, e.g. "Continue with Google"
+#}
+{% extends 'layout.html.twig' %}
+
+{% block title %}{{ 'Sign in'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+
+{% block content %}
+    <section class="sign-in">
+        <h1>{{ 'Sign in'|trans({}, 'quire') }}</h1>
+
+        {% if user %}
+            <p>{{ 'You\'re signed in as {name}.'|trans({ name: user.displayName }, 'quire') }}</p>
+            <p><a href="{{ logout_path() }}">{{ 'Sign out'|trans({}, 'quire') }}</a></p>
+        {% else %}
+            {% if error %}
+                <p class="form-error" id="sign-in-error" role="alert">{{ error.messageKey|trans(error.messageData, 'security') }}</p>
+            {% endif %}
+
+            {% if password_login %}
+                <form method="post" action="{{ path('quire_login') }}" class="form">
+                    <p class="form-field">
+                        <label for="username">{{ 'Email or username'|trans({}, 'quire') }}</label>
+                        <input type="text" id="username" name="_username" value="{{ last_username }}" autocomplete="username" required{% if error %} aria-describedby="sign-in-error"{% endif %}>
+                    </p>
+                    <p class="form-field">
+                        <label for="password">{{ 'Password'|trans({}, 'quire') }}</label>
+                        <input type="password" id="password" name="_password" autocomplete="current-password" required>
+                    </p>
+                    <p class="form-check">
+                        <input type="checkbox" id="remember-me" name="_remember_me" value="on">
+                        <label for="remember-me">{{ 'Keep me signed in on this device'|trans({}, 'quire') }}</label>
+                    </p>
+                    <input type="hidden" name="_csrf_token" value="{{ csrf_token('authenticate') }}">
+                    {% if target_path %}<input type="hidden" name="_target_path" value="{{ target_path }}">{% endif %}
+                    <p><button type="submit">{{ 'Sign in'|trans({}, 'quire') }}</button></p>
+                </form>
+            {% elseif not quire_slot_filled('auth.login_options') %}
+                <p>{{ 'Signing in with a password is turned off.'|trans({}, 'quire') }}</p>
+            {% endif %}
+
+            {% if quire_slot_filled('auth.login_options') %}
+                <div class="sign-in-options">{{ quire_slot('auth.login_options', { target_path }) }}</div>
+            {% endif %}
+        {% endif %}
+    </section>
+{% endblock %}

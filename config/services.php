@@ -62,6 +62,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Permalink/{PermalinkPattern,Redirect,Resolution}.php',
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
             '../src/Backup/BackupContents.php',
+            '../src/User/{User,Role,CreateUser,UpdateUser}.php',
+            '../src/User/Exception/',
             '../src/Backup/Exception/',
             '../src/Theme/{Exception,Event}/',
             '../src/Theme/Seo/SeoTags.php',

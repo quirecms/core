@@ -32,6 +32,7 @@
         "symfony/http-kernel": "^8.1",
         "symfony/process": "^8.1",
         "symfony/routing": "^8.1",
+        "symfony/security-bundle": "^8.1",
         "symfony/service-contracts": "^3.6",
         "symfony/string": "^8.1",
         "symfony/translation": "^8.1",

@@ -26,6 +26,8 @@ use Quire\Theme\Internal\AssetsPass;
 use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
+use Quire\User\Security\UserProvider;
+use Quire\User\User;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileExistenceResource;
@@ -111,6 +113,16 @@ final class QuireBundle extends AbstractBundle
         $builder->prependExtensionConfig('framework', [
             'cache' => ['pools' => [ContentRenderer::CACHE_POOL => ['adapter' => 'cache.app']]],
         ]);
+
+        // Quire's users for Symfony's security: a password hasher, and the user provider "quire_users".
+        // Only additions: which firewalls use them is up to the application, so a host application's
+        // own security setup stays as it is.
+        if ($builder->hasExtension('security')) {
+            $builder->prependExtensionConfig('security', [
+                'password_hashers' => [User::class => 'auto'],
+                'providers' => ['quire_users' => ['id' => UserProvider::class]],
+            ]);
+        }
 
         // Extensions boot here, before other bundles process their configuration, so extenders can
         // still add to it (e.g. Twig paths).

@@ -10,6 +10,7 @@ use Quire\Content\Exception\ContentOperationCancelledException;
 use Quire\Content\Exception\InvalidContentException;
 use Quire\Content\Exception\TransitionNotAllowedException;
 use Quire\Formatter\Exception\UnknownFormatException;
+use Quire\User\UserRepository;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
@@ -69,6 +70,14 @@ final class ConsoleErrors
         $object = $fields;
 
         return $object;
+    }
+
+    /**
+     * The ID of the user given by their ID, email or username, like the user commands take them.
+     */
+    public static function userId(UserRepository $users, string $reference, string $option): string
+    {
+        return $users->findByReference($reference)->id ?? throw new \InvalidArgumentException(\sprintf('%s: no user is "%s".', $option, $reference));
     }
 
     public static function date(string $value, string $option): \DateTimeImmutable

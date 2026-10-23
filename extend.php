@@ -10,6 +10,7 @@ use Quire\Formatter\Format;
 use Quire\Permission\Permissions;
 use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
+use Quire\User\AccountSettings;
 use Quire\User\Role;
 use Quire\User\Security\SignInListener;
 
@@ -35,6 +36,10 @@ return [
         ->define('site.homepage_page', 'string', null, label: 'Homepage page', help: 'The page the homepage shows: its ID or its path, e.g. "home".', group: 'site', nullable: true)
         ->define('site.homepage_route', 'string', null, label: 'Homepage route', help: 'The name of the extension route the homepage shows. It must not need parameters.', group: 'site', nullable: true)
         ->define(Permissions::SETTING, 'json', [], label: 'Permission changes', help: 'Abilities granted to or revoked from roles, on top of the defaults. Change them with "bin/console quire:permissions:grant" and "revoke".', group: 'users')
+        ->define(AccountSettings::REGISTRATION, 'bool', false, label: 'Registration', help: 'Whether visitors can create an account on the site, as members. Emails need a mailer (MAILER_DSN).', group: 'users')
+        ->define(AccountSettings::EMAIL_VERIFICATION, 'bool', false, label: 'Confirm emails', help: 'Whether people who register confirm their email, by opening an emailed link, before they can sign in.', group: 'users')
+        ->define(AccountSettings::PASSWORD_RESET, 'bool', false, label: 'Password reset', help: 'Whether users who forgot their password can choose a new one through an emailed link.', group: 'users')
+        ->define(AccountSettings::MAIL_FROM, 'string', null, label: 'Email sender', help: 'Who emails come from, e.g. "Tournament news <news@example.com>". Empty for the site title and noreply@ the site\'s domain.', group: 'users', nullable: true)
         ->define(SignInListener::PASSWORD_LOGIN_SETTING, 'bool', true, label: 'Password sign-in', help: 'Whether users can sign in with a password. Turn it off when everyone signs in another way, e.g. with single sign-on.', group: 'users')
         // Read when the application is built: changing it rebuilds the application (quire:theme:use does that right away).
         ->define(Themes::SETTING, 'string', Themes::DEFAULT, label: 'Theme', help: 'The ID of the site\'s theme, e.g. "acme-dark". Empty for Quire\'s built-in templates.', group: 'appearance', nullable: true),

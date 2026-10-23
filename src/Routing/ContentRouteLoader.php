@@ -7,6 +7,8 @@ namespace Quire\Routing;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Http\Controller\ContentController;
 use Quire\Http\Controller\LoginController;
+use Quire\Http\Controller\PasswordResetController;
+use Quire\Http\Controller\RegistrationController;
 use Quire\User\CurrentUser;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -94,5 +96,23 @@ final class ContentRouteLoader extends Loader
             defaults: ['_controller' => LoginController::class.'::logout', ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['GET', 'POST'],
         ), self::PRIORITY + 1);
+
+        // Accounts: each page answers 404 while its setting is off.
+        $accounts = [
+            RegistrationController::REGISTER_ROUTE => ['/register', RegistrationController::class.'::register', ['GET', 'HEAD', 'POST'], []],
+            RegistrationController::VERIFY_ROUTE => ['/verify-email/{token}', RegistrationController::class.'::verify', ['GET', 'HEAD'], ['token' => '[0-9a-f]{32}\.[A-Za-z0-9_-]+']],
+            RegistrationController::RESEND_ROUTE => ['/verify-email', RegistrationController::class.'::resend', ['GET', 'HEAD', 'POST'], []],
+            PasswordResetController::FORGOT_ROUTE => ['/forgot-password', PasswordResetController::class.'::forgot', ['GET', 'HEAD', 'POST'], []],
+            PasswordResetController::RESET_ROUTE => ['/reset-password/{token}', PasswordResetController::class.'::reset', ['GET', 'HEAD', 'POST'], ['token' => '[0-9a-f]{32}\.[A-Za-z0-9_-]+']],
+        ];
+
+        foreach ($accounts as $name => [$path, $controller, $methods, $requirements]) {
+            $collection->add($name, new Route(
+                path: $this->prefix.$path,
+                defaults: ['_controller' => $controller, ExtensionRouteLoader::QUIRE_ROUTE => true, ...(PasswordResetController::RESET_ROUTE === $name ? ['token' => null] : [])],
+                requirements: $requirements,
+                methods: $methods,
+            ), self::PRIORITY + 1);
+        }
     }
 }

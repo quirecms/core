@@ -25,6 +25,7 @@ final readonly class CreateUser
         public ?string $password = null,
         public array $roles = [],
         public array $attributes = [],
+        public bool $emailVerified = true,
     ) {
     }
 }

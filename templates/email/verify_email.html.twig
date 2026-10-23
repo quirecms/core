@@ -1,0 +1,9 @@
+{# Variables: user, url (the link that confirms the email) #}
+{% extends 'email/layout.html.twig' %}
+
+{% block body %}
+    <p>{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}</p>
+    <p>{{ 'Please confirm that this is your email address, so you can sign in:'|trans({}, 'quire') }}</p>
+    <p><a href="{{ url }}" style="display: inline-block; padding: 10px 18px; background: #1c184b; color: #ffffff; border-radius: 6px; text-decoration: none;">{{ 'Confirm my email address'|trans({}, 'quire') }}</a></p>
+    <p>{{ 'The link works for two days. If you didn\'t create an account, ignore this email.'|trans({}, 'quire') }}</p>
+{% endblock %}

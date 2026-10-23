@@ -1,0 +1,9 @@
+{# Variables: user, login_url, reset_url (null when password reset is off) #}
+{% extends 'email/layout.html.twig' %}
+
+{% block body %}
+    <p>{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}</p>
+    <p>{{ 'Someone tried to create an account with your email address, but you already have one.'|trans({}, 'quire') }}</p>
+    <p><a href="{{ login_url }}">{{ 'Sign in'|trans({}, 'quire') }}</a>{% if reset_url %} · <a href="{{ reset_url }}">{{ 'Forgot your password?'|trans({}, 'quire') }}</a>{% endif %}</p>
+    <p>{{ 'If it wasn\'t you, ignore this email: nothing changed.'|trans({}, 'quire') }}</p>
+{% endblock %}

@@ -1,0 +1,16 @@
+{#
+    An emailed link that doesn't work: it expired, was used already, or was replaced by a newer one.
+
+    Variables: retry_route (the page to ask for a new link)
+#}
+{% extends 'layout.html.twig' %}
+
+{% block title %}{{ 'This link doesn\'t work anymore'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+
+{% block content %}
+    <section class="sign-in">
+        <h1>{{ 'This link doesn\'t work anymore'|trans({}, 'quire') }}</h1>
+        <p>{{ 'Links in our emails work once, for a limited time, and only the newest one does.'|trans({}, 'quire') }}</p>
+        <p><a href="{{ path(retry_route) }}">{{ 'Get a new link'|trans({}, 'quire') }}</a></p>
+    </section>
+{% endblock %}

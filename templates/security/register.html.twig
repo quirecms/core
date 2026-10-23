@@ -1,0 +1,47 @@
+{#
+    The registration page, when the setting "quire.auth.registration" is on. Themes can replace it.
+
+    Variables: values (name, email: what was typed), errors (messages by field: name, email, password,
+    and form for the whole form)
+#}
+{% extends 'layout.html.twig' %}
+
+{% block title %}{{ 'Create an account'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+
+{% block content %}
+    <section class="sign-in">
+        <h1>{{ 'Create an account'|trans({}, 'quire') }}</h1>
+
+        {% if errors.form is defined %}
+            <p class="form-error" role="alert">{{ errors.form|trans({}, 'quire') }}</p>
+        {% endif %}
+
+        <form method="post" action="{{ path('quire_register') }}" class="form" novalidate>
+            <p class="form-field">
+                <label for="name">{{ 'Name'|trans({}, 'quire') }}</label>
+                <input type="text" id="name" name="name" value="{{ values.name }}" autocomplete="name" maxlength="100"{% if errors.name is defined %} aria-invalid="true" aria-describedby="name-error"{% endif %}>
+                {% if errors.name is defined %}<span class="form-error" id="name-error">{{ errors.name|trans({}, 'quire') }}</span>{% endif %}
+            </p>
+            <p class="form-field">
+                <label for="email">{{ 'Email'|trans({}, 'quire') }}</label>
+                <input type="email" id="email" name="email" value="{{ values.email }}" autocomplete="email" required{% if errors.email is defined %} aria-invalid="true" aria-describedby="email-error"{% endif %}>
+                {% if errors.email is defined %}<span class="form-error" id="email-error">{{ errors.email|trans({}, 'quire') }}</span>{% endif %}
+            </p>
+            <p class="form-field">
+                <label for="password">{{ 'Password'|trans({}, 'quire') }}</label>
+                <input type="password" id="password" name="password" autocomplete="new-password" minlength="8" required aria-describedby="password-hint{% if errors.password is defined %} password-error{% endif %}"{% if errors.password is defined %} aria-invalid="true"{% endif %}>
+                <span class="form-hint" id="password-hint">{{ 'At least 8 characters.'|trans({}, 'quire') }}</span>
+                {% if errors.password is defined %}<span class="form-error" id="password-error">{{ errors.password|trans({}, 'quire') }}</span>{% endif %}
+            </p>
+            {# Left empty by people, who don't see it; bots fill it in. #}
+            <p hidden>
+                <label for="website">Website</label>
+                <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+            </p>
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('register') }}">
+            <p><button type="submit">{{ 'Create account'|trans({}, 'quire') }}</button></p>
+        </form>
+
+        <p>{{ 'Already have an account?'|trans({}, 'quire') }} <a href="{{ path('quire_login') }}">{{ 'Sign in'|trans({}, 'quire') }}</a></p>
+    </section>
+{% endblock %}

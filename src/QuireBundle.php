@@ -30,6 +30,7 @@ use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
 use Quire\User\CurrentUser;
+use Quire\User\Security\FormThrottle;
 use Quire\User\Security\UserProvider;
 use Quire\User\User;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
@@ -148,7 +149,12 @@ final class QuireBundle extends AbstractBundle
     {
         // Rendered content is cached in its own pool, so it can be cleared on its own.
         $builder->prependExtensionConfig('framework', [
-            'cache' => ['pools' => [ContentRenderer::CACHE_POOL => ['adapter' => 'cache.app']]],
+            'cache' => ['pools' => [
+                ContentRenderer::CACHE_POOL => ['adapter' => 'cache.app'],
+                // How often forms such as the registration were sent. With several servers, make
+                // cache.app shared (e.g. Redis), or each server counts on its own.
+                FormThrottle::CACHE_POOL => ['adapter' => 'cache.app'],
+            ]],
         ]);
 
         // Quire's users for Symfony's security: a password hasher, and the user provider "quire_users".

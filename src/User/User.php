@@ -23,11 +23,12 @@ final readonly class User implements UserInterface, PasswordAuthenticatedUserInt
     public const string SUSPENDED = 'suspended';
 
     /**
-     * @param string|null          $email        Null for users who only sign in through another provider
-     * @param string|null          $passwordHash Null for users without a password
-     * @param list<string>         $roles        Quire's role names, e.g. ["editor"]; see {@see Role}
-     * @param string               $status       {@see ACTIVE} or {@see SUSPENDED}
-     * @param array<string, mixed> $attributes   Values extensions keep about the user
+     * @param string|null             $email           Null for users who only sign in through another provider
+     * @param string|null             $passwordHash    Null for users without a password
+     * @param list<string>            $roles           Quire's role names, e.g. ["editor"]; see {@see Role}
+     * @param string                  $status          {@see ACTIVE} or {@see SUSPENDED}
+     * @param array<string, mixed>    $attributes      Values extensions keep about the user
+     * @param \DateTimeImmutable|null $emailVerifiedAt When the user confirmed their email; null if they haven't
      */
     public function __construct(
         public string $id,
@@ -41,12 +42,21 @@ final readonly class User implements UserInterface, PasswordAuthenticatedUserInt
         public \DateTimeImmutable $createdAt,
         public \DateTimeImmutable $updatedAt,
         public ?\DateTimeImmutable $lastLoginAt,
+        public ?\DateTimeImmutable $emailVerifiedAt = null,
     ) {
     }
 
     public function isActive(): bool
     {
         return self::ACTIVE === $this->status;
+    }
+
+    /**
+     * Whether the user confirmed their email, by opening a link sent to it, or an admin created them.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return null !== $this->email && $this->emailVerifiedAt instanceof \DateTimeImmutable;
     }
 
     public function hasRole(string $role): bool
@@ -106,7 +116,7 @@ final readonly class User implements UserInterface, PasswordAuthenticatedUserInt
     }
 
     /**
-     * @param array{id: string, email: ?string, username: string, displayName: string, passwordHash: ?string, roles: list<string>, status: string, attributes: array<string, mixed>, createdAt: \DateTimeImmutable, updatedAt: \DateTimeImmutable, lastLoginAt: ?\DateTimeImmutable} $data
+     * @param array{id: string, email: ?string, username: string, displayName: string, passwordHash: ?string, roles: list<string>, status: string, attributes: array<string, mixed>, createdAt: \DateTimeImmutable, updatedAt: \DateTimeImmutable, lastLoginAt: ?\DateTimeImmutable, emailVerifiedAt?: ?\DateTimeImmutable} $data
      */
     public function __unserialize(array $data): void
     {
@@ -121,5 +131,6 @@ final readonly class User implements UserInterface, PasswordAuthenticatedUserInt
         $this->createdAt = $data['createdAt'];
         $this->updatedAt = $data['updatedAt'];
         $this->lastLoginAt = $data['lastLoginAt'];
+        $this->emailVerifiedAt = $data['emailVerifiedAt'] ?? null;
     }
 }

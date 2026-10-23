@@ -1,0 +1,11 @@
+{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}
+
+{{ 'Someone tried to create an account with your email address, but you already have one.'|trans({}, 'quire') }}
+
+{{ 'Sign in'|trans({}, 'quire') }}: {{ login_url|raw }}
+{% if reset_url %}{{ 'Forgot your password?'|trans({}, 'quire') }} {{ reset_url|raw }}
+{% endif %}
+
+{{ 'If it wasn\'t you, ignore this email: nothing changed.'|trans({}, 'quire') }}
+
+{{ site.title|raw }}

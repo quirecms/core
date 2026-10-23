@@ -68,8 +68,8 @@ final readonly class UserWriter
             }
 
             $id = $this->connection->fetchOne(
-                'INSERT INTO quire.app_user (email, username, display_name, password_hash, roles, attributes) VALUES (?, ?, ?, ?, ?::text[], ?::jsonb) RETURNING id',
-                [$email, $username, $displayName, $hash, $this->array($roles), json_encode((object) $command->attributes, \JSON_THROW_ON_ERROR)],
+                'INSERT INTO quire.app_user (email, username, display_name, password_hash, roles, attributes, email_verified_at) VALUES (?, ?, ?, ?, ?::text[], ?::jsonb, ?) RETURNING id',
+                [$email, $username, $displayName, $hash, $this->array($roles), json_encode((object) $command->attributes, \JSON_THROW_ON_ERROR), null !== $email && $command->emailVerified ? 'now' : null],
             );
 
             return $this->get(\is_string($id) ? $id : throw new \LogicException('The new user has no ID.'));
@@ -82,7 +82,7 @@ final readonly class UserWriter
      */
     public function update(UpdateUser $command): User
     {
-        $this->get($command->id);
+        $current = $this->get($command->id);
         $violations = [];
         $columns = [];
 
@@ -98,6 +98,11 @@ final readonly class UserWriter
 
         if ([] !== $violations) {
             throw new InvalidUserException($violations);
+        }
+
+        // A new email isn't confirmed yet.
+        if (\array_key_exists('email', $columns) && mb_strtolower((string) $columns['email']) !== mb_strtolower((string) $current->email)) {
+            $columns['email_verified_at'] = null;
         }
 
         return $this->transactional(function () use ($command, $columns): User {
@@ -230,6 +235,19 @@ final readonly class UserWriter
                 throw InvalidUserException::single('identity', \sprintf('This %s identity is linked to another user.', $provider));
             }
         });
+    }
+
+    /**
+     * Records that the user confirmed their email, e.g. by opening a link sent to it.
+     *
+     * @throws UserNotFoundException
+     */
+    public function markEmailVerified(string $id): User
+    {
+        $this->get($id);
+        $this->connection->executeStatement('UPDATE quire.app_user SET email_verified_at = now(), updated_at = now() WHERE id = ? AND email_verified_at IS NULL', [$id]);
+
+        return $this->get($id);
     }
 
     /**

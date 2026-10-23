@@ -1,0 +1,16 @@
+{#
+    After a form that emails a link. It reads the same whether the email has an account or not.
+
+    Variables: email (where the email went, if it has an account)
+#}
+{% extends 'layout.html.twig' %}
+
+{% block title %}{{ 'Check your inbox'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+
+{% block content %}
+    <section class="sign-in">
+        <h1>{{ 'Check your inbox'|trans({}, 'quire') }}</h1>
+        <p role="status">{{ 'If {email} has an account with us, we\'ve sent it an email with a link. It can take a few minutes; check your spam folder too.'|trans({ email }, 'quire') }}</p>
+        <p><a href="{{ path('quire_login') }}">{{ 'Back to signing in'|trans({}, 'quire') }}</a></p>
+    </section>
+{% endblock %}

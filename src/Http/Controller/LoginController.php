@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Http\Controller;
 
 use Quire\Settings\Settings;
+use Quire\User\AccountSettings;
 use Quire\User\Security\SignInListener;
 use Quire\User\User;
 use Symfony\Bundle\SecurityBundle\Security;
@@ -39,20 +40,18 @@ final readonly class LoginController
     {
         $user = $this->security->getUser();
 
-        $response = new Response($this->twig->render('security/login.html.twig', [
+        $passwordLogin = $this->settings->getBool(SignInListener::PASSWORD_LOGIN_SETTING);
+
+        return PrivatePage::secure(new Response($this->twig->render('security/login.html.twig', [
             'user' => $user instanceof User ? $user : null,
             'error' => $this->authentication->getLastAuthenticationError(),
             'last_username' => $this->authentication->getLastUsername(),
-            'password_login' => $this->settings->getBool(SignInListener::PASSWORD_LOGIN_SETTING),
+            'password_login' => $passwordLogin,
             'target_path' => $this->onSitePath($request->query->getString('next')),
-        ]));
-
-        // Never cached, and never shown inside another site, where a frame could capture the password.
-        $response->headers->set('Cache-Control', 'no-store');
-        $response->headers->set('Content-Security-Policy', "frame-ancestors 'none'");
-        $response->headers->set('X-Frame-Options', 'DENY');
-
-        return $response;
+            'registration' => $this->settings->getBool(AccountSettings::REGISTRATION),
+            'password_reset' => $passwordLogin && $this->settings->getBool(AccountSettings::PASSWORD_RESET),
+            'email_verification' => $this->settings->getBool(AccountSettings::EMAIL_VERIFICATION),
+        ])));
     }
 
     public function logout(): never

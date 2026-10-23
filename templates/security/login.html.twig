@@ -4,7 +4,8 @@
 
     Variables: user (when someone is signed in already), error (why the last attempt failed),
     last_username, password_login (whether signing in with a password is on), target_path (where to go
-    afterwards, or null)
+    afterwards, or null), registration, password_reset and email_verification (whether those are on)
+    Flash messages: "quire", e.g. after confirming an email
     Slots: auth.login_options, with { target_path }: other ways to sign in, e.g. "Continue with Google"
 #}
 {% extends 'layout.html.twig' %}
@@ -15,12 +16,21 @@
     <section class="sign-in">
         <h1>{{ 'Sign in'|trans({}, 'quire') }}</h1>
 
+        {% for message in app.flashes('quire') %}
+            <p class="notice" role="status">{{ message|trans({}, 'quire') }}</p>
+        {% endfor %}
+
         {% if user %}
             <p>{{ 'You\'re signed in as {name}.'|trans({ name: user.displayName }, 'quire') }}</p>
             <p><a href="{{ logout_path() }}">{{ 'Sign out'|trans({}, 'quire') }}</a></p>
         {% else %}
             {% if error %}
-                <p class="form-error" id="sign-in-error" role="alert">{{ error.messageKey|trans(error.messageData, 'security') }}</p>
+                <p class="form-error" id="sign-in-error" role="alert">
+                    {{ error.messageKey|trans(error.messageData, 'security') }}
+                    {% if email_verification and error.messageKey == constant('Quire\\User\\Security\\UserChecker::UNVERIFIED_MESSAGE') %}
+                        <a href="{{ path('quire_resend_verification') }}">{{ 'Send a new link'|trans({}, 'quire') }}</a>
+                    {% endif %}
+                </p>
             {% endif %}
 
             {% if password_login %}
@@ -41,12 +51,19 @@
                     {% if target_path %}<input type="hidden" name="_target_path" value="{{ target_path }}">{% endif %}
                     <p><button type="submit">{{ 'Sign in'|trans({}, 'quire') }}</button></p>
                 </form>
+                {% if password_reset %}
+                    <p><a href="{{ path('quire_forgot_password') }}">{{ 'Forgot your password?'|trans({}, 'quire') }}</a></p>
+                {% endif %}
             {% elseif not quire_slot_filled('auth.login_options') %}
                 <p>{{ 'Signing in with a password is turned off.'|trans({}, 'quire') }}</p>
             {% endif %}
 
             {% if quire_slot_filled('auth.login_options') %}
                 <div class="sign-in-options">{{ quire_slot('auth.login_options', { target_path }) }}</div>
+            {% endif %}
+
+            {% if registration %}
+                <p>{{ 'New here?'|trans({}, 'quire') }} <a href="{{ path('quire_register') }}">{{ 'Create an account'|trans({}, 'quire') }}</a></p>
             {% endif %}
         {% endif %}
     </section>

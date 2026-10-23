@@ -14,7 +14,7 @@ use Quire\Content\Internal\Row;
  */
 final readonly class UserRepository
 {
-    private const string COLUMNS = 'id, email, username, display_name, password_hash, roles, status, attributes, created_at, updated_at, last_login_at';
+    private const string COLUMNS = 'id, email, username, display_name, password_hash, roles, status, attributes, created_at, updated_at, last_login_at, email_verified_at';
 
     public function __construct(
         private Connection $connection,
@@ -132,6 +132,7 @@ final readonly class UserRepository
             createdAt: $row->date('created_at'),
             updatedAt: $row->date('updated_at'),
             lastLoginAt: $row->nullableDate('last_login_at'),
+            emailVerifiedAt: $row->nullableDate('email_verified_at'),
         );
     }
 

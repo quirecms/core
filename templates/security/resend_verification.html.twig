@@ -1,0 +1,28 @@
+{#
+    Asks for the email to send a new confirmation link to, when "quire.auth.email_verification" is on.
+
+    Variables: email (what was typed), errors (form)
+#}
+{% extends 'layout.html.twig' %}
+
+{% block title %}{{ 'Confirm your email address'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+
+{% block content %}
+    <section class="sign-in">
+        <h1>{{ 'Confirm your email address'|trans({}, 'quire') }}</h1>
+        <p>{{ 'Didn\'t get the email, or did the link expire? Enter your email address for a new one.'|trans({}, 'quire') }}</p>
+
+        {% if errors.form is defined %}
+            <p class="form-error" role="alert">{{ errors.form|trans({}, 'quire') }}</p>
+        {% endif %}
+
+        <form method="post" action="{{ path('quire_resend_verification') }}" class="form">
+            <p class="form-field">
+                <label for="email">{{ 'Email'|trans({}, 'quire') }}</label>
+                <input type="email" id="email" name="email" value="{{ email }}" autocomplete="email" required>
+            </p>
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('resend_verification') }}">
+            <p><button type="submit">{{ 'Send the link'|trans({}, 'quire') }}</button></p>
+        </form>
+    </section>
+{% endblock %}

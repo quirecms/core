@@ -23,6 +23,12 @@ use Quire\Storage\StorageDisks;
  */
 final readonly class GarbageCollector
 {
+    /**
+     * Held exclusively while collecting, and shared by backups: a backup's files can't be collected
+     * between its database dump and its copies of them.
+     */
+    public const int BACKUP_LOCK = 0x7175697265676301;
+
     /** Files that {@see ObjectStore} writes: "ab/cd/<sha256>.<ext>", and partial writes next to them */
     private const string OBJECT_FILE = '#^[0-9a-f]{2}/[0-9a-f]{2}/[0-9a-f]{64}\.[a-z0-9]+(\.part-[0-9a-f]{12})?$#';
 
@@ -40,11 +46,16 @@ final readonly class GarbageCollector
     public function collect(\DateTimeImmutable $before, bool $dryRun = false, ?\Closure $log = null): array
     {
         $log ??= static function (string $message): void {};
+        $this->connection->executeStatement('SELECT pg_advisory_lock(?)', [self::BACKUP_LOCK]);
 
-        return [
-            'objects' => $this->unreferencedObjects($before, $dryRun, $log),
-            'files' => $this->unrecordedFiles($before, $dryRun, $log),
-        ];
+        try {
+            return [
+                'objects' => $this->unreferencedObjects($before, $dryRun, $log),
+                'files' => $this->unrecordedFiles($before, $dryRun, $log),
+            ];
+        } finally {
+            $this->connection->executeStatement('SELECT pg_advisory_unlock(?)', [self::BACKUP_LOCK]);
+        }
     }
 
     /**

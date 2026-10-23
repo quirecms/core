@@ -331,7 +331,7 @@ final class QuireBundle extends AbstractBundle
             $disks[$name] = [
                 ...$configured,
                 'public' => $public,
-                'path' => $configured['path'] ?? $storage['root'].'/'.($public ? 'public' : 'private').'/'.$name,
+                'path' => $configured['path'] ?? DiskConfig::defaultPath($storage['root'], $public, $name),
                 'label' => $declaration['label'] ?? null,
                 'owner' => $declaration['owner'] ?? ExtenderContext::SITE,
             ];

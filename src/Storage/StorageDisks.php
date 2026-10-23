@@ -39,7 +39,30 @@ final class StorageDisks
         private readonly DiskFactory $factory,
         #[Autowire(service: self::SERVICES_LOCATOR)]
         private readonly ContainerInterface $services,
+        #[Autowire(param: self::ROOT_PARAMETER)]
+        private readonly string $root = 'storage',
     ) {
+    }
+
+    /**
+     * These disks, plus those of extensions that aren't enabled yet, where they'd be without
+     * configuration: e.g. for a restore of a backup that enables them.
+     *
+     * @internal
+     *
+     * @param list<array{name: string, public: bool, label: ?string, owner: string}> $declarations
+     */
+    public function withDeclarations(array $declarations): self
+    {
+        $config = $this->config;
+
+        foreach ($declarations as $disk) {
+            $config[$disk['name']] ??= [...$disk, 'adapter' => 'local', 'path' => DiskConfig::defaultPath($this->root, $disk['public'], $disk['name'])];
+        }
+
+        ksort($config);
+
+        return new self($config, $this->factory, $this->services, $this->root);
     }
 
     /**

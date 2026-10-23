@@ -21,9 +21,14 @@ use Symfony\Component\Console\Style\SymfonyStyle;
         Restores a backup made by <info>quire:backup</info>, replacing all of Quire's data in the database.
         An application that shares the database isn't touched.
 
-          <info>%command.full_name% var/backups/quire-20261022-180000.dump</info>
-          <info>%command.full_name% site.dump --dry-run</info>    (shows what's in it and whether it can be restored)
-          <info>gunzip -c site.dump.gz | %command.full_name% -</info>  (reads standard input)
+          <info>%command.full_name% var/backups/quire-20261022-180000.tar</info>
+          <info>%command.full_name% site.tar --dry-run</info>     (shows what's in it and whether it can be restored)
+          <info>gunzip -c site.tar.gz | %command.full_name% -</info>  (reads standard input)
+          <info>%command.full_name% site.tar --files-dir=/backups/files</info>   (for backups made with --files-dir)
+
+        Stored files go to the site's disks wherever they are now, e.g. on S3 when the disks moved there
+        since the backup; each is checked against its checksum first. Afterwards, every file the database
+        lists is checked to be on its disk.
 
         The backup needs code at least as new as the code that made it: Quire and every extension it has
         enabled must be installed, in the same version or newer. Migrations it doesn't have yet run after
@@ -48,6 +53,8 @@ final readonly class RestoreCommand
         bool $dryRun = false,
         #[Option(description: 'Replace existing data without asking')]
         bool $force = false,
+        #[Option(description: 'Where the files are, for a backup made with --files-dir')]
+        ?string $filesDir = null,
     ): int {
         $temporary = null;
 
@@ -55,7 +62,7 @@ final readonly class RestoreCommand
             $temporary = '-' === $file ? $this->readStandardInput() : null;
 
             // Standard input holds the backup, so it can't answer questions too.
-            return $this->restore($io, $input->isInteractive() && null === $temporary, $temporary ?? $file, $dryRun, $force);
+            return $this->restore($io, $input->isInteractive() && null === $temporary, $temporary ?? $file, $dryRun, $force, $filesDir);
         } catch (BackupException $e) {
             $io->error($e->getMessage());
 
@@ -67,11 +74,11 @@ final readonly class RestoreCommand
         }
     }
 
-    private function restore(SymfonyStyle $io, bool $interactive, string $file, bool $dryRun, bool $force): int
+    private function restore(SymfonyStyle $io, bool $interactive, string $file, bool $dryRun, bool $force, ?string $filesDir): int
     {
         $backup = $this->backups->inspect($file);
         $this->describe($io, $backup);
-        $problems = $this->backups->problems($backup);
+        $problems = $this->backups->problems($backup, $filesDir);
 
         if ([] !== $problems) {
             $io->error(['The backup can\'t be restored here:', ...$problems]);
@@ -103,8 +110,14 @@ final readonly class RestoreCommand
             }
         }
 
-        $this->backups->restore($file, $io->write(...));
-        $io->success('Restored the backup.');
+        $report = $this->backups->restore($file, $io->write(...), $filesDir);
+        $io->success(\sprintf('Restored the backup%s.', 0 === $report->restored + $report->alreadyThere ? '' : \sprintf(', and %d stored file(s) (%d were there already)', $report->restored + $report->alreadyThere, $report->alreadyThere)));
+
+        foreach (['are missing from their disks' => $report->missing, 'were damaged in the backup and weren\'t restored' => $report->corrupt] as $what => $names) {
+            if ([] !== $names) {
+                $io->warning([\sprintf('%d stored file(s) %s:', \count($names), $what), ...\array_slice($names, 0, 20), ...(\count($names) > 20 ? ['…'] : [])]);
+            }
+        }
 
         return Command::SUCCESS;
     }
@@ -122,7 +135,29 @@ final readonly class RestoreCommand
             ['Tables' => (string) $backup->tables],
             ['Migrations' => (string) \count($backup->migrations)],
             ['Extensions' => [] === $backup->enabledExtensions ? 'none enabled in the database' : implode(', ', $backup->enabledExtensions)],
+            ['Stored files' => $this->storedFiles($backup)],
         );
+
+        if ([] !== $backup->missingWhenMade) {
+            $io->warning(\sprintf('%d stored file(s) were missing or damaged when the backup was made, so it has no good copy of them.', \count($backup->missingWhenMade)));
+        }
+    }
+
+    private function storedFiles(BackupContents $backup): string
+    {
+        if ([] === $backup->objects) {
+            return 'none';
+        }
+
+        $byDisk = implode(', ', array_map(static fn (string $disk, int $count): string => \sprintf('%s: %d', $disk, $count), array_keys($backup->objects), $backup->objects));
+        $copies = match ($backup->files) {
+            'archive' => \sprintf('%d copied into the backup', $backup->filesInArchive),
+            'directory' => 'copied into a files directory',
+            'none' => 'not copied',
+            default => 'not copied (a backup of the database only)',
+        };
+
+        return \sprintf('%d (%s); %s', array_sum($backup->objects), $byDisk, $copies);
     }
 
     /**

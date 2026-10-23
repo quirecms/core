@@ -66,6 +66,15 @@ final readonly class DiskConfig
     }
 
     /**
+     * Where a local disk without a "path" is: public disks under "public/", which the web server serves,
+     * private ones under "private/".
+     */
+    public static function defaultPath(string $root, bool $public, string $name): string
+    {
+        return $root.'/'.($public ? 'public' : 'private').'/'.$name;
+    }
+
+    /**
      * Where the files are, for people: "local: /app/storage/public/acme", "s3: photos/acme at https://…".
      */
     public function location(): string

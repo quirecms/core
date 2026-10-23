@@ -10,9 +10,11 @@ use Quire\Backup\BackupContents;
 use Quire\Database\DatabaseSchema;
 use Quire\Database\MigrationOrder;
 use Quire\Extend\ExtenderException;
+use Quire\Extend\Storage;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\ExtensionStateStoreInterface;
+use Quire\Storage\StorageDisks;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
@@ -34,6 +36,7 @@ final readonly class RestoreChecks
         private Connection $connection,
         private InstalledExtensions $installed,
         private ExtensionStateStoreInterface $state,
+        private StorageDisks $disks,
         #[Autowire(param: 'kernel.project_dir')]
         private string $projectDir,
         #[Autowire(param: 'kernel.environment')]
@@ -42,12 +45,13 @@ final readonly class RestoreChecks
     }
 
     /**
+     * @param string|null $filesDirectory Where the copies of stored files are, for backups made with one
+     *
      * @return list<string> Why the backup can't be restored; empty when it can
      */
-    public function problems(BackupContents $backup): array
+    public function problems(BackupContents $backup, ?string $filesDirectory = null): array
     {
-        // Pinned extensions come from the configuration, whatever the backup has enabled.
-        $enabled = null === $this->state->readOnlyReason() ? $backup->enabledExtensions : $this->state->enabledIds();
+        $enabled = $this->enabled($backup);
         $problems = [];
 
         foreach ($enabled as $id) {
@@ -57,10 +61,13 @@ final readonly class RestoreChecks
         }
 
         try {
-            $namespaces = $this->migrationNamespaces(array_values(array_filter($enabled, $this->installed->has(...))));
+            $container = $this->boot(array_values(array_filter($enabled, $this->installed->has(...))));
         } catch (ExtenderException $e) {
             return [...$problems, \sprintf('The extensions the backup has enabled can\'t be loaded: %s', $e->getMessage())];
         }
+
+        /** @var list<array{namespace: string, directory: string, owner: string}> $namespaces */
+        $namespaces = $container->getParameter(MigrationOrder::PARAMETER);
 
         foreach ($namespaces as $registered) {
             $available = new RecursiveRegexFinder()->findMigrations($registered['directory'], $registered['namespace']);
@@ -78,7 +85,16 @@ final readonly class RestoreChecks
             }
         }
 
-        return [...$problems, ...$this->databaseProblems()];
+        return [...$problems, ...$this->fileProblems($backup, $container, $filesDirectory), ...$this->databaseProblems()];
+    }
+
+    /**
+     * The disks the site has once the backup is restored: its own, and those of the extensions the backup
+     * enables, where they are without configuration.
+     */
+    public function disksAfterRestore(BackupContents $backup): StorageDisks
+    {
+        return $this->disks->withDeclarations($this->declaredDisks($this->boot(array_values(array_filter($this->enabled($backup), $this->installed->has(...))))));
     }
 
     /**
@@ -107,14 +123,58 @@ final readonly class RestoreChecks
     }
 
     /**
-     * The migrations the code has when the given extensions are enabled: their extenders run in a
-     * container of their own, as they would when the application is built after the restore.
+     * Pinned extensions come from the configuration, whatever the backup has enabled.
+     *
+     * @return list<string>
+     */
+    private function enabled(BackupContents $backup): array
+    {
+        return null === $this->state->readOnlyReason() ? $backup->enabledExtensions : $this->state->enabledIds();
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fileProblems(BackupContents $backup, ContainerBuilder $container, ?string $filesDirectory): array
+    {
+        $problems = [];
+        $disks = $this->disks->withDeclarations($this->declaredDisks($container));
+
+        foreach (array_keys($backup->objects) as $disk) {
+            if (!$disks->has($disk)) {
+                $problems[] = \sprintf('The backup has files on the disk "%s", which this site doesn\'t have. Install the extension that declares it, or configure it in "quire.storage.disks".', $disk);
+            }
+        }
+
+        if ('directory' === $backup->files && null === $filesDirectory) {
+            $problems[] = 'The backup\'s files are in a files directory, not in the backup: pass it with --files-dir.';
+        }
+
+        if (null !== $filesDirectory && !is_dir($filesDirectory)) {
+            $problems[] = \sprintf('The files directory "%s" doesn\'t exist.', $filesDirectory);
+        }
+
+        return $problems;
+    }
+
+    /**
+     * @return list<array{name: string, public: bool, label: ?string, owner: string}>
+     */
+    private function declaredDisks(ContainerBuilder $container): array
+    {
+        /** @var list<array{name: string, public: bool, label: ?string, owner: string}> $declared */
+        $declared = $container->getParameterBag()->all()[Storage::PARAMETER] ?? [];
+
+        return $declared;
+    }
+
+    /**
+     * The extenders of the given extensions, run in a container of their own, as they would when the
+     * application is built after the restore: what migrations and disks the code has then.
      *
      * @param list<string> $enabledIds
-     *
-     * @return list<array{namespace: string, directory: string, owner: string}>
      */
-    private function migrationNamespaces(array $enabledIds): array
+    private function boot(array $enabledIds): ContainerBuilder
     {
         $container = new ContainerBuilder();
         $container->setParameter('kernel.project_dir', $this->projectDir);
@@ -128,10 +188,7 @@ final readonly class RestoreChecks
             ExtensionBooter::coreExtendFile(),
         );
 
-        /** @var list<array{namespace: string, directory: string, owner: string}> $namespaces */
-        $namespaces = $container->getParameter(MigrationOrder::PARAMETER);
-
-        return $namespaces;
+        return $container;
     }
 
     /**

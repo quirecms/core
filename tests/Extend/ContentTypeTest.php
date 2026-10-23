@@ -107,7 +107,7 @@ final class ContentTypeTest extends ExtenderTestCase
         $fails = fn (ContentType $extender, string $message) => $this->assertExtenderFails($extender, $message);
 
         $fails(new ContentType('product')->field('Price', 'float'), 'Field names start with a lowercase letter');
-        $fails(new ContentType('product')->field('price', 'money'), 'Unknown type "money". Use one of: string, text, int, float, bool, enum, list, date, datetime, json.');
+        $fails(new ContentType('product')->field('price', 'money'), 'Unknown type "money". Use one of: string, text, int, float, bool, enum, list, date, datetime, json, relation.');
         $fails(new ContentType('product')->field('size', 'enum'), 'Fields of type "enum" need a list of choices.');
         $fails(new ContentType('product')->field('size', 'string', choices: ['s']), 'Choices only apply to fields of type "enum".');
         $fails(new ContentType('product')->field('size', 'enum', choices: ['s', 's']), 'The choices must be different from each other.');

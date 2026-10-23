@@ -80,6 +80,11 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
                 'UPDATE quire.content SET fields = fields - CAST(:names AS text[]) WHERE type = :type AND jsonb_exists_any(fields, CAST(:names AS text[]))',
                 $parameters,
             );
+            // The links of its relation fields.
+            $this->connection->executeStatement(
+                'DELETE FROM quire.content_relation r USING quire.content c WHERE c.id = r.source_id AND c.type = :type AND r.field = ANY(CAST(:names AS text[]))',
+                $parameters,
+            );
             // Revisions are part of the item's data too.
             $this->connection->executeStatement(
                 'UPDATE quire.content_revision r SET fields = r.fields - CAST(:names AS text[])

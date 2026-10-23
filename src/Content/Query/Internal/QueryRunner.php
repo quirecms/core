@@ -9,6 +9,9 @@ use Doctrine\DBAL\ParameterType;
 use Psr\Container\ContainerInterface;
 use Quire\Content\Content;
 use Quire\Content\ContentRepository;
+use Quire\Content\Field\FieldStorage;
+use Quire\Content\Field\Type\RelationField;
+use Quire\Content\Internal\RelationFieldsPass;
 use Quire\Content\Internal\Row;
 use Quire\Content\Query\ContentPage;
 use Quire\Content\Query\ContentQuery;
@@ -54,6 +57,9 @@ final readonly class QueryRunner
         array $config,
         private ContainerInterface $services,
         private Viewer $viewer,
+        /** @var array<string, array<string, list<array{type: string, field: string}>>> Inverses of relation fields: target type → name → sources */
+        #[Autowire(param: RelationFieldsPass::INVERSES_PARAMETER)]
+        private array $inverses = [],
     ) {
         /** @var Config $config */
         $config = [...['scopes' => [], 'visibility' => [], 'relations' => []], ...$config];
@@ -205,7 +211,11 @@ final readonly class QueryRunner
      */
     public function assertRelation(array $types, string $name): void
     {
-        $relation = $this->config['relations'][$name] ?? throw new InvalidQueryException(\sprintf('Unknown relation "%s". Registered: %s.', $name, implode(', ', array_keys($this->config['relations']))));
+        if (!isset($this->config['relations'][$name]) && null !== $this->fieldRelation($types, $name)) {
+            return;
+        }
+
+        $relation = $this->config['relations'][$name] ?? throw new InvalidQueryException(\sprintf('Unknown relation "%s". Registered: %s, and the relation fields of the queried types and their inverses.', $name, implode(', ', array_keys($this->config['relations']))));
         $this->assertTypes($types, $relation['types'], \sprintf('The relation "%s" (from "%s")', $name, $relation['owner']));
     }
 
@@ -257,13 +267,121 @@ final readonly class QueryRunner
         }
 
         foreach ($query->relations() as $name) {
-            $loader = $this->services->get($this->config['relations'][$name]['class']);
-            \assert($loader instanceof RelationLoaderInterface);
-            $values = $loader->load($items, $query);
+            if (isset($this->config['relations'][$name])) {
+                $loader = $this->services->get($this->config['relations'][$name]['class']);
+                \assert($loader instanceof RelationLoaderInterface);
+                $values = $loader->load($items, $query);
+            } else {
+                $relation = $this->fieldRelation($query->types(), $name) ?? throw new \LogicException(\sprintf('The relation "%s" was checked when it was added.', $name));
+                $values = 'field' === $relation['kind'] ? $this->linkedItems($items, $query, $name) : $this->linkingItems($items, $query, $relation['sources']);
+            }
+
             $items = array_map(static fn (Content $item): Content => $item->withAttributes([$name => $values[$item->id] ?? null]), $items);
         }
 
         return $items;
+    }
+
+    /**
+     * A relation that comes with the content types: a relation field all the queried types declare, or the
+     * inverse of other types' relation fields that link to all of them.
+     *
+     * @param list<string> $types
+     *
+     * @return array{kind: 'field'}|array{kind: 'inverse', sources: list<array{type: string, field: string}>}|null
+     */
+    private function fieldRelation(array $types, string $name): ?array
+    {
+        if ([] !== $types && array_all($types, fn (string $type): bool => $this->types->has($type) && FieldStorage::Relation === $this->types->get($type)->field($name)?->storage())) {
+            return ['kind' => 'field'];
+        }
+
+        if ([] === $types || !array_all($types, fn (string $type): bool => isset($this->inverses[$type][$name]))) {
+            return null;
+        }
+
+        $sources = array_merge(...array_map(fn (string $type): array => $this->inverses[$type][$name], $types));
+
+        return ['kind' => 'inverse', 'sources' => array_values(array_unique($sources, \SORT_REGULAR))];
+    }
+
+    /**
+     * The items each item's relation field links to, in its order: one query for all, with the visibility
+     * rules of the query (links to items the viewer can't see are left out).
+     *
+     * @param non-empty-list<Content> $items
+     *
+     * @return array<string, list<Content>|Content|null>
+     */
+    private function linkedItems(array $items, ContentQuery $query, string $name): array
+    {
+        $ids = [];
+        $targetTypes = [];
+
+        foreach ($items as $item) {
+            $field = $this->types->get($item->type)->field($name);
+            $value = $item->fields[$name] ?? null;
+            $ids[$item->id] = array_values(array_filter(\is_array($value) ? $value : [$value], \is_string(...)));
+            $targetTypes = [...$targetTypes, ...($field instanceof \Quire\Content\Field\FieldDefinition ? RelationField::targetTypes($field) : [])];
+        }
+
+        $all = array_values(array_unique(array_merge(...array_values($ids))));
+        $found = [];
+
+        if ([] !== $all && [] !== $targetTypes) {
+            foreach ($query->related(...array_values(array_unique($targetTypes)))->where('id', 'in', $all)->get() as $linked) {
+                $found[$linked->id] = $linked;
+            }
+        }
+
+        $values = [];
+
+        foreach ($items as $item) {
+            $linked = array_values(array_filter(array_map(static fn (string $id): ?Content => $found[$id] ?? null, $ids[$item->id])));
+            $field = $this->types->get($item->type)->field($name);
+            $values[$item->id] = $field instanceof \Quire\Content\Field\FieldDefinition && RelationField::isMultiple($field) ? $linked : ($linked[0] ?? null);
+        }
+
+        return $values;
+    }
+
+    /**
+     * The items that link to each item through the given relation fields, in their types' order, with the
+     * visibility rules of the query.
+     *
+     * @param non-empty-list<Content>                  $items
+     * @param list<array{type: string, field: string}> $sources
+     *
+     * @return array<string, list<Content>>
+     */
+    private function linkingItems(array $items, ContentQuery $query, array $sources): array
+    {
+        $values = array_fill_keys(array_map(static fn (Content $item): string => $item->id, $items), []);
+        $pairs = implode(' OR ', array_fill(0, \count($sources), '(s.type = ? AND r.field = ?)'));
+        $links = $this->connection->fetchAllAssociative(
+            'SELECT r.target_id, r.source_id FROM quire.content_relation r JOIN quire.content s ON s.id = r.source_id WHERE r.target_id = ANY(CAST(? AS uuid[])) AND ('.$pairs.')',
+            ['{'.implode(',', array_keys($values)).'}', ...array_merge(...array_map(static fn (array $source): array => [$source['type'], $source['field']], $sources))],
+        );
+
+        if ([] === $links) {
+            return $values;
+        }
+
+        $byTarget = [];
+
+        foreach ($links as $link) {
+            $byTarget[new Row($link)->string('source_id')][] = new Row($link)->string('target_id');
+        }
+
+        $types = array_values(array_unique(array_column($sources, 'type')));
+
+        foreach ($query->related(...$types)->where('id', 'in', array_keys($byTarget))->get() as $source) {
+            foreach ($byTarget[$source->id] ?? [] as $target) {
+                $values[$target][] = $source;
+            }
+        }
+
+        return $values;
     }
 
     /**

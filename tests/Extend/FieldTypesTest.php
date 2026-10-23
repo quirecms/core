@@ -55,7 +55,7 @@ final class FieldTypesTest extends ExtenderTestCase
         $this->assertExtenderFails(new ContentType('product')->field('rating', 'acme-reviews.stars', options: ['of' => 0]), 'Give "of" as a number of stars from 1 to 10.');
         $this->assertExtenderFails(new ContentType('product')->field('rating', 'acme-reviews.stars', default: 20), 'The default value doesn\'t fit the field: At most 5 stars.');
         $this->assertExtenderFails(new ContentType('product')->field('rating', 'acme-reviews.stars', choices: [1, 2]), 'Choices only apply to fields of type "enum".');
-        $this->assertExtenderFails(new ContentType('product')->field('rating', 'acme-maps.location'), 'Unknown type "acme-maps.location". Use one of: string, text, int, float, bool, enum, list, date, datetime, json, acme-reviews.stars.');
+        $this->assertExtenderFails(new ContentType('product')->field('rating', 'acme-maps.location'), 'Unknown type "acme-maps.location". Use one of: string, text, int, float, bool, enum, list, date, datetime, json, relation, acme-reviews.stars.');
     }
 }
 

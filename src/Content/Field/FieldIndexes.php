@@ -38,7 +38,8 @@ final readonly class FieldIndexes
 
         foreach ($this->types->all() as $type) {
             foreach ($type->fields as $field) {
-                if (!$field->isIndexed()) {
+                // Relations are indexed in quire.content_relation.
+                if (!$field->isIndexed() || !$field->storage()->needsIndex()) {
                     continue;
                 }
 

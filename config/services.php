@@ -50,7 +50,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Maker/Internal/',
             '../src/Content/Type/{Capability,ContentTypeDefinition}.php',
             '../src/Content/Field/{FieldDefinition,FieldExpression,FieldType}.php',
-            '../src/Content/Internal/Fields.php',
+            '../src/Content/Internal/{Fields,RelationFieldsPass}.php',
             '../src/Formatter/{CompiledText,FormatContext,FormatterProfile,Shortcode}.php',
             '../src/Formatter/{Exception,Internal}/',
             '../src/Content/Type/Exception/',

@@ -7,6 +7,7 @@ namespace Quire\Content\Query\Internal;
 use Quire\Content\Field\FieldDefinition;
 use Quire\Content\Field\FieldExpression;
 use Quire\Content\Field\FieldStorage;
+use Quire\Content\Field\Type\RelationField;
 use Quire\Content\Internal\Row;
 use Quire\Content\Query\Exception\InvalidQueryException;
 use Quire\Content\Type\ContentTypeDefinition;
@@ -65,6 +66,10 @@ final readonly class QueryFields
         if (str_starts_with($field, 'fields.')) {
             $definition = $this->field($types, substr($field, \strlen('fields.')), 'filtered');
 
+            if (FieldStorage::Relation === $definition->storage()) {
+                return $this->relation($field, $definition, $operator, $value);
+            }
+
             if (FieldStorage::TextList === $definition->storage()) {
                 return $this->containment($field, FieldExpression::json($definition, 'c.fields'), $operator, $value);
             }
@@ -107,7 +112,9 @@ final readonly class QueryFields
     private function field(array $types, string $name, string $use): FieldDefinition
     {
         $found = null;
-        $usable = static fn (FieldDefinition $field): bool => $field->isIndexed() && ('filtered' === $use || $field->storage()->canBeSorted());
+        // Relations can always be filtered: quire.content_relation indexes them.
+        $usable = static fn (FieldDefinition $field): bool => 'filtered' === $use && FieldStorage::Relation === $field->storage()
+            || $field->isIndexed() && ('filtered' === $use || $field->storage()->canBeSorted());
 
         foreach ($types as $type) {
             $definition = $this->types->get($type)->field($name);
@@ -154,6 +161,67 @@ final readonly class QueryFields
         return [
             'sql' => '('.implode(' OR ', array_fill(0, \count($values), \sprintf('%s @> CAST(? AS jsonb)', $expression))).')',
             'params' => array_map(static fn (string $item): string => json_encode([$item], \JSON_THROW_ON_ERROR), $values),
+        ];
+    }
+
+    /**
+     * Filters by the links of a relation field, in quire.content_relation: lists with "contains" (links to
+     * all the items given) or "contains any", single relations with "=", "!=", "in" and "not in". Null
+     * means no link. Items are given as Content or by ID; an ID that isn't one matches nothing.
+     *
+     * @return Condition
+     */
+    private function relation(string $field, FieldDefinition $definition, string $operator, mixed $value): array
+    {
+        $exists = static fn (string $target = ''): string => 'EXISTS (SELECT 1 FROM quire.content_relation r WHERE r.source_id = c.id AND r.field = ?'.$target.')';
+        $multiple = RelationField::isMultiple($definition);
+        /** @var list<string> $ids */
+        $ids = array_values(array_filter(
+            array_map($definition->queryValue(...), \is_array($value) ? array_values($value) : [$value]),
+            static fn (mixed $id): bool => \is_string($id) && Row::isUuid($id),
+        ));
+        $given = \is_array($value) ? \count($value) : 1;
+
+        if (null === $value) {
+            return match ($operator) {
+                '=' => ['sql' => 'NOT '.$exists(), 'params' => [$definition->name]],
+                '!=' => ['sql' => $exists(), 'params' => [$definition->name]],
+                default => throw new InvalidQueryException(\sprintf('"%s" can\'t be compared with null using "%s".', $field, $operator)),
+            };
+        }
+
+        $allowed = $multiple ? ['contains', 'contains any'] : ['=', '!=', 'in', 'not in'];
+
+        if (!\in_array($operator, $allowed, true)) {
+            throw new InvalidQueryException($multiple ? \sprintf('"%s" links to a list of items: filter it with "contains" (links to all of them) or "contains any".', $field) : \sprintf('"%s" links to one item: filter it with "=", "!=", "in" or "not in".', $field));
+        }
+
+        if (\in_array($operator, ['in', 'not in', 'contains any'], true) || ('contains' === $operator && \is_array($value))) {
+            if ([] === $ids) {
+                return ['sql' => 'not in' === $operator ? 'TRUE' : 'FALSE', 'params' => []];
+            }
+        } elseif ([] === $ids) {
+            // One ID that isn't one: like loading an item by an ID that isn't one.
+            return ['sql' => '!=' === $operator ? 'TRUE' : 'FALSE', 'params' => []];
+        }
+
+        if ('contains' === $operator) {
+            // A list that has a malformed ID can't link to all of them.
+            if (\count($ids) !== $given) {
+                return ['sql' => 'FALSE', 'params' => []];
+            }
+
+            return [
+                'sql' => '('.implode(' AND ', array_fill(0, \count($ids), $exists(' AND r.target_id = CAST(? AS uuid)'))).')',
+                'params' => array_merge(...array_map(static fn (string $id): array => [$definition->name, $id], $ids)),
+            ];
+        }
+
+        $condition = $exists(' AND r.target_id = ANY(CAST(? AS uuid[]))');
+
+        return [
+            'sql' => \in_array($operator, ['!=', 'not in'], true) ? 'NOT '.$condition : $condition,
+            'params' => [$definition->name, '{'.implode(',', $ids).'}'],
         ];
     }
 

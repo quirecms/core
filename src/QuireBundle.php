@@ -7,6 +7,7 @@ namespace Quire;
 use Composer\Autoload\ClassLoader;
 use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
 use Quire\Content\ContentRenderer;
+use Quire\Content\Internal\RelationFieldsPass;
 use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
 use Quire\Extend\ExtenderContext;
@@ -64,6 +65,7 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new SlotsPass());
         $container->addCompilerPass(new AssetsPass());
         $container->addCompilerPass(new PermissionsPass());
+        $container->addCompilerPass(new RelationFieldsPass());
     }
 
     public function configure(DefinitionConfigurator $definition): void

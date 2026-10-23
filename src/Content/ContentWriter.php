@@ -31,6 +31,7 @@ use Quire\Content\Exception\InvalidContentException;
 use Quire\Content\Exception\TransitionNotAllowedException;
 use Quire\Content\Internal\Fields;
 use Quire\Content\Internal\Locales;
+use Quire\Content\Internal\Relations;
 use Quire\Content\Internal\Row;
 use Quire\Content\Internal\Slugs;
 use Quire\Content\Permalink\Permalinks;
@@ -72,6 +73,7 @@ final readonly class ContentWriter
         private EventDispatcherInterface $dispatcher,
         private Permalinks $permalinks,
         private RouteCollisions $routes,
+        private Relations $relations,
     ) {
     }
 
@@ -106,6 +108,7 @@ final readonly class ContentWriter
             if (!isset($violations['fields'])) {
                 $fields = Fields::withDefaults($type, Fields::normalize($type, $command->fields));
                 $violations += Fields::violations($type, null, $fields);
+                $violations += $this->relations->violations($type, null, null, $fields);
             }
 
             if (null !== $command->slug && !Slugs::isValid($command->slug)) {
@@ -151,7 +154,9 @@ final readonly class ContentWriter
                 ],
             );
 
-            $content = $this->repository->get(\is_string($id) ? $id : throw new \LogicException('INSERT … RETURNING id returned no ID.'));
+            $id = \is_string($id) ? $id : throw new \LogicException('INSERT … RETURNING id returned no ID.');
+            $this->relations->sync($id, $type, $fields, null);
+            $content = $this->repository->get($id);
 
             if ($type->has(Capability::REVISIONS)) {
                 $this->saveRevision($content, $command->revisionMessage, $command->actorId);
@@ -190,6 +195,7 @@ final readonly class ContentWriter
                 /** @var array<string, mixed> $newFields */
                 $newFields = $values['fields'];
                 $violations += Fields::violations($type, $current->fields, $newFields);
+                $violations += $this->relations->violations($type, $current->id, $current->fields, $newFields);
             }
 
             if (\array_key_exists('slug', $values) && !Slugs::isValid($this->string($values, 'slug'))) {
@@ -231,6 +237,10 @@ final readonly class ContentWriter
             }
 
             $after = $this->saveChanges($current, $values);
+
+            if (\array_key_exists('fields', $values)) {
+                $this->relations->sync($after->id, $type, $after->fields, $current->fields);
+            }
 
             if ($type->has(Capability::REVISIONS) && [] !== array_intersect_key($values, array_flip(self::REVISIONED))) {
                 $this->saveRevision($after, $command->revisionMessage, $command->actorId);
@@ -417,6 +427,7 @@ final readonly class ContentWriter
             }
 
             $this->dispatchCancellable(new ContentPurging($current));
+            $this->relations->detach($current->id);
             $this->connection->executeStatement('DELETE FROM quire.content WHERE id = ?', [$current->id]);
             $events->append(new ContentPurged($current));
 
@@ -443,6 +454,17 @@ final readonly class ContentWriter
         $current = $this->repository->get($contentId);
         $type = $this->types->get($current->type);
         $fields = array_diff_key($current->fields, $type->fields) + array_intersect_key($revision->fields, $type->fields);
+
+        // Links to items deleted for good since the revision are dropped.
+        foreach ($this->relations->relationFields($type) as $name => $field) {
+            if (!\array_key_exists($name, $fields)) {
+                continue;
+            }
+
+            $ids = array_values(array_filter((array) $fields[$name], \is_string(...)));
+            $existing = $this->relations->existing($ids);
+            $fields[$name] = \is_array($fields[$name]) ? array_values(array_intersect($ids, $existing)) : (\in_array($fields[$name], $existing, true) ? $fields[$name] : null);
+        }
 
         return $this->update(new UpdateContent(
             $contentId,

@@ -28,6 +28,8 @@ enum FieldType: string
     case DateTime = 'datetime';
     /** Any JSON-encodable value; can't be indexed */
     case Json = 'json';
+    /** Links to other content items, e.g. a post's tags or a page's related pages */
+    case Relation = 'relation';
 
     /**
      * @return class-string<FieldTypeInterface>
@@ -45,6 +47,7 @@ enum FieldType: string
             self::Date => Type\DateField::class,
             self::DateTime => Type\DateTimeField::class,
             self::Json => Type\JsonField::class,
+            self::Relation => Type\RelationField::class,
         };
     }
 }

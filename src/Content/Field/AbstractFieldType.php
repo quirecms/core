@@ -83,6 +83,7 @@ abstract class AbstractFieldType implements FieldTypeInterface
             FieldStorage::Boolean => 'checkbox',
             FieldStorage::TextList => 'tags',
             FieldStorage::Unindexed => 'textarea',
+            FieldStorage::Relation => 'relation',
             FieldStorage::Text => 'text',
         };
     }

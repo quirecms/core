@@ -6,6 +6,8 @@ namespace Quire\Extend;
 
 use Quire\Content\Field\FieldDefinition;
 use Quire\Content\Field\FieldType;
+use Quire\Content\Field\FieldTypeInstances;
+use Quire\Content\Field\FieldTypeInterface;
 use Quire\Content\Permalink\PermalinkPattern;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
@@ -107,18 +109,20 @@ final class ContentType implements ExtenderInterface
     /**
      * Declares a typed field, stored in the item's "fields" and checked on every save.
      *
-     * @param FieldType|string $type       "string", "text", "int", "float", "bool", "enum", "list", "date", "datetime" or "json"
-     * @param mixed            $default    Set on new items that don't provide a value
-     * @param bool             $required   New items must have a value, and it can't be removed
-     * @param list<string|int> $choices    Allowed values, for "enum" fields
-     * @param int|float|null   $min        Smallest value, for "int" and "float" fields
-     * @param int|float|null   $max        Largest value, for "int" and "float" fields
-     * @param int|null         $maxLength  Most characters, for "string", "text" and "list" fields (per item). Indexed
-     *                                     string fields default to 255 and allow at most 1000.
-     * @param bool             $sortable   Listings can sort by it. The field gets a database index.
-     * @param bool             $filterable Listings can filter by it. The field gets a database index.
-     * @param string|null      $widget     Hint for admin interfaces, e.g. "textarea" or "color"
-     * @param int|null         $order      Position in admin forms; defaults to declaration order
+     * @param FieldType|string     $type       "string", "text", "int", "float", "bool", "enum", "list", "date", "datetime", "json",
+     *                                         or a type an extension adds with Extend\FieldTypes
+     * @param mixed                $default    Set on new items that don't provide a value
+     * @param bool                 $required   New items must have a value, and it can't be removed
+     * @param list<string|int>     $choices    Allowed values, for "enum" fields
+     * @param int|float|null       $min        Smallest value, for "int" and "float" fields
+     * @param int|float|null       $max        Largest value, for "int" and "float" fields
+     * @param int|null             $maxLength  Most characters, for "string", "text" and "list" fields (per item). Indexed
+     *                                         string fields default to 255 and allow at most 1000.
+     * @param bool                 $sortable   Listings can sort by it. The field gets a database index.
+     * @param bool                 $filterable Listings can filter by it. The field gets a database index.
+     * @param string|null          $widget     Hint for admin interfaces, e.g. "textarea" or "color"
+     * @param int|null             $order      Position in admin forms; defaults to declaration order
+     * @param array<string, mixed> $options    The type's own options, for types of extensions
      */
     public function field(
         string $name,
@@ -136,8 +140,9 @@ final class ContentType implements ExtenderInterface
         ?string $group = null,
         ?string $widget = null,
         ?int $order = null,
+        array $options = [],
     ): self {
-        $this->fields[] = ['name' => $name, 'type' => $type, 'default' => $default, 'required' => $required, 'choices' => $choices, 'min' => $min, 'max' => $max, 'maxLength' => $maxLength, 'sortable' => $sortable, 'filterable' => $filterable, 'label' => $label, 'help' => $help, 'group' => $group, 'widget' => $widget, 'order' => $order];
+        $this->fields[] = ['name' => $name, 'type' => $type, 'default' => $default, 'required' => $required, 'choices' => $choices, 'min' => $min, 'max' => $max, 'maxLength' => $maxLength, 'sortable' => $sortable, 'filterable' => $filterable, 'label' => $label, 'help' => $help, 'group' => $group, 'widget' => $widget, 'order' => $order, 'options' => $options];
 
         return $this;
     }
@@ -321,24 +326,26 @@ final class ContentType implements ExtenderInterface
      */
     private function fieldDefinition(ExtenderContext $context, array $declaration, int $defaultOrder): FieldDefinition
     {
-        /** @var array{name: string, type: FieldType|string, default: mixed, required: bool, choices: list<string|int>, min: int|float|null, max: int|float|null, maxLength: ?int, sortable: bool, filterable: bool, label: ?string, help: ?string, group: ?string, widget: ?string, order: ?int} $d */
+        /** @var array{name: string, type: FieldType|string, default: mixed, required: bool, choices: list<string|int>, min: int|float|null, max: int|float|null, maxLength: ?int, sortable: bool, filterable: bool, label: ?string, help: ?string, group: ?string, widget: ?string, order: ?int, options: array<string, mixed>} $d */
         $d = $declaration;
         $where = \sprintf('Extend\ContentType("%s")::field("%s")', $this->id, $d['name']);
-        $typeName = $d['type'] instanceof FieldType ? $d['type']->value : $d['type'];
-        $type = FieldType::tryFrom($typeName) ?? throw $context->error($where, \sprintf('Unknown type "%s". Use one of: %s.', $typeName, implode(', ', array_map(static fn (FieldType $t): string => $t->value, FieldType::cases()))));
+        $type = $d['type'] instanceof FieldType ? $d['type']->value : $d['type'];
+        $types = $this->fieldTypes($context);
+        $class = $types[$type] ?? throw $context->error($where, \sprintf('Unknown type "%s". Use one of: %s.', $type, implode(', ', array_keys($types))));
+        $accepted = FieldTypeInstances::get($class)->options();
+        $accepting = fn (string $option): string => $this->quotedList(array_keys(array_filter($types, static fn (string $c): bool => \in_array($option, FieldTypeInstances::get($c)->options(), true))));
+        $unknownOptions = array_diff(array_keys($d['options']), $accepted, ['choices', 'min', 'max', 'maxLength']);
 
         $error = match (true) {
             1 !== preg_match(self::FIELD_PATTERN, $d['name']) => 'Field names start with a lowercase letter, followed by up to 63 lowercase letters, digits or underscores.',
-            FieldType::Enum === $type && [] === $d['choices'] => 'Fields of type "enum" need a list of choices.',
-            FieldType::Enum !== $type && [] !== $d['choices'] => 'Choices only apply to fields of type "enum".',
+            [] !== $d['choices'] && !\in_array('choices', $accepted, true) => \sprintf('Choices only apply to fields of type %s.', $accepting('choices')),
             \count($d['choices']) !== \count(array_unique($d['choices'], \SORT_REGULAR)) => 'The choices must be different from each other.',
-            !$type->isNumeric() && (null !== $d['min'] || null !== $d['max']) => 'min and max only apply to "int" and "float" fields.',
+            (null !== $d['min'] || null !== $d['max']) && !\in_array('min', $accepted, true) => \sprintf('min and max only apply to %s fields.', $accepting('min')),
             null !== $d['min'] && null !== $d['max'] && $d['min'] > $d['max'] => 'min can\'t be larger than max.',
-            null !== $d['maxLength'] && !\in_array($type, [FieldType::String, FieldType::Text, FieldType::List], true) => 'maxLength only applies to "string", "text" and "list" fields.',
+            null !== $d['maxLength'] && !\in_array('maxLength', $accepted, true) => \sprintf('maxLength only applies to %s fields.', $accepting('maxLength')),
             null !== $d['maxLength'] && $d['maxLength'] < 1 => 'maxLength must be at least 1.',
-            $d['sortable'] && !$type->canBeSorted() => \sprintf('Fields of type "%s" can\'t be sortable.', $type->value),
-            $d['filterable'] && !$type->canBeFiltered() => \sprintf('Fields of type "%s" can\'t be filterable.', $type->value),
-            ($d['sortable'] || $d['filterable']) && FieldType::String === $type && ($d['maxLength'] ?? 0) > self::MAX_INDEXED_LENGTH => \sprintf('Indexed string fields can have a maxLength of at most %d, so their index entries fit.', self::MAX_INDEXED_LENGTH),
+            [] !== $unknownOptions => \sprintf('Fields of type "%s" have no option "%s".%s', $type, reset($unknownOptions), [] === array_diff($accepted, ['choices', 'min', 'max', 'maxLength']) ? '' : \sprintf(' Their options: %s.', implode(', ', array_diff($accepted, ['choices', 'min', 'max', 'maxLength'])))),
+            ($d['sortable'] || $d['filterable']) && FieldType::String->value === $type && ($d['maxLength'] ?? 0) > self::MAX_INDEXED_LENGTH => \sprintf('Indexed string fields can have a maxLength of at most %d, so their index entries fit.', self::MAX_INDEXED_LENGTH),
             default => null,
         };
 
@@ -346,7 +353,7 @@ final class ContentType implements ExtenderInterface
             throw $context->error($where, $error);
         }
 
-        $indexedString = ($d['sortable'] || $d['filterable']) && FieldType::String === $type;
+        $indexedString = ($d['sortable'] || $d['filterable']) && FieldType::String->value === $type;
 
         $field = new FieldDefinition(
             name: $d['name'],
@@ -364,7 +371,19 @@ final class ContentType implements ExtenderInterface
             group: $d['group'],
             widget: $d['widget'],
             order: $d['order'] ?? $defaultOrder,
+            options: $d['options'],
+            typeClass: $class,
         );
+
+        $error = match (true) {
+            $d['sortable'] && !$field->storage()->canBeSorted() => \sprintf('Fields of type "%s" can\'t be sortable.', $type),
+            $d['filterable'] && !$field->storage()->canBeFiltered() => \sprintf('Fields of type "%s" can\'t be filterable.', $type),
+            default => $field->implementation()->definitionError($field),
+        };
+
+        if (null !== $error) {
+            throw $context->error($where, $error);
+        }
 
         if (null === $d['default']) {
             return $field;
@@ -394,7 +413,45 @@ final class ContentType implements ExtenderInterface
             group: $field->group,
             widget: $field->widget,
             order: $field->order,
+            options: $field->options,
+            typeClass: $field->typeClass,
         );
+    }
+
+    /**
+     * Core's field types and those extensions registered so far, by name.
+     *
+     * @return array<string, class-string<FieldTypeInterface>>
+     */
+    private function fieldTypes(ExtenderContext $context): array
+    {
+        $types = [];
+
+        foreach (FieldType::cases() as $type) {
+            $types[$type->value] = $type->class();
+        }
+
+        /** @var list<array{name: string, class: class-string<FieldTypeInterface>, owner: string}> $registered */
+        $registered = $context->container()->getParameterBag()->all()[FieldTypes::PARAMETER] ?? [];
+
+        foreach ($registered as $type) {
+            $types[$type['name']] = $type['class'];
+        }
+
+        return $types;
+    }
+
+    /**
+     * '"int" and "float"', or '"enum"'.
+     *
+     * @param list<string> $names
+     */
+    private function quotedList(array $names): string
+    {
+        $quoted = array_map(static fn (string $name): string => '"'.$name.'"', $names);
+        $last = array_pop($quoted);
+
+        return [] === $quoted ? (string) $last : implode(', ', $quoted).' and '.$last;
     }
 
     /**

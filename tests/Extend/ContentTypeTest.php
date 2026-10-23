@@ -81,7 +81,7 @@ final class ContentTypeTest extends ExtenderTestCase
 
         $price = $type->field('price');
         self::assertNotNull($price);
-        self::assertSame([FieldType::Float, 10.0, true, 0, 'acme-reviews', 'Price', 'pricing'], [$price->type, $price->default, $price->required, $price->min, $price->owner, $price->label, $price->group]);
+        self::assertSame(['float', 10.0, true, 0, 'acme-reviews', 'Price', 'pricing'], [$price->type, $price->default, $price->required, $price->min, $price->owner, $price->label, $price->group]);
         self::assertTrue($price->isIndexed());
         self::assertSame(255, $type->field('sku')?->maxLength, 'Indexed strings get a length limit, so index entries fit.');
         self::assertNull($type->field('notes')?->maxLength);

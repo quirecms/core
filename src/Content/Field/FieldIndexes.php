@@ -44,7 +44,7 @@ final readonly class FieldIndexes
 
                 // List fields are filtered by containment (@>), which needs GIN. Other fields get a B-tree
                 // on (type, value): it serves both filters and sorting within a type.
-                $definition = FieldType::List === $field->type
+                $definition = FieldStorage::TextList === $field->storage()
                     ? \sprintf('ON quire.content USING GIN (%s)', FieldExpression::json($field))
                     : \sprintf('ON quire.content (type, %s)', FieldExpression::value($field));
 

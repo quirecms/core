@@ -11,19 +11,29 @@ namespace Quire\Content\Field;
  */
 final readonly class FieldDefinition
 {
+    /** The field type's name, e.g. "int", or "acme-maps.location" for an extension's */
+    public string $type;
+
+    /** @var class-string<FieldTypeInterface> */
+    public string $typeClass;
+
     /**
-     * @param string           $owner      ID of the extension that declared it, or "core"
-     * @param list<string|int> $choices    Allowed values, for {@see FieldType::Enum}
-     * @param int|float|null   $min        Smallest allowed value, for numeric fields
-     * @param int|float|null   $max        Largest allowed value, for numeric fields
-     * @param int|null         $maxLength  Most characters, for string and text fields (and each item of a list)
-     * @param bool             $sortable   Listings can be sorted by it; it gets a database index
-     * @param bool             $filterable Listings can be filtered by it; it gets a database index
-     * @param int              $order      Position among the type's fields in admin forms
+     * @param FieldType|string                      $type       A core type, or the name of an extension's
+     * @param string                                $owner      ID of the extension that declared it, or "core"
+     * @param list<string|int>                      $choices    Allowed values, for {@see FieldType::Enum}
+     * @param int|float|null                        $min        Smallest allowed value, for numeric fields
+     * @param int|float|null                        $max        Largest allowed value, for numeric fields
+     * @param int|null                              $maxLength  Most characters, for string and text fields (and each item of a list)
+     * @param bool                                  $sortable   Listings can be sorted by it; it gets a database index
+     * @param bool                                  $filterable Listings can be filtered by it; it gets a database index
+     * @param string|null                           $widget     The admin widget, when not the type's own (see {@see widget()})
+     * @param int                                   $order      Position among the type's fields in admin forms
+     * @param array<string, mixed>                  $options    The type's own options
+     * @param class-string<FieldTypeInterface>|null $typeClass  The type's class; found for core's types
      */
     public function __construct(
         public string $name,
-        public FieldType $type,
+        FieldType|string $type,
         public string $owner,
         public mixed $default = null,
         public bool $required = false,
@@ -38,7 +48,11 @@ final readonly class FieldDefinition
         public ?string $group = null,
         public ?string $widget = null,
         public int $order = 0,
+        public array $options = [],
+        ?string $typeClass = null,
     ) {
+        $this->type = $type instanceof FieldType ? $type->value : $type;
+        $this->typeClass = $typeClass ?? FieldType::tryFrom($this->type)?->class() ?? throw new \LogicException(\sprintf('The field "%s" has the type "%s", which isn\'t one of core\'s: pass its class.', $name, $this->type));
     }
 
     public function isIndexed(): bool
@@ -47,24 +61,20 @@ final readonly class FieldDefinition
     }
 
     /**
-     * Converts accepted input to the stored form: dates and times to ISO 8601 text, whole numbers in float
-     * fields to floats. Values that can't be converted are returned unchanged, for {@see validate()} to report.
+     * How the field's values are stored, compared and indexed.
+     */
+    public function storage(): FieldStorage
+    {
+        return $this->implementation()->storage($this);
+    }
+
+    /**
+     * Converts accepted input to the stored form: e.g. dates and times to ISO 8601 text, whole numbers in
+     * float fields to floats. Values that can't be converted are returned unchanged, for {@see validate()} to report.
      */
     public function normalize(mixed $value): mixed
     {
-        return match ($this->type) {
-            FieldType::Float => \is_int($value) ? (float) $value : $value,
-            FieldType::Date => match (true) {
-                $value instanceof \DateTimeInterface => $value->format('Y-m-d'),
-                default => $value,
-            },
-            FieldType::DateTime => match (true) {
-                $value instanceof \DateTimeInterface => \DateTimeImmutable::createFromInterface($value)->setTimezone(new \DateTimeZone('UTC'))->format(\DATE_ATOM),
-                \is_string($value) && false !== ($parsed = $this->parseDateTime($value)) => $parsed->setTimezone(new \DateTimeZone('UTC'))->format(\DATE_ATOM),
-                default => $value,
-            },
-            default => $value,
-        };
+        return $this->implementation()->normalize($value, $this);
     }
 
     /**
@@ -72,17 +82,39 @@ final readonly class FieldDefinition
      */
     public function validate(mixed $value): ?string
     {
-        return match ($this->type) {
-            FieldType::String, FieldType::Text => \is_string($value) ? $this->lengthError($value) : 'Expected text.',
-            FieldType::Int => \is_int($value) ? $this->rangeError($value) : 'Expected a whole number.',
-            FieldType::Float => \is_float($value) ? $this->rangeError($value) : 'Expected a number.',
-            FieldType::Bool => \is_bool($value) ? null : 'Expected true or false.',
-            FieldType::Enum => \in_array($value, $this->choices, true) ? null : \sprintf('Expected one of: %s.', implode(', ', array_map(static fn (string|int $choice): string => json_encode($choice, \JSON_THROW_ON_ERROR), $this->choices))),
-            FieldType::List => $this->listError($value),
-            FieldType::Date => \is_string($value) && $this->isDate($value) ? null : 'Expected a date such as "2026-12-24".',
-            FieldType::DateTime => \is_string($value) && false !== $this->parseDateTime($value) ? null : 'Expected a date and time such as "2026-12-24T18:00:00+01:00".',
-            FieldType::Json => $this->isJsonEncodable($value) ? null : 'Expected a value that can be stored as JSON.',
-        };
+        return $this->implementation()->validate($value, $this);
+    }
+
+    /**
+     * @see FieldTypeInterface::queryValue()
+     */
+    public function queryValue(mixed $value): string|int|bool|null
+    {
+        return $this->implementation()->queryValue($value, $this);
+    }
+
+    /**
+     * @see FieldTypeInterface::expected()
+     */
+    public function expected(): string
+    {
+        return $this->implementation()->expected($this);
+    }
+
+    /**
+     * The admin widget: the one declared, or the type's.
+     */
+    public function widget(): string
+    {
+        return $this->widget ?? $this->implementation()->widget($this);
+    }
+
+    /**
+     * The field type, created once: types keep no state.
+     */
+    public function implementation(): FieldTypeInterface
+    {
+        return FieldTypeInstances::get($this->typeClass);
     }
 
     /**
@@ -94,7 +126,8 @@ final readonly class FieldDefinition
     {
         return [
             'name' => $this->name,
-            'type' => $this->type->value,
+            'type' => $this->type,
+            'type_class' => $this->typeClass,
             'owner' => $this->owner,
             'default' => $this->default,
             'required' => $this->required,
@@ -109,6 +142,7 @@ final readonly class FieldDefinition
             'group' => $this->group,
             'widget' => $this->widget,
             'order' => $this->order,
+            'options' => $this->options,
         ];
     }
 
@@ -119,12 +153,12 @@ final readonly class FieldDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{name: string, type: string, owner: string, default: mixed, required: bool, choices: list<string|int>, min: int|float|null, max: int|float|null, max_length: ?int, sortable: bool, filterable: bool, label: ?string, help: ?string, group: ?string, widget: ?string, order: int} $field */
+        /** @var array{name: string, type: string, type_class: class-string<FieldTypeInterface>, owner: string, default: mixed, required: bool, choices: list<string|int>, min: int|float|null, max: int|float|null, max_length: ?int, sortable: bool, filterable: bool, label: ?string, help: ?string, group: ?string, widget: ?string, order: int, options: array<string, mixed>} $field */
         $field = $data;
 
         return new self(
             name: $field['name'],
-            type: FieldType::from($field['type']),
+            type: $field['type'],
             owner: $field['owner'],
             default: $field['default'],
             required: $field['required'],
@@ -139,71 +173,8 @@ final readonly class FieldDefinition
             group: $field['group'],
             widget: $field['widget'],
             order: $field['order'],
+            options: $field['options'],
+            typeClass: $field['type_class'],
         );
-    }
-
-    private function listError(mixed $value): ?string
-    {
-        if (!\is_array($value) || !array_is_list($value)) {
-            return 'Expected a list of texts.';
-        }
-
-        foreach ($value as $item) {
-            $error = \is_string($item) ? $this->lengthError($item) : 'Expected a list of texts.';
-
-            if (null !== $error) {
-                return $error;
-            }
-        }
-
-        return null;
-    }
-
-    private function lengthError(string $value): ?string
-    {
-        return null !== $this->maxLength && mb_strlen($value) > $this->maxLength ? \sprintf('At most %d characters.', $this->maxLength) : null;
-    }
-
-    private function rangeError(int|float $value): ?string
-    {
-        return match (true) {
-            null !== $this->min && $value < $this->min => \sprintf('At least %s.', $this->min),
-            null !== $this->max && $value > $this->max => \sprintf('At most %s.', $this->max),
-            default => null,
-        };
-    }
-
-    private function isDate(string $value): bool
-    {
-        $date = \DateTimeImmutable::createFromFormat('!Y-m-d', $value);
-
-        return false !== $date && $date->format('Y-m-d') === $value;
-    }
-
-    /**
-     * Parses ISO 8601 date-times with an explicit offset, so a value never depends on the server's time zone.
-     */
-    private function parseDateTime(string $value): \DateTimeImmutable|false
-    {
-        if (1 !== preg_match('/^\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:?\d{2})$/', $value)) {
-            return false;
-        }
-
-        try {
-            return new \DateTimeImmutable($value);
-        } catch (\Exception) {
-            return false;
-        }
-    }
-
-    private function isJsonEncodable(mixed $value): bool
-    {
-        try {
-            json_encode($value, \JSON_THROW_ON_ERROR);
-
-            return true;
-        } catch (\JsonException) {
-            return false;
-        }
     }
 }

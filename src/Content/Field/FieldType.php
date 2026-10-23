@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Quire\Content\Field;
 
 /**
- * The kinds of values a content field can hold, and how each is stored in the item's JSONB "fields".
+ * The field types of Quire's core, by name. Extensions add more with Extend\FieldTypes.
  *
  * @api
  */
@@ -29,18 +29,22 @@ enum FieldType: string
     /** Any JSON-encodable value; can't be indexed */
     case Json = 'json';
 
-    public function isNumeric(): bool
+    /**
+     * @return class-string<FieldTypeInterface>
+     */
+    public function class(): string
     {
-        return self::Int === $this || self::Float === $this;
-    }
-
-    public function canBeSorted(): bool
-    {
-        return !\in_array($this, [self::Text, self::List, self::Json], true);
-    }
-
-    public function canBeFiltered(): bool
-    {
-        return !\in_array($this, [self::Text, self::Json], true);
+        return match ($this) {
+            self::String => Type\StringField::class,
+            self::Text => Type\TextField::class,
+            self::Int => Type\IntField::class,
+            self::Float => Type\FloatField::class,
+            self::Bool => Type\BoolField::class,
+            self::Enum => Type\EnumField::class,
+            self::List => Type\ListField::class,
+            self::Date => Type\DateField::class,
+            self::DateTime => Type\DateTimeField::class,
+            self::Json => Type\JsonField::class,
+        };
     }
 }

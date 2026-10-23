@@ -6,7 +6,7 @@ namespace Quire\Content\Query\Internal;
 
 use Quire\Content\Field\FieldDefinition;
 use Quire\Content\Field\FieldExpression;
-use Quire\Content\Field\FieldType;
+use Quire\Content\Field\FieldStorage;
 use Quire\Content\Internal\Row;
 use Quire\Content\Query\Exception\InvalidQueryException;
 use Quire\Content\Type\ContentTypeDefinition;
@@ -65,7 +65,7 @@ final readonly class QueryFields
         if (str_starts_with($field, 'fields.')) {
             $definition = $this->field($types, substr($field, \strlen('fields.')), 'filtered');
 
-            if (FieldType::List === $definition->type) {
+            if (FieldStorage::TextList === $definition->storage()) {
                 return $this->containment($field, FieldExpression::json($definition, 'c.fields'), $operator, $value);
             }
 
@@ -107,7 +107,7 @@ final readonly class QueryFields
     private function field(array $types, string $name, string $use): FieldDefinition
     {
         $found = null;
-        $usable = static fn (FieldDefinition $field): bool => $field->isIndexed() && ('filtered' === $use || $field->type->canBeSorted());
+        $usable = static fn (FieldDefinition $field): bool => $field->isIndexed() && ('filtered' === $use || $field->storage()->canBeSorted());
 
         foreach ($types as $type) {
             $definition = $this->types->get($type)->field($name);
@@ -211,36 +211,15 @@ final readonly class QueryFields
      */
     private function value(string $field, mixed $value, string|FieldDefinition $kind): mixed
     {
-        $type = $kind instanceof FieldDefinition ? $kind->type : null;
-        $numeric = $kind instanceof FieldDefinition && FieldExpression::isNumeric($kind);
-
         $converted = match (true) {
+            // The field's type converts what it's compared with, as it converts what's stored.
+            $kind instanceof FieldDefinition => $kind->queryValue($value),
             'uuid' === $kind => \is_string($value) ? (Row::isUuid($value) ? $value : new NoMatch()) : null,
-            $numeric => match (true) {
-                \is_int($value) => $value,
-                \is_float($value) => (string) $value,
-                \is_string($value) && is_numeric($value) => trim($value),
-                default => null,
-            },
-            FieldType::Bool === $type => match (true) {
-                \is_bool($value) => $value,
-                \in_array($value, [1, '1', 'true'], true) => true,
-                \in_array($value, [0, '0', 'false'], true) => false,
-                default => null,
-            },
-            FieldType::Date === $type, FieldType::DateTime === $type => $this->fieldDate($kind, $value),
             'timestamp' === $kind => $this->timestamp($value),
             default => \is_string($value) || \is_int($value) ? (string) $value : null,
         };
 
         return $converted ?? throw new InvalidQueryException(\sprintf('"%s" can\'t be compared with %s: %s.', $field, get_debug_type($value), $this->expected($kind)));
-    }
-
-    private function fieldDate(FieldDefinition $field, mixed $value): ?string
-    {
-        $normalized = $field->normalize($value);
-
-        return \is_string($normalized) && null === $field->validate($normalized) ? $normalized : null;
     }
 
     private function timestamp(mixed $value): ?string
@@ -268,11 +247,7 @@ final readonly class QueryFields
         return match (true) {
             'uuid' === $kind => 'expected an ID',
             'timestamp' === $kind => 'expected a date and time',
-            !$kind instanceof FieldDefinition => 'expected text',
-            FieldExpression::isNumeric($kind) => 'expected a number',
-            FieldType::Bool === $kind->type => 'expected true or false',
-            FieldType::Date === $kind->type => 'expected a date such as "2026-12-24"',
-            FieldType::DateTime === $kind->type => 'expected a date and time with an offset, such as "2026-12-24T18:00:00+01:00"',
+            $kind instanceof FieldDefinition => 'expected '.$kind->expected(),
             default => 'expected text',
         };
     }

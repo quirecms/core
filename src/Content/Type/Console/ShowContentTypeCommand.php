@@ -58,11 +58,12 @@ final readonly class ShowContentTypeCommand
                 null === $field->maxLength ? null : 'max length '.$field->maxLength,
                 $field->sortable ? 'sortable' : null,
                 $field->filterable ? 'filterable' : null,
+                ...array_map(static fn (string $option, mixed $value): string => $option.' '.json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE), array_keys($field->options), $field->options),
             ]);
 
             $rows[] = [
                 $field->name,
-                $field->type->value,
+                $field->type,
                 implode(', ', $rules),
                 null === $field->default ? '' : json_encode($field->default, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES),
                 $field->owner,

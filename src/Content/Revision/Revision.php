@@ -15,6 +15,7 @@ final readonly class Revision
      * @param int                  $contentVersion The item's version this revision was saved as
      * @param array<string, mixed> $fields
      * @param string|null          $authorId       Who made the change
+     * @param string|null          $approvedBy     Who approved it, for changes published after review
      */
     public function __construct(
         public string $id,
@@ -28,6 +29,7 @@ final readonly class Revision
         public ?string $authorId,
         public ?string $message,
         public \DateTimeImmutable $createdAt,
+        public ?string $approvedBy = null,
     ) {
     }
 }

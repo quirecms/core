@@ -142,6 +142,32 @@ final readonly class Relations
     }
 
     /**
+     * The fields to bring back from a revision: the fields declared now come from it, values of fields no
+     * longer declared stay as they are, and links to items deleted for good since are dropped.
+     *
+     * @param array<string, mixed> $current  The item's fields now
+     * @param array<string, mixed> $revision The revision's fields
+     *
+     * @return array<string, mixed>
+     */
+    public function fieldsToRestore(ContentTypeDefinition $type, array $current, array $revision): array
+    {
+        $fields = array_diff_key($current, $type->fields) + array_intersect_key($revision, $type->fields);
+
+        foreach ($this->relationFields($type) as $name => $field) {
+            if (!\array_key_exists($name, $fields)) {
+                continue;
+            }
+
+            $ids = array_values(array_filter((array) $fields[$name], \is_string(...)));
+            $existing = $this->existing($ids);
+            $fields[$name] = \is_array($fields[$name]) ? array_values(array_intersect($ids, $existing)) : (\in_array($fields[$name], $existing, true) ? $fields[$name] : null);
+        }
+
+        return $fields;
+    }
+
+    /**
      * @return array<string, FieldDefinition>
      */
     public function relationFields(ContentTypeDefinition $type): array

@@ -21,6 +21,7 @@
         "league/flysystem": "^3.29",
         "league/flysystem-local": "^3.29",
         "psr/event-dispatcher": "^1.0",
+        "sebastian/diff": "^7.0 || ^8.0 || ^9.0",
         "symfony/asset": "^8.1",
         "symfony/asset-mapper": "^8.1",
         "symfony/cache": "^8.1",

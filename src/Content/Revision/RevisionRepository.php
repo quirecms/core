@@ -14,7 +14,7 @@ use Quire\Content\Internal\Row;
  */
 final readonly class RevisionRepository
 {
-    private const string COLUMNS = 'id, content_id, content_version, title, excerpt, body, body_format, fields, author_id, message, created_at';
+    private const string COLUMNS = 'id, content_id, content_version, title, excerpt, body, body_format, fields, author_id, message, created_at, approved_by';
 
     public function __construct(
         private Connection $connection,
@@ -68,6 +68,7 @@ final readonly class RevisionRepository
             authorId: $row->nullableString('author_id'),
             message: $row->nullableString('message'),
             createdAt: $row->date('created_at'),
+            approvedBy: $row->nullableString('approved_by'),
         );
     }
 }

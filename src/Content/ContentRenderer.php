@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Content;
 
+use Quire\Content\Revision\PendingRevision;
 use Quire\Formatter\CompiledText;
 use Quire\Formatter\Formatter;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -86,6 +87,12 @@ final readonly class ContentRenderer
         }
 
         $key = \sprintf('content.%s.%d.%s.%s', str_replace('-', '', $content->id), $content->version, $profile, $this->fingerprint);
+        $pending = $content->attributes['pending_revision'] ?? null;
+
+        if ($pending instanceof PendingRevision) {
+            // A preview: the item's text with changes that aren't published.
+            $key .= \sprintf('.pending.%s.%d', str_replace('-', '', $pending->id), $pending->version);
+        }
 
         /** @var array{body: array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string}, teaser: ?array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string}} $cached */
         $cached = $this->cache->get($key, function (ItemInterface $item) use ($content, $profile): array {

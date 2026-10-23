@@ -12,7 +12,7 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
  * Declares the abilities of every content type, once all types are registered: content.<type>.view,
- * view_drafts, create, edit_own, edit_any, publish and delete.
+ * view_drafts, create, edit_own, edit_any, publish, review and delete.
  *
  * @internal
  */
@@ -26,6 +26,7 @@ final class ContentAbilities
         'edit_own' => ['Edit their own %s', [Role::EDITOR]],
         'edit_any' => ['Edit any %s', [Role::EDITOR]],
         'publish' => ['Publish %s', [Role::EDITOR]],
+        'review' => ['Review changes to %s', [Role::EDITOR]],
         'delete' => ['Delete %s', [Role::EDITOR]],
     ];
 

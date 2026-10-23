@@ -85,6 +85,16 @@ final readonly class Content
         return clone ($this, ['attributes' => [...$this->attributes, ...$attributes]]);
     }
 
+    /**
+     * @internal Used for previews, e.g. of a pending revision
+     *
+     * @param array<string, mixed> $properties New values, by property name
+     */
+    public function with(array $properties): self
+    {
+        return clone ($this, $properties);
+    }
+
     public function field(string $name, mixed $default = null): mixed
     {
         return \array_key_exists($name, $this->fields) ? $this->fields[$name] : $default;

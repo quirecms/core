@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Doctrine\Migrations\DependencyFactory;
 use Doctrine\Migrations\Tools\Console\Command as MigrationCommand;
+use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\InstalledExtensions;
@@ -57,7 +58,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/{Content,Status}.php',
             '../src/Content/{Command,Event,Exception}/',
             '../src/Content/Internal/{Locales,Row}.php',
-            '../src/Content/Revision/Revision.php',
+            '../src/Content/Revision/{Diff,DiffLine,Merge,PendingRevision,Review,ReviewState,Revision,Snapshot,Verdict}.php',
+            '../src/Content/Revision/Internal/',
             '../src/Content/Workflow/ContentSubject.php',
             '../src/Content/Console/ConsoleErrors.php',
             '../src/Storage/{Disk,StoredObject}.php',
@@ -92,6 +94,8 @@ return static function (ContainerConfigurator $container): void {
     // Storage is for extensions; nothing in core uses it yet, and unused private services are removed.
     $services->set(StorageDisks::class)->public();
     $services->set(ObjectStore::class)->public();
+    // For admin interfaces and APIs; nothing in core edits pending revisions.
+    $services->set(PendingRevisionWriter::class)->public();
 
     // Sessions in PostgreSQL, for applications that choose them (framework.session.handler_id).
     $services->set(SessionHandlerFactory::SERVICE, PdoSessionHandler::class)

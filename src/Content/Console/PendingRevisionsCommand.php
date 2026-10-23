@@ -1,0 +1,136 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Quire\Content\Console;
+
+use Quire\Content\ContentRepository;
+use Quire\Content\ContentWriter;
+use Quire\Content\Revision\PendingRevision;
+use Quire\Content\Revision\PendingRevisionRepository;
+use Quire\Content\Revision\PendingRevisionWriter;
+use Symfony\Component\Console\Attribute\Argument;
+use Symfony\Component\Console\Attribute\AsCommand;
+use Symfony\Component\Console\Attribute\Option;
+use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Formatter\OutputFormatter;
+use Symfony\Component\Console\Style\SymfonyStyle;
+
+#[AsCommand(
+    name: 'quire:content:pending',
+    description: 'List the pending revisions of a content item (changes not published yet), show, publish or discard one',
+    help: <<<'HELP'
+        <info>%command.full_name% 0192b6a0-…</info>
+        <info>%command.full_name% 0192b6a0-… --show 0192b6a1-…</info>
+        <info>%command.full_name% 0192b6a0-… --publish 0192b6a1-…</info>
+        <info>%command.full_name% 0192b6a0-… --discard 0192b6a1-…</info>
+
+        Showing a pending revision prints what it changes, as a diff, and whether it merges with the
+        live item. Publishing merges it into the item.
+        HELP,
+)]
+final readonly class PendingRevisionsCommand
+{
+    public function __construct(
+        private ContentRepository $content,
+        private PendingRevisionRepository $repository,
+        private PendingRevisionWriter $pending,
+        private ContentWriter $writer,
+    ) {
+    }
+
+    public function __invoke(
+        SymfonyStyle $io,
+        #[Argument(description: 'The item\'s ID')]
+        string $id,
+        #[Option(description: 'ID of a pending revision to show')]
+        ?string $show = null,
+        #[Option(description: 'ID of a pending revision to publish')]
+        ?string $publish = null,
+        #[Option(description: 'ID of a pending revision to delete without publishing it')]
+        ?string $discard = null,
+    ): int {
+        return ConsoleErrors::handle($io, function () use ($io, $id, $show, $publish, $discard): int {
+            $content = $this->content->get($id);
+
+            if (\count(array_filter([$show, $publish, $discard], static fn (?string $option): bool => null !== $option)) > 1) {
+                throw new \InvalidArgumentException('Pass one of --show, --publish and --discard.');
+            }
+
+            if (null !== $publish) {
+                $pending = $this->ofItem($publish, $content->id);
+                $after = $this->writer->publishPendingRevision($pending->id, $pending->version);
+                $io->success(\sprintf('Published the changes. "%s" is now at version %d.', $after->title, $after->version));
+
+                return Command::SUCCESS;
+            }
+
+            if (null !== $discard) {
+                $this->pending->discard($this->ofItem($discard, $content->id)->id);
+                $io->success('Discarded the changes.');
+
+                return Command::SUCCESS;
+            }
+
+            if (null !== $show) {
+                $this->show($io, $this->ofItem($show, $content->id));
+
+                return Command::SUCCESS;
+            }
+
+            $rows = array_map(static fn (PendingRevision $pending): array => [
+                $pending->id, $pending->state->value, $pending->version, $pending->baseVersion, $pending->updatedAt->format('Y-m-d H:i'), $pending->message ?? '',
+            ], $this->repository->forContent($content->id));
+
+            if ([] === $rows) {
+                $io->note('The item has no pending revisions.');
+
+                return Command::SUCCESS;
+            }
+
+            $io->table(['Pending revision', 'State', 'Version', 'Based on', 'Saved', 'Message'], $rows);
+
+            return Command::SUCCESS;
+        });
+    }
+
+    private function show(SymfonyStyle $io, PendingRevision $pending): void
+    {
+        $diff = $pending->diff();
+        $io->definitionList(
+            ['State' => $pending->state->value],
+            ['Based on' => \sprintf('version %d', $pending->baseVersion)],
+            ['Message' => $pending->message ?? ''],
+            ['Changes' => $diff->isEmpty() ? 'none' : implode(', ', array_keys($diff->changes))],
+        );
+
+        foreach ($diff->changes as $property => $change) {
+            if ('body' !== $property) {
+                $io->writeln(\sprintf('<comment>%s</comment>: %s → %s', $property, OutputFormatter::escape($this->value($change['old'])), OutputFormatter::escape($this->value($change['new']))));
+            }
+        }
+
+        if ('' !== $diff->unified()) {
+            $io->newLine();
+            $io->writeln(OutputFormatter::escape($diff->unified()));
+        }
+
+        $merge = $this->repository->merge($pending);
+
+        if (!$merge->isClean()) {
+            $io->warning(array_merge(['It conflicts with changes published since it was started:'], array_map(static fn (string $property, string $message): string => \sprintf('%s: %s', $property, $message), array_keys($merge->conflicts), $merge->conflicts)));
+        }
+    }
+
+    private function ofItem(string $pendingId, string $contentId): PendingRevision
+    {
+        $pending = $this->repository->get($pendingId);
+
+        return $pending->contentId === $contentId ? $pending : throw new \InvalidArgumentException(\sprintf('The pending revision "%s" is for another item.', $pendingId));
+    }
+
+    private function value(mixed $value): string
+    {
+        return null === $value ? '(none)' : json_encode($value, \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_UNICODE | \JSON_UNESCAPED_SLASHES);
+    }
+}

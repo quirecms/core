@@ -8,6 +8,8 @@ use Quire\Content\Exception\ContentConflictException;
 use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Exception\ContentOperationCancelledException;
 use Quire\Content\Exception\InvalidContentException;
+use Quire\Content\Exception\MergeConflictException;
+use Quire\Content\Exception\PendingRevisionConflictException;
 use Quire\Content\Exception\TransitionNotAllowedException;
 use Quire\Formatter\Exception\UnknownFormatException;
 use Quire\User\UserRepository;
@@ -30,7 +32,9 @@ final class ConsoleErrors
             return $work();
         } catch (InvalidContentException $e) {
             $io->error(array_map(static fn (string $property, string $message): string => \sprintf('%s: %s', $property, $message), array_keys($e->violations), $e->violations));
-        } catch (ContentNotFoundException|ContentConflictException|TransitionNotAllowedException|ContentOperationCancelledException|UnknownFormatException|\JsonException|\InvalidArgumentException $e) {
+        } catch (MergeConflictException $e) {
+            $io->error([$e->getMessage(), ...array_map(static fn (string $property, string $message): string => \sprintf('%s: %s', $property, $message), array_keys($e->conflicts), $e->conflicts)]);
+        } catch (ContentNotFoundException|ContentConflictException|PendingRevisionConflictException|TransitionNotAllowedException|ContentOperationCancelledException|UnknownFormatException|\JsonException|\InvalidArgumentException $e) {
             $io->error($e->getMessage());
         }
 

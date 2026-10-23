@@ -24,10 +24,13 @@ use Quire\Content\Event\ContentStatusChanged;
 use Quire\Content\Event\ContentUnpublished;
 use Quire\Content\Event\ContentUpdated;
 use Quire\Content\Event\ContentUpdating;
+use Quire\Content\Event\PendingRevisionPublished;
 use Quire\Content\Exception\ContentConflictException;
 use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Exception\ContentOperationCancelledException;
 use Quire\Content\Exception\InvalidContentException;
+use Quire\Content\Exception\MergeConflictException;
+use Quire\Content\Exception\PendingRevisionConflictException;
 use Quire\Content\Exception\TransitionNotAllowedException;
 use Quire\Content\Internal\Fields;
 use Quire\Content\Internal\Locales;
@@ -35,7 +38,12 @@ use Quire\Content\Internal\Relations;
 use Quire\Content\Internal\Row;
 use Quire\Content\Internal\Slugs;
 use Quire\Content\Permalink\Permalinks;
+use Quire\Content\Revision\Internal\Values;
+use Quire\Content\Revision\PendingRevisionRepository;
+use Quire\Content\Revision\Review;
+use Quire\Content\Revision\ReviewState;
 use Quire\Content\Revision\RevisionRepository;
+use Quire\Content\Revision\Verdict;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
@@ -58,6 +66,9 @@ final readonly class ContentWriter
 {
     private const int MAX_TITLE_LENGTH = 1000;
 
+    /** Whether pending revisions must be approved before they're published. */
+    public const string APPROVAL_SETTING = 'quire.content.changes_need_approval';
+
     /** Changes to these are kept in revisions. */
     private const array REVISIONED = ['title', 'excerpt', 'body', 'body_format', 'fields'];
 
@@ -74,6 +85,7 @@ final readonly class ContentWriter
         private Permalinks $permalinks,
         private RouteCollisions $routes,
         private Relations $relations,
+        private PendingRevisionRepository $pendingRevisions,
     ) {
     }
 
@@ -179,75 +191,62 @@ final readonly class ContentWriter
      */
     public function update(UpdateContent $command): Content
     {
-        return $this->write(function (\ArrayObject $events) use ($command): Content {
-            $current = $this->lockEditable($command->id, $command->expectedVersion);
-            $this->dispatchCancellable(new ContentUpdating($current, $command));
+        return $this->write(fn (\ArrayObject $events): Content => $this->applyUpdate($events, $command));
+    }
 
-            if ($command->isEmpty()) {
-                return $current;
+    /**
+     * Publishes a pending revision: merges its changes into the item and saves a revision. Changes
+     * published since it was started are kept; if they changed the same lines or fields, publishing fails
+     * with a {@see MergeConflictException} and nothing changes. The pending revision is deleted.
+     *
+     * When the site requires approval ("quire.content.changes_need_approval"), it must be approved.
+     *
+     * @param int         $expectedVersion The pending revision's version the publisher saw
+     * @param string|null $actorId         Who publishes it. The revision is credited to the changes' author.
+     *
+     * @throws ContentNotFoundException
+     * @throws PendingRevisionConflictException   when it was saved since the expected version
+     * @throws MergeConflictException
+     * @throws InvalidContentException            when the merged item breaks a rule (e.g. an empty title), or it needs approval
+     * @throws ContentOperationCancelledException
+     */
+    public function publishPendingRevision(string $id, int $expectedVersion, ?string $actorId = null): Content
+    {
+        return $this->write(function (\ArrayObject $events) use ($id, $expectedVersion, $actorId): Content {
+            $pending = $this->pendingRevisions->lock($id);
+
+            if ($pending->version !== $expectedVersion) {
+                throw new PendingRevisionConflictException($pending->id, $expectedVersion, $pending->version);
             }
 
-            $type = $this->types->get($current->type);
-            $values = $this->changedValues($current, $command, $type);
-            $violations = $this->validate($type, $values);
-
-            if (\array_key_exists('fields', $values) && !isset($violations['fields']) && \is_array($values['fields'])) {
-                /** @var array<string, mixed> $newFields */
-                $newFields = $values['fields'];
-                $violations += Fields::violations($type, $current->fields, $newFields);
-                $violations += $this->relations->violations($type, $current->id, $current->fields, $newFields);
+            if (ReviewState::Approved !== $pending->state && $this->settings->getBool(self::APPROVAL_SETTING)) {
+                throw InvalidContentException::single('state', 'The changes need to be approved before they\'re published.');
             }
 
-            if (\array_key_exists('slug', $values) && !Slugs::isValid($this->string($values, 'slug'))) {
-                $violations['slug'] = $this->invalidSlugMessage();
+            $current = $this->repository->lock($pending->contentId);
+
+            if ($current->isTrashed()) {
+                throw InvalidContentException::single('deleted_at', 'The item is in the trash. Restore it before changing it.');
             }
 
-            $parentId = \array_key_exists('parent_id', $values) ? $this->nullableString($values, 'parent_id') : $current->parentId;
-            $locale = \array_key_exists('locale', $values) ? $this->string($values, 'locale') : $current->locale;
+            $merge = $this->pendingRevisions->merge($pending, $current);
 
-            if (\array_key_exists('parent_id', $values) && null !== $parentId) {
-                $violations += $this->parentViolations($type, $parentId, $locale, $current->id);
+            if (!$merge->isClean()) {
+                throw new MergeConflictException($pending->id, $merge->conflicts, $merge);
             }
 
-            if (\array_key_exists('locale', $values) && $this->hasChildren($current->id, includeTrashed: true)) {
-                $violations['locale'] = 'Items with child items can\'t change their language. Move or delete the children first.';
-            }
+            $approval = ReviewState::Approved === $pending->state
+                ? array_find(array_reverse($this->pendingRevisions->reviews($pending->id)), static fn (Review $review): bool => Verdict::Approve === $review->verdict)
+                : null;
+            $merged = $merge->result;
+            $after = $this->applyUpdate($events, new UpdateContent($current->id, $current->version, revisionMessage: $pending->message, actorId: $pending->authorId)
+                ->title($merged->title)
+                ->body($merged->body, $merged->bodyFormat)
+                ->excerpt($merged->excerpt)
+                ->fields($merged->fields), $approval?->reviewerId);
 
-            if (\array_key_exists('published_at', $values)) {
-                $violations += $this->publishedAtViolations($current, $this->date($values, 'published_at'));
-            }
-
-            $this->throwIfAny($violations);
-
-            if ([] === $values) {
-                return $current;
-            }
-
-            if ([] !== array_intersect_key($values, array_flip(['slug', 'parent_id', 'locale']))) {
-                $slug = \array_key_exists('slug', $values) ? $this->string($values, 'slug') : $current->slug;
-                $this->slugs->lockSiblings($type->id, $parentId, $locale);
-
-                if ($this->slugs->isTaken($slug, $type->id, $parentId, $locale, $current->id)) {
-                    throw InvalidContentException::single('slug', \sprintf('Another %s here already uses the slug "%s".', strtolower($type->label), $slug));
-                }
-            }
-
-            if (\array_key_exists('locale', $values)) {
-                $values['search_config'] = Locales::searchConfiguration($locale);
-            }
-
-            $after = $this->saveChanges($current, $values);
-
-            if (\array_key_exists('fields', $values)) {
-                $this->relations->sync($after->id, $type, $after->fields, $current->fields);
-            }
-
-            if ($type->has(Capability::REVISIONS) && [] !== array_intersect_key($values, array_flip(self::REVISIONED))) {
-                $this->saveRevision($after, $command->revisionMessage, $command->actorId);
-            }
-
-            $this->assertReachable($after);
-            $events->append(new ContentUpdated($current, $after));
+            $this->connection->executeStatement('DELETE FROM quire.content_pending_revision WHERE id = ?', [$pending->id]);
+            $events->append(new PendingRevisionPublished($pending, $after, $actorId));
 
             return $after;
         });
@@ -450,21 +449,8 @@ final readonly class ContentWriter
             throw InvalidContentException::single('revision', \sprintf('The item has no revision "%s".', $revisionId));
         }
 
-        // Fields declared now come from the revision; values of fields no longer declared stay as they are.
         $current = $this->repository->get($contentId);
-        $type = $this->types->get($current->type);
-        $fields = array_diff_key($current->fields, $type->fields) + array_intersect_key($revision->fields, $type->fields);
-
-        // Links to items deleted for good since the revision are dropped.
-        foreach ($this->relations->relationFields($type) as $name => $field) {
-            if (!\array_key_exists($name, $fields)) {
-                continue;
-            }
-
-            $ids = array_values(array_filter((array) $fields[$name], \is_string(...)));
-            $existing = $this->relations->existing($ids);
-            $fields[$name] = \is_array($fields[$name]) ? array_values(array_intersect($ids, $existing)) : (\in_array($fields[$name], $existing, true) ? $fields[$name] : null);
-        }
+        $fields = $this->relations->fieldsToRestore($this->types->get($current->type), $current->fields, $revision->fields);
 
         return $this->update(new UpdateContent(
             $contentId,
@@ -476,6 +462,84 @@ final readonly class ContentWriter
             ->body($revision->body, $revision->bodyFormat)
             ->excerpt($revision->excerpt)
             ->fields($fields));
+    }
+
+    /**
+     * @param \ArrayObject<int, object> $events
+     * @param string|null               $approvedBy Who approved the changes, for the revision
+     */
+    private function applyUpdate(\ArrayObject $events, UpdateContent $command, ?string $approvedBy = null): Content
+    {
+        $current = $this->lockEditable($command->id, $command->expectedVersion);
+        $this->dispatchCancellable(new ContentUpdating($current, $command));
+
+        if ($command->isEmpty()) {
+            return $current;
+        }
+
+        $type = $this->types->get($current->type);
+        $values = $this->changedValues($current, $command, $type);
+        $violations = $this->validate($type, $values);
+
+        if (\array_key_exists('fields', $values) && !isset($violations['fields']) && \is_array($values['fields'])) {
+            /** @var array<string, mixed> $newFields */
+            $newFields = $values['fields'];
+            $violations += Fields::violations($type, $current->fields, $newFields);
+            $violations += $this->relations->violations($type, $current->id, $current->fields, $newFields);
+        }
+
+        if (\array_key_exists('slug', $values) && !Slugs::isValid($this->string($values, 'slug'))) {
+            $violations['slug'] = $this->invalidSlugMessage();
+        }
+
+        $parentId = \array_key_exists('parent_id', $values) ? $this->nullableString($values, 'parent_id') : $current->parentId;
+        $locale = \array_key_exists('locale', $values) ? $this->string($values, 'locale') : $current->locale;
+
+        if (\array_key_exists('parent_id', $values) && null !== $parentId) {
+            $violations += $this->parentViolations($type, $parentId, $locale, $current->id);
+        }
+
+        if (\array_key_exists('locale', $values) && $this->hasChildren($current->id, includeTrashed: true)) {
+            $violations['locale'] = 'Items with child items can\'t change their language. Move or delete the children first.';
+        }
+
+        if (\array_key_exists('published_at', $values)) {
+            $violations += $this->publishedAtViolations($current, $this->date($values, 'published_at'));
+        }
+
+        $this->throwIfAny($violations);
+
+        if ([] === $values) {
+            return $current;
+        }
+
+        if ([] !== array_intersect_key($values, array_flip(['slug', 'parent_id', 'locale']))) {
+            $slug = \array_key_exists('slug', $values) ? $this->string($values, 'slug') : $current->slug;
+            $this->slugs->lockSiblings($type->id, $parentId, $locale);
+
+            if ($this->slugs->isTaken($slug, $type->id, $parentId, $locale, $current->id)) {
+                throw InvalidContentException::single('slug', \sprintf('Another %s here already uses the slug "%s".', strtolower($type->label), $slug));
+            }
+        }
+
+        if (\array_key_exists('locale', $values)) {
+            $values['search_config'] = Locales::searchConfiguration($locale);
+        }
+
+        $after = $this->saveChanges($current, $values);
+
+        if (\array_key_exists('fields', $values)) {
+            $this->relations->sync($after->id, $type, $after->fields, $current->fields);
+        }
+
+        if ($type->has(Capability::REVISIONS) && [] !== array_intersect_key($values, array_flip(self::REVISIONED))) {
+            $this->saveRevision($after, $command->revisionMessage, $command->actorId, $approvedBy);
+        }
+
+        $this->assertReachable($after);
+        $events->append(new ContentUpdated($current, $after));
+
+        return $after;
     }
 
     /**
@@ -623,7 +687,7 @@ final readonly class ContentWriter
 
         return array_filter(
             $values,
-            static fn (mixed $value, string $column): bool => !self::same($value, $currentValues[$column]),
+            static fn (mixed $value, string $column): bool => !Values::same($value, $currentValues[$column]),
             \ARRAY_FILTER_USE_BOTH,
         );
     }
@@ -780,12 +844,12 @@ final readonly class ContentWriter
         );
     }
 
-    private function saveRevision(Content $content, ?string $message, ?string $actorId): void
+    private function saveRevision(Content $content, ?string $message, ?string $actorId, ?string $approvedBy = null): void
     {
         $this->connection->executeStatement(
-            'INSERT INTO quire.content_revision (content_id, content_version, title, excerpt, body, body_format, fields, author_id, message)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            [$content->id, $content->version, $content->title, $content->excerpt, $content->body, $content->bodyFormat, $this->json($content->fields), $actorId, $message],
+            'INSERT INTO quire.content_revision (content_id, content_version, title, excerpt, body, body_format, fields, author_id, message, approved_by)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$content->id, $content->version, $content->title, $content->excerpt, $content->body, $content->bodyFormat, $this->json($content->fields), $actorId, $message, $approvedBy],
         );
 
         $keep = $this->settings->getInt('quire.content.revisions_keep');
@@ -813,32 +877,6 @@ final readonly class ContentWriter
         if ([] !== $violations) {
             throw new InvalidContentException($violations);
         }
-    }
-
-    /**
-     * Strict equality, except that dates compare by instant and fields ignore key order (as JSONB does).
-     */
-    private static function same(mixed $a, mixed $b): bool
-    {
-        return match (true) {
-            $a instanceof \DateTimeImmutable && $b instanceof \DateTimeImmutable => $a->getTimestamp() === $b->getTimestamp(),
-            \is_array($a) && \is_array($b) => self::sorted($a) === self::sorted($b),
-            default => $a === $b,
-        };
-    }
-
-    /**
-     * @param array<mixed> $value
-     *
-     * @return array<mixed> With object keys sorted, recursively
-     */
-    private static function sorted(array $value): array
-    {
-        if (!array_is_list($value)) {
-            ksort($value);
-        }
-
-        return array_map(static fn (mixed $item): mixed => \is_array($item) ? self::sorted($item) : $item, $value);
     }
 
     private function json(mixed $value): string

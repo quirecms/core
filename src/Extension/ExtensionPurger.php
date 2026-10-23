@@ -91,6 +91,13 @@ final readonly class ExtensionPurger implements ExtensionPurgerInterface
                  FROM quire.content c WHERE c.id = r.content_id AND c.type = :type AND jsonb_exists_any(r.fields, CAST(:names AS text[]))',
                 $parameters,
             );
+            // And so are changes not published yet, and what they started from.
+            $this->connection->executeStatement(
+                "UPDATE quire.content_pending_revision p SET fields = p.fields - CAST(:names AS text[]), base = jsonb_set(p.base, '{fields}', (p.base -> 'fields') - CAST(:names AS text[]))
+                 FROM quire.content c WHERE c.id = p.content_id AND c.type = :type
+                 AND (jsonb_exists_any(p.fields, CAST(:names AS text[])) OR jsonb_exists_any(p.base -> 'fields', CAST(:names AS text[])))",
+                $parameters,
+            );
             $output(\sprintf('  Deleted the fields %s from %d %s.', implode(', ', $names), $items, 1 === $items ? strtolower($type->label) : strtolower($type->pluralLabel)));
         }
     }

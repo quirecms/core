@@ -3,12 +3,15 @@
 declare(strict_types=1);
 
 use Quire\Content\ContentWriter;
+use Quire\Content\Job\PublishDueContent;
 use Quire\Content\Query\Relation;
 use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
 use Quire\Formatter\Format;
 use Quire\Permission\Permissions;
+use Quire\Storage\Job\CollectGarbage;
+use Quire\Storage\Job\CollectGarbageHandler;
 use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
@@ -31,6 +34,7 @@ return [
         ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site', exposed: true)
         ->define(ContentWriter::APPROVAL_SETTING, 'bool', false, label: 'Approve changes', help: 'Whether changes to published content must be approved by a reviewer before they go live. Applies to changes saved as pending revisions, e.g. in the admin.', group: 'content')
         ->define('quire.content.revisions_keep', 'int', 50, label: 'Revisions to keep', help: 'How many revisions to keep per content item. Older ones are deleted. 0 keeps all.', group: 'content')
+        ->define(CollectGarbageHandler::GRACE_SETTING, 'int', 1, label: 'Keep unused files', help: 'For how many days the daily clean-up keeps stored files that nothing uses any more (at least 1). Make it at least as long as you keep backups that don\'t contain the files.', group: 'storage')
         ->define('quire.content.per_page', 'int', 10, label: 'Items per page', help: 'How many items lists such as the blog show per page (1 to 100).', group: 'content')
         // What the homepage shows. The URL patterns of each content type are settings too: quire.permalinks.<type>.
         ->define('site.homepage', 'enum', 'listing', label: 'Homepage', help: 'What the homepage shows: the list of a content type (see "Homepage list"), a page (see "Homepage page"), or a page of an extension (see "Homepage route").', group: 'site', choices: ['listing', 'page', 'route'])
@@ -60,6 +64,11 @@ return [
         ->profile('content', formats: ['markdown', 'text', 'html'], shortcodes: ['*'], headingAnchors: true)
         // Text written by visitors, e.g. comments: basic markup, no images, links marked as user-generated.
         ->profile('comment', formats: ['markdown', 'text'], sanitizer: 'basic', images: false, linkRel: ['nofollow', 'ugc']),
+
+    // Tasks of core that run on a schedule, in the background (see docs/jobs.md).
+    new Extend\Jobs()
+        ->schedule('quire.publish-due', 'every 1 minute', PublishDueContent::class)
+        ->schedule('quire.collect-garbage', '30 3 * * *', CollectGarbage::class),
 
     new Extend\ContentWorkflow()
         ->status(Status::DRAFT)

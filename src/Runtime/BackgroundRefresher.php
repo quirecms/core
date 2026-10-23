@@ -21,7 +21,7 @@ final class BackgroundRefresher
     private readonly \Closure $spawn;
 
     /**
-     * @param (\Closure(string): void)|null $spawn Runs a shell command without waiting for it; replaceable in tests
+     * @param (\Closure(string): void)|null $spawn Runs a shell command (until the shell returns); replaceable in tests
      */
     public function __construct(
         #[Autowire(param: 'kernel.project_dir')]
@@ -33,7 +33,7 @@ final class BackgroundRefresher
         private readonly ?\Closure $clock = null,
     ) {
         $this->spawn = $spawn ?? static function (string $command): void {
-            Process::fromShellCommandline($command)->run();
+            Process::fromShellCommandline($command, timeout: null)->run();
         };
     }
 
@@ -50,16 +50,29 @@ final class BackgroundRefresher
         }
 
         $this->lastTriggeredAt = $now;
+        // Detached with "&", so the shell returns at once and the refresh outlives this request.
+        ($this->spawn)($this->command().' &');
 
-        ($this->spawn)(\sprintf(
-            // Detached with "&", so the shell returns at once and the refresh outlives this request.
-            '%s %s quire:app:refresh --env=%s >> %s 2>&1 &',
+        return true;
+    }
+
+    /**
+     * Runs the refresh and waits for it, e.g. in a background worker, which stops afterwards so that it
+     * starts again with the new build.
+     */
+    public function refreshNow(): void
+    {
+        ($this->spawn)($this->command());
+    }
+
+    private function command(): string
+    {
+        return \sprintf(
+            '%s %s quire:app:refresh --env=%s >> %s 2>&1',
             escapeshellarg(PhpBinary::path()),
             escapeshellarg($this->projectDir.'/bin/console'),
             escapeshellarg($this->environment),
             escapeshellarg($this->projectDir.'/var/log/quire-refresh.log'),
-        ));
-
-        return true;
+        );
     }
 }

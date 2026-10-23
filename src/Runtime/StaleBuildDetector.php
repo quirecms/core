@@ -39,6 +39,27 @@ final class StaleBuildDetector
     ) {
     }
 
+    /**
+     * Whether the enabled extensions or the theme changed since this build. False when the database
+     * can't be reached: carrying on with the current build is the best option then.
+     */
+    public function isStale(): bool
+    {
+        if (null === $this->builtForHash) {
+            return false;
+        }
+
+        try {
+            /** @var list<string> $enabledIds */
+            $enabledIds = $this->connection->fetchFirstColumn('SELECT id FROM quire.extension WHERE enabled ORDER BY id');
+            $activeTheme = CompileTimeState::activeThemeIn($this->connection);
+        } catch (\Throwable) {
+            return false;
+        }
+
+        return CompileTimeState::hashOf($enabledIds, $activeTheme) !== $this->builtForHash;
+    }
+
     public function __invoke(RequestEvent $event): void
     {
         if (!$event->isMainRequest() || null === $this->builtForHash || $this->interval <= 0) {
@@ -54,16 +75,7 @@ final class StaleBuildDetector
 
         $this->nextCheckAt = $now + $this->interval;
 
-        try {
-            /** @var list<string> $enabledIds */
-            $enabledIds = $this->connection->fetchFirstColumn('SELECT id FROM quire.extension WHERE enabled ORDER BY id');
-            $activeTheme = CompileTimeState::activeThemeIn($this->connection);
-        } catch (\Throwable) {
-            // The database is unreachable; serving with the current build is the best option.
-            return;
-        }
-
-        if (CompileTimeState::hashOf($enabledIds, $activeTheme) !== $this->builtForHash) {
+        if ($this->isStale()) {
             $this->refresher->trigger();
         }
     }

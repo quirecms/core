@@ -25,6 +25,7 @@ use Quire\Formatter\Formatter;
 use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
+use Quire\Jobs\Job;
 use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\PermissionsPass;
 use Quire\Settings\SettingValidatorInterface;
@@ -215,6 +216,25 @@ final class QuireBundle extends AbstractBundle
                 // cache.app shared (e.g. Redis), or each server counts on its own.
                 FormThrottle::CACHE_POOL => ['adapter' => 'cache.app'],
             ]],
+        ]);
+
+        // Background jobs: the transport "quire" (by default the table quire.job, see Jobs\Job), with
+        // retries, and failed jobs kept in the database for a look and a retry. Additions only: the
+        // application's own transports and routing stay as they are.
+        $builder->setParameter('quire.jobs.default_dsn', 'quire://');
+        $builder->prependExtensionConfig('framework', [
+            'messenger' => [
+                'transports' => [
+                    Job::TRANSPORT => [
+                        'dsn' => '%env(default:quire.jobs.default_dsn:QUIRE_JOBS_DSN)%',
+                        // About 20 minutes of retries (10 s, 30 s, 1.5 min, 4.5 min, 13.5 min): longer than most outages of a mail server or an API.
+                        'retry_strategy' => ['max_retries' => 5, 'delay' => 10_000, 'multiplier' => 3, 'max_delay' => 3_600_000],
+                        'failure_transport' => Job::FAILED_TRANSPORT,
+                    ],
+                    Job::FAILED_TRANSPORT => 'quire://default?queue=failed',
+                ],
+                'routing' => [Job::class => Job::TRANSPORT],
+            ],
         ]);
 
         // Quire's users for Symfony's security: a password hasher, and the user provider "quire_users".

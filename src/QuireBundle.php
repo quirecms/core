@@ -9,7 +9,9 @@ use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterfa
 use Quire\Content\ContentRenderer;
 use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
+use Quire\Extend\ExtenderContext;
 use Quire\Extend\Permissions;
+use Quire\Extend\Storage;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Extension\Boot\ExtensionStateResource;
@@ -25,6 +27,8 @@ use Quire\Formatter\SourceProcessorInterface;
 use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\PermissionsPass;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Storage\Internal\DiskConfig;
+use Quire\Storage\StorageDisks;
 use Quire\Theme\Internal\AssetsPass;
 use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
@@ -39,8 +43,11 @@ use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\ConfigurationExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
+use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\DependencyInjection\ServiceLocator;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
 /**
@@ -102,6 +109,57 @@ final class QuireBundle extends AbstractBundle
                                 ->scalarNode('email')
                                     ->info('Property path of the email of the application\'s users, e.g. "email"; none by default.')
                                     ->defaultNull()
+                                ->end()
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
+                ->arrayNode('storage')
+                    ->info('Where uploaded files are kept. See docs/storage.md.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->scalarNode('root')
+                            ->info('Directory of local disks without a "path": public disks in "public/<disk>", private ones in "private/<disk>". Keep it on a volume that survives deployments.')
+                            ->defaultValue('%kernel.project_dir%/storage')
+                            ->cannotBeEmpty()
+                        ->end()
+                        ->arrayNode('disks')
+                            ->info('Disks by name: those that extensions declare (to put them elsewhere, e.g. on S3), and the site\'s own.')
+                            // Disk names keep their "-": by default, configuration keys turn it into "_".
+                            ->normalizeKeys(false)
+                            ->useAttributeAsKey('name')
+                            ->arrayPrototype()
+                                ->children()
+                                    ->enumNode('adapter')
+                                        ->info('"local" (a directory), "s3" (any S3-compatible service; needs league/flysystem-async-aws-s3), or "service" (a Flysystem FilesystemOperator service of the application, e.g. from flysystem-bundle)')
+                                        ->values(['local', 's3', 'service'])
+                                        ->defaultValue('local')
+                                    ->end()
+                                    ->booleanNode('public')
+                                        ->info('Whether files are served to everyone. Set by the extension that declares the disk; required for the site\'s own disks.')
+                                        ->defaultNull()
+                                    ->end()
+                                    ->scalarNode('url')
+                                        ->info('Base URL of the files of a public disk, e.g. a CDN in front of the bucket. By default Quire serves local disks at /storage/<disk>, and S3 disks link to the bucket.')
+                                        ->defaultNull()
+                                    ->end()
+                                    ->scalarNode('path')->info('local: the directory; "<root>/public/<disk>" or "<root>/private/<disk>" by default')->defaultNull()->end()
+                                    ->scalarNode('bucket')->info('s3: the bucket')->defaultNull()->end()
+                                    ->scalarNode('region')->info('s3: the region')->defaultValue('us-east-1')->end()
+                                    ->scalarNode('endpoint')->info('s3: the service\'s address, for services other than AWS, e.g. "https://<account>.r2.cloudflarestorage.com"')->defaultNull()->end()
+                                    ->scalarNode('access_key')->info('s3: the access key ID, e.g. "%env(S3_ACCESS_KEY)%"')->defaultNull()->end()
+                                    ->scalarNode('secret_key')->info('s3: the secret access key, e.g. "%env(S3_SECRET_KEY)%"')->defaultNull()->end()
+                                    ->scalarNode('prefix')->info('s3: a directory in the bucket, so disks can share one')->defaultValue('')->end()
+                                    ->booleanNode('path_style')->info('s3: address the bucket in the path ("https://host/bucket/…"), as most services other than AWS need')->defaultFalse()->end()
+                                    ->scalarNode('service')->info('service: the ID of the FilesystemOperator service')->defaultNull()->end()
+                                ->end()
+                                ->validate()
+                                    ->ifTrue(static fn (array $disk): bool => 's3' === $disk['adapter'] && (null === $disk['bucket'] || '' === $disk['bucket']))
+                                    ->thenInvalid('S3 disks need a "bucket".')
+                                ->end()
+                                ->validate()
+                                    ->ifTrue(static fn (array $disk): bool => 'service' === $disk['adapter'] && (null === $disk['service'] || '' === $disk['service']))
+                                    ->thenInvalid('Disks with the "service" adapter need the "service" ID.')
                                 ->end()
                             ->end()
                         ->end()
@@ -188,6 +246,10 @@ final class QuireBundle extends AbstractBundle
         $builder->setParameter(CurrentUser::LOGIN_PARAMETER, $users['login'] ?? !$users['host']['enabled']);
         $builder->setParameter(CurrentUser::HOST_PARAMETER, $users['host']['enabled'] ? $this->hostUsers($users['host'], $builder) : null);
 
+        /** @var array{root: string, disks: array<string, array<string, mixed>>} $storage */
+        $storage = $config['storage'];
+        $this->storageDisks($storage, $builder);
+
         $container->import('../config/services.php');
 
         // The formatter finds its services by this tag, however they were registered.
@@ -227,6 +289,96 @@ final class QuireBundle extends AbstractBundle
         }
 
         return ['roles' => $host['roles'], 'display_name' => $host['display_name'], 'email' => $host['email']];
+    }
+
+    /**
+     * The disks the extensions declare, placed where the configuration says (a directory under the storage
+     * root by default), plus the site's own.
+     *
+     * @param array{root: string, disks: array<string, array<string, mixed>>} $storage
+     */
+    private function storageDisks(array $storage, ContainerBuilder $builder): void
+    {
+        $declared = [];
+
+        /** @var list<array{name: string, public: bool, label: ?string, owner: string}> $declarations */
+        $declarations = (array) ($builder->getParameterBag()->all()[Storage::PARAMETER] ?? []);
+
+        foreach ($declarations as $disk) {
+            $declared[$disk['name']] = $disk;
+        }
+
+        $disks = [];
+        $services = [];
+
+        foreach (array_keys($declared + $storage['disks']) as $name) {
+            $configured = $storage['disks'][$name] ?? ['adapter' => 'local', 'public' => null, 'url' => null, 'path' => null, 'service' => null];
+            $declaration = $declared[$name] ?? null;
+
+            if (1 !== preg_match(Storage::NAME_PATTERN, $name)) {
+                throw new InvalidConfigurationException(\sprintf('"quire.storage.disks.%s": disk names have lowercase letters, digits, "-" and "_", and start with a letter.', $name));
+            }
+
+            if (null === $declaration && null === $configured['public']) {
+                throw new InvalidConfigurationException(\sprintf('"quire.storage.disks.%s.public" is needed: no extension declares the disk, so say whether its files are served to everyone.', $name));
+            }
+
+            if (null !== $declaration && null !== $configured['public'] && $configured['public'] !== $declaration['public']) {
+                throw new InvalidConfigurationException(\sprintf('"quire.storage.disks.%s.public" contradicts "%s", which declares the disk %s.', $name, $declaration['owner'], $declaration['public'] ? 'public' : 'private'));
+            }
+
+            $public = (bool) ($declaration['public'] ?? $configured['public']);
+            $disks[$name] = [
+                ...$configured,
+                'public' => $public,
+                'path' => $configured['path'] ?? $storage['root'].'/'.($public ? 'public' : 'private').'/'.$name,
+                'label' => $declaration['label'] ?? null,
+                'owner' => $declaration['owner'] ?? ExtenderContext::SITE,
+            ];
+
+            if ('service' === $configured['adapter'] && \is_string($configured['service'])) {
+                $services[$name] = new Reference($configured['service']);
+            }
+        }
+
+        ksort($disks);
+        $this->assertSeparateDisks($disks, $builder);
+        $builder->setParameter(StorageDisks::PARAMETER, $disks);
+        $builder->setParameter(StorageDisks::ROOT_PARAMETER, $storage['root']);
+        $builder->setDefinition(StorageDisks::SERVICES_LOCATOR, new Definition(ServiceLocator::class, [$services]))->addTag('container.service_locator');
+    }
+
+    /**
+     * Two disks in one place would see each other's files, and the garbage collector would delete them as
+     * unrecorded: each disk needs a directory, or bucket and prefix, of its own.
+     *
+     * @param array<string, array<string, mixed>> $disks
+     */
+    private function assertSeparateDisks(array $disks, ContainerBuilder $builder): void
+    {
+        $locations = [];
+
+        foreach ($disks as $name => $disk) {
+            $disk = DiskConfig::fromArray($name, $disk);
+            $path = $builder->getParameterBag()->resolveValue($disk->path);
+            $location = match ($disk->adapter) {
+                'local' => 'local:'.rtrim(\is_string($path) ? $path : $disk->path, '/').'/',
+                's3' => 's3:'.($disk->endpoint ?? 'aws').'/'.$disk->bucket.'/'.trim($disk->prefix, '/').'/',
+                'service' => null,
+            };
+
+            if (null === $location) {
+                continue;
+            }
+
+            foreach ($locations as $other => $otherLocation) {
+                if (str_starts_with($location, $otherLocation) || str_starts_with($otherLocation, $location)) {
+                    throw new InvalidConfigurationException(\sprintf('The storage disks "%s" and "%s" are in the same place, or one inside the other. Give each its own directory, or bucket and prefix.', $other, $name));
+                }
+            }
+
+            $locations[$name] = $location;
+        }
     }
 
     private function bootExtensions(ContainerBuilder $builder): void

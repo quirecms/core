@@ -9,6 +9,7 @@ use Quire\Http\Controller\ContentController;
 use Quire\Http\Controller\LoginController;
 use Quire\Http\Controller\PasswordResetController;
 use Quire\Http\Controller\RegistrationController;
+use Quire\Http\Controller\StorageController;
 use Quire\User\CurrentUser;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -69,6 +70,21 @@ final class ContentRouteLoader extends Loader
         if ($this->login) {
             $this->addLoginRoutes($collection);
         }
+
+        // Stored files (see docs/storage.md). The disk names "_signed" can't clash with: disk names start
+        // with a letter.
+        $collection->add(StorageController::SIGNED_ROUTE, new Route(
+            path: $this->prefix.'/storage/_signed/{disk}/{key}',
+            defaults: ['_controller' => StorageController::class.'::signed', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            requirements: ['disk' => '[a-z][a-z0-9_-]*', 'key' => StorageController::KEY_PATTERN],
+            methods: ['GET', 'HEAD'],
+        ), self::PRIORITY + 1);
+        $collection->add(StorageController::FILE_ROUTE, new Route(
+            path: $this->prefix.'/storage/{disk}/{key}',
+            defaults: ['_controller' => StorageController::class.'::file', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            requirements: ['disk' => '[a-z][a-z0-9_-]*', 'key' => StorageController::KEY_PATTERN],
+            methods: ['GET', 'HEAD'],
+        ), self::PRIORITY + 1);
 
         $collection->add(Permalinks::CONTENT_ROUTE, new Route(
             path: $this->prefix.'/{path}',

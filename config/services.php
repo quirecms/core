@@ -11,6 +11,8 @@ use Quire\Health\HealthCheckInterface;
 use Quire\Http\Session\SessionHandlerFactory;
 use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
+use Quire\Storage\ObjectStore;
+use Quire\Storage\StorageDisks;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler;
 
@@ -58,6 +60,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Revision/Revision.php',
             '../src/Content/Workflow/ContentSubject.php',
             '../src/Content/Console/ConsoleErrors.php',
+            '../src/Storage/{Disk,StoredObject}.php',
+            '../src/Storage/Exception/',
             '../src/Content/Query/{ContentPage,ContentQuery}.php',
             '../src/Content/Query/Exception/',
             '../src/Content/Query/Internal/{NoMatch,QueryFields,QueryServicesPass}.php',
@@ -84,6 +88,10 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(SchemaAssetFilter::class)
         ->tag(SchemaAssetFilter::TAG);
+
+    // Storage is for extensions; nothing in core uses it yet, and unused private services are removed.
+    $services->set(StorageDisks::class)->public();
+    $services->set(ObjectStore::class)->public();
 
     // Sessions in PostgreSQL, for applications that choose them (framework.session.handler_id).
     $services->set(SessionHandlerFactory::SERVICE, PdoSessionHandler::class)

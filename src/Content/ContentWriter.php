@@ -25,6 +25,7 @@ use Quire\Content\Event\ContentUnpublished;
 use Quire\Content\Event\ContentUpdated;
 use Quire\Content\Event\ContentUpdating;
 use Quire\Content\Event\PendingRevisionPublished;
+use Quire\Content\Event\PendingRevisionPublishFailed;
 use Quire\Content\Exception\ContentConflictException;
 use Quire\Content\Exception\ContentNotFoundException;
 use Quire\Content\Exception\ContentOperationCancelledException;
@@ -40,6 +41,7 @@ use Quire\Content\Internal\Slugs;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Revision\Internal\Values;
 use Quire\Content\Revision\PendingRevisionRepository;
+use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Content\Revision\Review;
 use Quire\Content\Revision\ReviewState;
 use Quire\Content\Revision\RevisionRepository;
@@ -86,6 +88,7 @@ final readonly class ContentWriter
         private RouteCollisions $routes,
         private Relations $relations,
         private PendingRevisionRepository $pendingRevisions,
+        private PendingRevisionWriter $pendingRevisionWriter,
     ) {
     }
 
@@ -319,14 +322,57 @@ final readonly class ContentWriter
     }
 
     /**
-     * Publishes scheduled items whose date has passed, so {@see ContentPublished} listeners run for them.
-     * Visitors already see them: visibility is evaluated when content is queried.
+     * Publishes scheduled items whose date has passed, so {@see ContentPublished} listeners run for them
+     * (visitors already see them: visibility is evaluated when content is queried), then the pending
+     * revisions whose time has come (CNT-035), as {@see publishPendingRevision()} does. A pending revision
+     * that can't be published, because of a conflict, a missing approval or a rule its result breaks,
+     * stays pending without a time, with the reason (see {@see PendingRevisionPublishFailed}).
      *
-     * @return list<Content> The items published
+     * @return list<Content> The items published, or whose changes were
      *
      * @phpstan-impure
      */
     public function publishDue(int $limit = 100): array
+    {
+        return [...$this->publishDueItems($limit), ...$this->publishDueChanges($limit)];
+    }
+
+    /**
+     * @return list<Content>
+     */
+    private function publishDueChanges(int $limit): array
+    {
+        $due = $this->connection->fetchAllAssociative(
+            'SELECT id, version, scheduled_by FROM quire.content_pending_revision WHERE publish_at <= now() ORDER BY publish_at LIMIT ?',
+            [$limit],
+        );
+
+        $published = [];
+
+        foreach ($due as $values) {
+            $row = new Row($values);
+            $id = $row->string('id');
+
+            try {
+                $published[] = $this->publishPendingRevision($id, $row->int('version'), $row->nullableString('scheduled_by'));
+            } catch (PendingRevisionConflictException|ContentNotFoundException) {
+                // Saved or deleted in the meantime: it's considered again on the next run if it's still due.
+            } catch (MergeConflictException $e) {
+                $this->pendingRevisionWriter->failScheduled($id, \sprintf('Changes published since conflict with these: %s. Resolve them, then publish or schedule the changes again.', implode(', ', array_keys($e->conflicts))));
+            } catch (InvalidContentException $e) {
+                $this->pendingRevisionWriter->failScheduled($id, implode(' ', $e->violations));
+            } catch (ContentOperationCancelledException $e) {
+                $this->pendingRevisionWriter->failScheduled($id, $e->getMessage());
+            }
+        }
+
+        return $published;
+    }
+
+    /**
+     * @return list<Content>
+     */
+    private function publishDueItems(int $limit): array
     {
         $due = $this->connection->fetchAllAssociative(
             'SELECT id, version, published_at FROM quire.content

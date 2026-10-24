@@ -13,9 +13,12 @@ namespace Quire\Content\Revision\Internal;
 final class LineMerge
 {
     /**
+     * @param bool $theirsOnConflict Where the edits conflict, take their lines instead of failing: e.g. to
+     *                               resolve a conflict in favour of one side, keeping the other's edits elsewhere
+     *
      * @return string|null The merged text, or null when the edits conflict
      */
-    public static function merge(string $base, string $ours, string $theirs): ?string
+    public static function merge(string $base, string $ours, string $theirs, bool $theirsOnConflict = false): ?string
     {
         if ($ours === $theirs || $theirs === $base) {
             return $ours;
@@ -63,7 +66,7 @@ final class LineMerge
 
             $chunk = match (true) {
                 $ourChunk === $theirChunk, $theirChunk === $original => $ourChunk,
-                $ourChunk === $original => $theirChunk,
+                $ourChunk === $original, $theirsOnConflict => $theirChunk,
                 default => null,
             };
 

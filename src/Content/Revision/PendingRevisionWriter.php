@@ -11,8 +11,10 @@ use Quire\Content\Command\UpdatePendingRevision;
 use Quire\Content\Content;
 use Quire\Content\ContentRepository;
 use Quire\Content\Event\PendingRevisionDiscarded;
+use Quire\Content\Event\PendingRevisionPublishFailed;
 use Quire\Content\Event\PendingRevisionReviewed;
 use Quire\Content\Event\PendingRevisionSaved;
+use Quire\Content\Event\PendingRevisionScheduled;
 use Quire\Content\Event\PendingRevisionSubmitted;
 use Quire\Content\Exception\ContentConflictException;
 use Quire\Content\Exception\ContentNotFoundException;
@@ -234,6 +236,43 @@ final readonly class PendingRevisionWriter
             $review = array_find($this->pending->reviews($pending->id), static fn (Review $review): bool => $review->id === $reviewId) ?? throw new \LogicException('The review just saved is missing.');
 
             return [$review, new PendingRevisionReviewed($pending, $review)];
+        });
+    }
+
+    /**
+     * Sets when the changes are published, by the task quire.publish-due, with the same merge, conflict and
+     * approval rules as publishing them by hand; null clears it. A time in the past publishes them on the
+     * task's next run. A problem of an earlier time is forgotten.
+     *
+     * @throws ContentNotFoundException
+     * @throws PendingRevisionConflictException when it was saved since the expected version
+     */
+    public function schedule(string $id, int $expectedVersion, ?\DateTimeImmutable $at, ?string $actorId = null): PendingRevision
+    {
+        return $this->write(function () use ($id, $expectedVersion, $at, $actorId): array {
+            $current = $this->lock($id, $expectedVersion);
+            $this->connection->executeStatement(
+                'UPDATE quire.content_pending_revision SET publish_at = ?, publish_problem = NULL, scheduled_by = ? WHERE id = ?',
+                [$at?->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d H:i:sP'), $at instanceof \DateTimeImmutable ? $actorId : null, $current->id],
+            );
+            $pending = $this->pending->get($current->id);
+
+            return [$pending, new PendingRevisionScheduled($pending, $actorId)];
+        });
+    }
+
+    /**
+     * Records why the changes couldn't be published at their time, and clears it.
+     *
+     * @internal Used by {@see \Quire\Content\ContentWriter::publishDue()}
+     */
+    public function failScheduled(string $id, string $reason): void
+    {
+        $this->write(function () use ($id, $reason): array {
+            $this->connection->executeStatement('UPDATE quire.content_pending_revision SET publish_at = NULL, publish_problem = ? WHERE id = ?', [$reason, $id]);
+            $pending = $this->pending->find($id);
+
+            return [null, $pending instanceof PendingRevision ? new PendingRevisionPublishFailed($pending, $reason) : null];
         });
     }
 

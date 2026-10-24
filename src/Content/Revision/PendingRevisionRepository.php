@@ -18,7 +18,7 @@ use Quire\Content\Internal\Row;
  */
 final readonly class PendingRevisionRepository
 {
-    private const string COLUMNS = 'id, content_id, base_version, base, title, excerpt, body, body_format, fields, message, state, author_id, version, created_at, updated_at';
+    private const string COLUMNS = 'id, content_id, base_version, base, title, excerpt, body, body_format, fields, message, state, author_id, version, created_at, updated_at, publish_at, publish_problem, scheduled_by';
 
     public function __construct(
         private Connection $connection,
@@ -59,6 +59,41 @@ final readonly class PendingRevisionRepository
         $rows = $this->connection->fetchAllAssociative(
             \sprintf('SELECT %s FROM quire.content_pending_revision WHERE content_id = :content AND (CAST(:author AS uuid) IS NULL OR author_id = :author) ORDER BY updated_at DESC, id DESC', self::COLUMNS),
             ['content' => $contentId, 'author' => $authorId],
+        );
+
+        return array_map($this->hydrate(...), $rows);
+    }
+
+    /**
+     * Pending revisions waiting for a reviewer, of items not in the trash: e.g. for a reviewer's list of
+     * work.
+     *
+     * @return list<PendingRevision> Longest waiting first
+     */
+    public function awaitingReview(int $limit = 50): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            \sprintf('SELECT %s FROM quire.content_pending_revision p WHERE state = ? AND EXISTS (SELECT 1 FROM quire.content c WHERE c.id = p.content_id AND c.deleted_at IS NULL) ORDER BY updated_at, id LIMIT ?', self::COLUMNS),
+            [ReviewState::InReview->value, max(1, $limit)],
+        );
+
+        return array_map($this->hydrate(...), $rows);
+    }
+
+    /**
+     * An author's pending revisions, of items not in the trash.
+     *
+     * @return list<PendingRevision> Most recently saved first
+     */
+    public function byAuthor(string $authorId, int $limit = 50): array
+    {
+        if (!Row::isUuid($authorId)) {
+            return [];
+        }
+
+        $rows = $this->connection->fetchAllAssociative(
+            \sprintf('SELECT %s FROM quire.content_pending_revision p WHERE author_id = ? AND EXISTS (SELECT 1 FROM quire.content c WHERE c.id = p.content_id AND c.deleted_at IS NULL) ORDER BY updated_at DESC, id DESC LIMIT ?', self::COLUMNS),
+            [$authorId, max(1, $limit)],
         );
 
         return array_map($this->hydrate(...), $rows);
@@ -158,6 +193,9 @@ final readonly class PendingRevisionRepository
             version: $row->int('version'),
             createdAt: $row->date('created_at'),
             updatedAt: $row->date('updated_at'),
+            publishAt: $row->nullableDate('publish_at'),
+            publishProblem: $row->nullableString('publish_problem'),
+            scheduledBy: $row->nullableString('scheduled_by'),
         );
     }
 }

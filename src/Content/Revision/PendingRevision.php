@@ -17,12 +17,15 @@ namespace Quire\Content\Revision;
 final readonly class PendingRevision
 {
     /**
-     * @param int         $baseVersion The item's version it was started from (or rebased onto)
-     * @param Snapshot    $base        The item's text and fields at that version
-     * @param Snapshot    $proposed    The text and fields to publish
-     * @param string|null $message     What the change is about, e.g. "Fix the opening hours"; becomes the revision's message
-     * @param string|null $authorId    Who writes it
-     * @param int         $version     Increases with each save, for optimistic locking
+     * @param int                     $baseVersion    The item's version it was started from (or rebased onto)
+     * @param Snapshot                $base           The item's text and fields at that version
+     * @param Snapshot                $proposed       The text and fields to publish
+     * @param string|null             $message        What the change is about, e.g. "Fix the opening hours"; becomes the revision's message
+     * @param string|null             $authorId       Who writes it
+     * @param int                     $version        Increases with each save, for optimistic locking
+     * @param \DateTimeImmutable|null $publishAt      When the changes are published, by the task quire.publish-due
+     * @param string|null             $publishProblem Why publishing them at their time failed, e.g. a conflict
+     * @param string|null             $scheduledBy    Who set the time
      */
     public function __construct(
         public string $id,
@@ -36,6 +39,9 @@ final readonly class PendingRevision
         public int $version,
         public \DateTimeImmutable $createdAt,
         public \DateTimeImmutable $updatedAt,
+        public ?\DateTimeImmutable $publishAt = null,
+        public ?string $publishProblem = null,
+        public ?string $scheduledBy = null,
     ) {
     }
 

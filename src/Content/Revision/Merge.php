@@ -45,7 +45,8 @@ final readonly class Merge
                     ? 'The same lines were changed since these changes were started. Compare them with the live text and resolve the conflict.'
                     : 'It was changed since these changes were started. Choose which value to keep.';
 
-                return $proposed;
+                // The proposal's lines where they conflict, and the live text's edits elsewhere.
+                return \is_string($base) && \is_string($live) && \is_string($proposed) ? LineMerge::merge($base, $live, $proposed, theirsOnConflict: true) : $proposed;
             }
 
             return $merged;

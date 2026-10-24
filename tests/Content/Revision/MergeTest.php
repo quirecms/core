@@ -72,6 +72,20 @@ final class MergeTest extends TestCase
         self::assertSame(['Our hours', "c\n", 'angry'], [$merge->result->title, $merge->result->body, $merge->result->fields['mood']]);
     }
 
+    public function testTheResultTakesTheProposalOnlyInTheLinesThatConflict(): void
+    {
+        $base = "# Opening hours\n\nMonday to Friday, 9 to 5.\n\nClosed on Sundays.\n";
+        $live = "# Opening hours\n\nMonday to Friday, 10 to 5.\n\nClosed on Sundays and holidays.\n";
+        $proposed = "# Opening hours\n\nMonday to Friday, 9 to 6.\n\nClosed on Sundays.\n";
+
+        self::assertNull(LineMerge::merge($base, $live, $proposed));
+        self::assertSame("# Opening hours\n\nMonday to Friday, 9 to 6.\n\nClosed on Sundays and holidays.\n", LineMerge::merge($base, $live, $proposed, theirsOnConflict: true));
+
+        $merge = Merge::of(new Snapshot('Hours', null, $base, 'markdown', []), new Snapshot('Hours', null, $live, 'markdown', []), new Snapshot('Hours', null, $proposed, 'markdown', []));
+        self::assertSame(['body'], array_keys($merge->conflicts));
+        self::assertSame("# Opening hours\n\nMonday to Friday, 9 to 6.\n\nClosed on Sundays and holidays.\n", $merge->result->body, 'Resolving it in favour of the proposal keeps the live edits elsewhere.');
+    }
+
     public function testFieldsCompareLikeJsonObjects(): void
     {
         $base = new Snapshot('T', null, '', 'markdown', ['extra' => ['a' => 1, 'b' => 2]]);

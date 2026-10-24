@@ -12,7 +12,7 @@ use Symfony\Component\DependencyInjection\Parameter;
 
 /**
  * Makes AssetMapper read the importmap through {@see ImportMapConfigReader}, which adds the scripts of
- * Extend\Assets as entrypoints.
+ * Extend\Assets as entrypoints, and the npm packages of extensions and themes.
  *
  * @internal
  */
@@ -29,6 +29,7 @@ final class AssetsPass implements CompilerPassInterface
         $container->getDefinition(self::CONFIG_READER)
             ->setClass(ImportMapConfigReader::class)
             ->addArgument(new Parameter(Assets::PARAMETER))
-            ->addArgument(new Parameter(Themes::CHAIN_PARAMETER));
+            ->addArgument(new Parameter(Themes::CHAIN_PARAMETER))
+            ->addArgument(new Parameter(Assets::PACKAGES_PARAMETER));
     }
 }

@@ -58,7 +58,68 @@ final class ImportMapConfigReaderTest extends TestCase
         self::assertSame(['app', 'chart'], array_keys($written));
     }
 
-    private function reader(): ImportMapConfigReader
+    public function testAddsThePackagesOfExtensionsAndThemes(): void
+    {
+        $entries = $this->reader([
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'quire-admin'],
+            ['name' => 'tom-select/dist/css/tom-select.css', 'version' => '2.4.3', 'owner' => 'acme-tags'],
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'acme-reviews'],
+        ])->getEntries();
+
+        $turbo = $entries->get('@hotwired/turbo');
+        self::assertTrue($turbo->isRemotePackage());
+        self::assertSame('8.0.23', $turbo->version);
+        self::assertFalse($turbo->isEntrypoint);
+        self::assertSame(ImportMapType::JS, $turbo->type);
+        self::assertStringStartsWith($this->directory.'/vendor/@hotwired/turbo/', $turbo->path, 'Downloaded where the site\'s own packages are.');
+        self::assertSame(ImportMapType::CSS, $entries->get('tom-select/dist/css/tom-select.css')->type);
+    }
+
+    public function testThePackagesOfTheSitesImportmapWin(): void
+    {
+        new Filesystem()->dumpFile($this->directory.'/importmap.php', "<?php return ['@hotwired/turbo' => ['version' => '8.0.24']];");
+
+        $entries = $this->reader([
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'quire-admin'],
+            ['name' => '@hotwired/turbo', 'version' => '7.3.0', 'owner' => 'acme-reviews'],
+        ])->getEntries();
+
+        self::assertSame('8.0.24', $entries->get('@hotwired/turbo')->version, 'The site chose the version, which also settles different ones.');
+    }
+
+    public function testDifferentVersionsOfAPackageAreAnErrorTheSiteSettles(): void
+    {
+        $this->expectExceptionMessageIsOrContains('Extensions or themes need different versions of the package "@hotwired/turbo": 7.3.0 by acme-reviews, 8.0.23 by quire-admin and acme-cart. The site can only use one. Choose it by adding the package to importmap.php, e.g. with "bin/console importmap:require @hotwired/turbo@8.0.23", and check that they work with it.');
+
+        $this->reader([
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'quire-admin'],
+            ['name' => '@hotwired/turbo', 'version' => '7.3.0', 'owner' => 'acme-reviews'],
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'acme-cart'],
+        ])->getEntries();
+    }
+
+    public function testNeverWritesThePackagesToImportmapPhpUnlessTheSiteRequiresThem(): void
+    {
+        $reader = $this->reader([
+            ['name' => '@hotwired/turbo', 'version' => '8.0.23', 'owner' => 'quire-admin'],
+            ['name' => '@hotwired/stimulus', 'version' => '3.2.2', 'owner' => 'quire-admin'],
+        ]);
+        $entries = $reader->getEntries();
+        // What "importmap:require @hotwired/stimulus@3.2.1" does.
+        $entries->add($reader->createRemoteEntry('@hotwired/stimulus', ImportMapType::JS, '3.2.1', '@hotwired/stimulus', false));
+
+        $reader->writeEntries($entries);
+
+        $written = include $this->directory.'/importmap.php';
+        self::assertIsArray($written);
+        self::assertSame(['app', '@hotwired/stimulus'], array_keys($written));
+        self::assertSame(['version' => '3.2.1'], $written['@hotwired/stimulus']);
+    }
+
+    /**
+     * @param list<array{name: string, version: string, owner: string}> $packages
+     */
+    private function reader(array $packages = []): ImportMapConfigReader
     {
         return new ImportMapConfigReader(
             $this->directory.'/importmap.php',
@@ -71,6 +132,7 @@ final class ImportMapConfigReaderTest extends TestCase
                 ['type' => 'entrypoint', 'path' => 'app', 'group' => 'site', 'owner' => 'site'],
             ],
             [['id' => 'quire-child', 'path' => $this->directory.'/themes/child'], ['id' => 'quire-base', 'path' => $this->directory.'/themes/base']],
+            $packages,
         );
     }
 }

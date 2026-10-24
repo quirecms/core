@@ -31,6 +31,7 @@ final class ConsoleAppRebuilderTest extends TestCase
             '/app/bin/console cache:clear --env=prod',
             '/app/bin/console quire:migrations:migrate --no-interaction --allow-no-migration --env=prod',
             '/app/bin/console quire:content:sync-indexes --env=prod',
+            '/app/bin/console importmap:install --env=prod',
         ], $this->commands);
         self::assertSame(1, $this->workers->restarts);
         self::assertStringEndsWith("Restarted the PHP workers.\n", $output);
@@ -40,7 +41,7 @@ final class ConsoleAppRebuilderTest extends TestCase
     {
         $this->rebuild(migrate: false);
 
-        self::assertSame(['/app/bin/console cache:clear --env=prod'], $this->commands);
+        self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console importmap:install --env=prod'], $this->commands);
     }
 
     public function testRecompilesAssetsWhenTheSiteServesCompiledOnes(): void
@@ -49,7 +50,7 @@ final class ConsoleAppRebuilderTest extends TestCase
         $compiled = new CompiledAssetMapperConfigReader($directory);
 
         $this->rebuild(migrate: false, compiledAssets: $compiled);
-        self::assertSame(['/app/bin/console cache:clear --env=prod'], $this->commands, 'Not in development, where assets are served as they are.');
+        self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console importmap:install --env=prod'], $this->commands, 'Not in development, where assets are served as they are.');
 
         $compiled->saveConfig('manifest.json', []);
         $this->commands = [];
@@ -60,7 +61,7 @@ final class ConsoleAppRebuilderTest extends TestCase
             new Filesystem()->remove($directory);
         }
 
-        self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console asset-map:compile --env=prod'], $this->commands);
+        self::assertSame(['/app/bin/console cache:clear --env=prod', '/app/bin/console importmap:install --env=prod', '/app/bin/console asset-map:compile --env=prod'], $this->commands);
     }
 
     public function testInDebugModeTheBuildIsWarmedUpRatherThanDeleted(): void
@@ -73,7 +74,7 @@ final class ConsoleAppRebuilderTest extends TestCase
 
         $rebuilder->rebuild(false, static function (): void {});
 
-        self::assertSame(['/app/bin/console cache:warmup --env=dev'], $this->commands, 'A running process keeps using the build it started with.');
+        self::assertSame(['/app/bin/console cache:warmup --env=dev', '/app/bin/console importmap:install --env=dev'], $this->commands, 'A running process keeps using the build it started with.');
     }
 
     public function testReportsWhenThereAreNoWorkers(): void

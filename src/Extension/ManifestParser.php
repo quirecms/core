@@ -17,7 +17,13 @@ final class ManifestParser
 {
     private const string ID_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
-    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme'];
+    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme', 'importmap'];
+
+    /** An npm package, optionally with a file inside it: "@hotwired/turbo", "bootstrap/dist/css/bootstrap.min.css" */
+    private const string PACKAGE_PATTERN = '#^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$#';
+
+    /** An exact version, so that every site downloads the same file: "8.0.23", "1.0.0-beta.2" */
+    private const string VERSION_PATTERN = '/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/';
 
     private const array KNOWN_THEME_KEYS = ['parent'];
 
@@ -72,6 +78,7 @@ final class ManifestParser
             requires: $requires,
             optional: $optional,
             parent: $parent,
+            importmap: $this->importmap($name, $manifest),
         );
     }
 
@@ -179,6 +186,42 @@ final class ManifestParser
         }
 
         return $parent;
+    }
+
+    /**
+     * Reads "extra.quire.importmap": {"@hotwired/turbo": "8.0.23"}.
+     *
+     * @param array<string, mixed> $manifest
+     *
+     * @return array<string, string>
+     */
+    private function importmap(string $name, array $manifest): array
+    {
+        $importmap = $manifest['importmap'] ?? [];
+
+        if (!\is_array($importmap) || ([] !== $importmap && array_is_list($importmap))) {
+            throw InvalidManifestException::forPackage($name, '"extra.quire.importmap" must be a JSON object of packages and their versions, e.g. {"@hotwired/turbo": "8.0.23"}.');
+        }
+
+        $packages = [];
+
+        foreach ($importmap as $package => $version) {
+            $package = (string) $package;
+
+            if (1 !== preg_match(self::PACKAGE_PATTERN, $package)) {
+                throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.importmap" lists "%s", which is not the name of an npm package, e.g. "@hotwired/turbo" or "bootstrap/dist/css/bootstrap.min.css".', $package));
+            }
+
+            if (!\is_string($version) || 1 !== preg_match(self::VERSION_PATTERN, $version)) {
+                throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.importmap.%s" must be an exact version, such as "1.2.3", so every site gets the same file; got %s.', $package, json_encode($version)));
+            }
+
+            $packages[$package] = $version;
+        }
+
+        ksort($packages);
+
+        return $packages;
     }
 
     /**

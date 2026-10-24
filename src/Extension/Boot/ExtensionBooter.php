@@ -70,6 +70,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Views::PARAMETER, []);
         $container->setParameter(Slots::PARAMETER, []);
         $container->setParameter(Assets::PARAMETER, []);
+        $container->setParameter(Assets::PACKAGES_PARAMETER, $this->packages());
         $container->setParameter(Permissions::PARAMETER, ['roles' => [], 'abilities' => [], 'rules' => []]);
         $container->setParameter(Auth::PARAMETER, []);
 
@@ -136,6 +137,25 @@ final readonly class ExtensionBooter
         $container->setParameter(self::FILES_PARAMETER, $files);
 
         return $resolved;
+    }
+
+    /**
+     * The npm packages of every installed extension and theme, enabled or not: the site downloads them
+     * when it's installed or built, before it knows which ones it uses.
+     *
+     * @return list<array{name: string, version: string, owner: string}>
+     */
+    private function packages(): array
+    {
+        $packages = [];
+
+        foreach ($this->installed->extensionsAndThemes() as $manifest) {
+            foreach ($manifest->importmap as $name => $version) {
+                $packages[] = ['name' => $name, 'version' => $version, 'owner' => $manifest->id];
+            }
+        }
+
+        return $packages;
     }
 
     private function run(ExtenderContext $context, string $file): void

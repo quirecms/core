@@ -12,12 +12,14 @@ namespace Quire\Extension;
 final readonly class ExtensionManifest
 {
     /**
-     * @param string       $id          Stable identifier, e.g. "acme-reviews"
-     * @param string       $packageName Composer package name, e.g. "acme/reviews"
-     * @param string       $path        Absolute path to the installed package
-     * @param list<string> $requires    IDs of extensions that must be enabled first
-     * @param list<string> $optional    IDs of extensions that load first when enabled, but aren't required
-     * @param string|null  $parent      For themes: ID of the theme this one inherits from
+     * @param string                $id          Stable identifier, e.g. "acme-reviews"
+     * @param string                $packageName Composer package name, e.g. "acme/reviews"
+     * @param string                $path        Absolute path to the installed package
+     * @param list<string>          $requires    IDs of extensions that must be enabled first
+     * @param list<string>          $optional    IDs of extensions that load first when enabled, but aren't required
+     * @param string|null           $parent      For themes: ID of the theme this one inherits from
+     * @param array<string, string> $importmap   JavaScript (or CSS) packages its scripts import, with their versions,
+     *                                           e.g. ["@hotwired/turbo" => "8.0.23"]
      */
     public function __construct(
         public string $id,
@@ -32,6 +34,7 @@ final readonly class ExtensionManifest
         public array $requires = [],
         public array $optional = [],
         public ?string $parent = null,
+        public array $importmap = [],
     ) {
     }
 }

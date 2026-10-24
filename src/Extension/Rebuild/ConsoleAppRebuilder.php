@@ -53,6 +53,9 @@ final readonly class ConsoleAppRebuilder implements AppRebuilderInterface
             $this->console(['quire:content:sync-indexes'], $output);
         }
 
+        // The npm packages of extensions, e.g. of one installed without Composer's scripts, which download them.
+        $this->console(['importmap:install'], $output);
+
         // Compiled assets are part of the build: the importmap includes the enabled extensions' scripts.
         if ($this->compiledAssets?->configExists('manifest.json') ?? false) {
             $this->console(['asset-map:compile'], $output);

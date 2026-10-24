@@ -27,6 +27,9 @@ final class Assets implements ExtenderInterface
     /** @internal Parameter listing the assets as {type, path, group, owner} */
     public const string PARAMETER = 'quire.assets';
 
+    /** @internal Parameter listing the packages of "extra.quire.importmap" as {name, version, owner} */
+    public const string PACKAGES_PARAMETER = 'quire.assets.packages';
+
     /** Pages of the site, and of the admin interface */
     public const array GROUPS = ['site', 'admin'];
 
@@ -49,7 +52,10 @@ final class Assets implements ExtenderInterface
 
     /**
      * A JavaScript module, as a logical path such as "acme-reviews/reviews.js". It can import other files
-     * with relative paths ("./chart.js"), and packages of the site's importmap.
+     * with relative paths ("./chart.js"), packages of the site's importmap, and the npm packages that
+     * the extension or theme lists in "extra.quire.importmap" of its composer.json:
+     *
+     *     "extra": {"quire": {"importmap": {"@hotwired/turbo": "8.0.23"}}}
      */
     public function script(string $path, string $group = 'site'): self
     {

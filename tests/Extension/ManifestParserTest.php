@@ -84,6 +84,18 @@ final class ManifestParserTest extends TestCase
         self::assertNull($this->parse($this->package('acme/reviews'))?->parent);
     }
 
+    public function testReadsTheNpmPackagesItsScriptsImport(): void
+    {
+        $manifest = $this->parse($this->package('acme/reviews', ['extra' => ['quire' => ['importmap' => [
+            '@hotwired/turbo' => '8.0.23',
+            'bootstrap/dist/css/bootstrap.min.css' => '5.3.8',
+            'chart.js' => '4.5.0-rc.1',
+        ]]]]));
+
+        self::assertSame(['@hotwired/turbo' => '8.0.23', 'bootstrap/dist/css/bootstrap.min.css' => '5.3.8', 'chart.js' => '4.5.0-rc.1'], $manifest?->importmap);
+        self::assertSame([], $this->parse($this->package('acme/reviews'))?->importmap);
+    }
+
     public function testAcceptsAnEmptyManifestObject(): void
     {
         self::assertNotNull($this->parse($this->package('acme/reviews', ['extra' => ['quire' => []]])));
@@ -108,6 +120,10 @@ final class ManifestParserTest extends TestCase
         yield 'theme section is a list' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['acme-base']]]], '"extra.quire.theme" must be a JSON object'];
         yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent.'];
         yield 'parent is a package name' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme/base']]]], '"extra.quire.theme.parent" must be the ID of a theme'];
+        yield 'importmap is a list' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo']]]], '"extra.quire.importmap" must be a JSON object of packages and their versions'];
+        yield 'importmap names a URL' => [['extra' => ['quire' => ['importmap' => ['https://cdn.example.com/turbo.js' => '8.0.23']]]], 'which is not the name of an npm package'];
+        yield 'importmap has a range' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo' => '^8.0']]]], '"extra.quire.importmap.@hotwired/turbo" must be an exact version, such as "1.2.3", so every site gets the same file; got "^8.0".'];
+        yield 'importmap version is not a string' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo' => 8]]]], 'must be an exact version'];
         yield 'parent is the theme itself' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme-reviews']]]], 'is the theme itself'];
     }
 

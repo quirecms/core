@@ -2,6 +2,11 @@
 
 declare(strict_types=1);
 
+use Quire\Content\Check\ContentChecker;
+use Quire\Content\Check\Internal\AltTextCheck;
+use Quire\Content\Check\Internal\ExcerptCheck;
+use Quire\Content\Check\Internal\LinksCheck;
+use Quire\Content\Check\Internal\TitleLengthCheck;
 use Quire\Content\ContentWriter;
 use Quire\Content\Job\PublishDueContent;
 use Quire\Content\Query\Relation;
@@ -31,12 +36,20 @@ return [
         ->slot('head', AssetsSlot::class, priority: 1000)
         ->slot('admin.head', AdminAssetsSlot::class, priority: 1000),
 
+    // Checks before publishing (see docs/content.md): warnings until a site makes them errors.
+    new Extend\ContentChecks()
+        ->check('core.alt-text', AltTextCheck::class, 'Images have a description')
+        ->check('core.links', LinksCheck::class, 'Links to the site lead to pages visitors can see')
+        ->check('core.excerpt', ExcerptCheck::class, 'Items have an excerpt')
+        ->check('core.title-length', TitleLengthCheck::class, 'Titles fit in search results'),
+
     new Extend\Settings()
         ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)
         ->define('site.description', 'string', '', label: 'Site description', help: 'A short description of the site, used by search engines and when the site is shared.', group: 'site', widget: 'textarea', exposed: true)
         ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site', exposed: true)
         ->define('site.timezone', 'enum', 'UTC', label: 'Time zone', help: 'Where the site is, e.g. "Europe/Berlin": editors enter and see dates and times in it.', group: 'site', choices: DateTimeZone::listIdentifiers(), exposed: true)
         ->define(ContentWriter::APPROVAL_SETTING, 'bool', false, label: 'Approve changes', help: 'Whether changes to published content must be approved by a reviewer before they go live. Applies to changes saved as pending revisions, e.g. in the admin.', group: 'content')
+        ->define(ContentChecker::LEVELS_SETTING, 'json', [], label: 'Content checks', help: 'The level of each check of content before it\'s published, where it isn\'t the default: "error" (blocks publishing), "warning" or "off", e.g. {"core.alt-text": "error"}. List the checks with "bin/console quire:content:check --list".', group: 'content')
         ->define('quire.content.revisions_keep', 'int', 50, label: 'Revisions to keep', help: 'How many revisions to keep per content item. Older ones are deleted. 0 keeps all.', group: 'content')
         ->define(CollectGarbageHandler::GRACE_SETTING, 'int', 1, label: 'Keep unused files', help: 'For how many days the daily clean-up keeps stored files that nothing uses any more (at least 1). Make it at least as long as you keep backups that don\'t contain the files.', group: 'storage')
         ->define('quire.content.per_page', 'int', 10, label: 'Items per page', help: 'How many items lists such as the blog show per page (1 to 100).', group: 'content')

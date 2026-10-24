@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\Exception\ForeignKeyConstraintViolationException;
 use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Quire\Content\Check\ContentChecker;
 use Quire\Content\Command\CreateContent;
 use Quire\Content\Command\UpdateContent;
 use Quire\Content\Event\CancellableEvent;
@@ -89,6 +90,7 @@ final readonly class ContentWriter
         private Relations $relations,
         private PendingRevisionRepository $pendingRevisions,
         private PendingRevisionWriter $pendingRevisionWriter,
+        private ContentChecker $checker,
     ) {
     }
 
@@ -306,6 +308,11 @@ final readonly class ContentWriter
 
             $status = $this->workflow->apply($current, $transition);
             $after = $this->saveChanges($current, ['status' => $status, 'published_at' => $publishedAt]);
+
+            // Publishing passes the content checks; a scheduled item that goes live passed them when it was scheduled.
+            if (\in_array($after->status, [Status::PUBLISHED, Status::SCHEDULED], true) && Status::SCHEDULED !== $current->status) {
+                $this->assertPassesChecks($after);
+            }
             // The publication date can be part of the URL.
             $this->assertReachable($after);
 
@@ -394,6 +401,18 @@ final readonly class ContentWriter
         }
 
         return $published;
+    }
+
+    /**
+     * @throws InvalidContentException when a content check finds an error, e.g. an image without a description
+     */
+    private function assertPassesChecks(Content $item): void
+    {
+        $report = $this->checker->check($item);
+
+        if ($report->hasErrors()) {
+            throw new InvalidContentException($report->violations());
+        }
     }
 
     /**
@@ -573,6 +592,11 @@ final readonly class ContentWriter
         }
 
         $after = $this->saveChanges($current, $values);
+
+        // Changes to what visitors see, or will at its time, pass the content checks.
+        if (\in_array($after->status, [Status::PUBLISHED, Status::SCHEDULED], true)) {
+            $this->assertPassesChecks($after);
+        }
 
         if (\array_key_exists('fields', $values)) {
             $this->relations->sync($after->id, $type, $after->fields, $current->fields);

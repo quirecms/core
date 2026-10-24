@@ -6,6 +6,7 @@ namespace Quire\Permission\Internal;
 
 use Quire\Extend\Auth;
 use Quire\Extend\Permissions;
+use Quire\Permission\AccessExplainer;
 use Quire\Permission\Security\AbilityVoter;
 use Quire\User\Security\ExtensionAuthenticators;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -15,7 +16,7 @@ use Symfony\Component\DependencyInjection\Reference;
 
 /**
  * Makes the rules of Extend\Permissions and the authenticators of Extend\Auth services that
- * {@see AbilityVoter} and {@see ExtensionAuthenticators} can reach.
+ * {@see AbilityVoter}, {@see AccessExplainer} and {@see ExtensionAuthenticators} can reach.
  *
  * @internal
  */
@@ -30,6 +31,7 @@ final class PermissionsPass implements CompilerPassInterface
         $authenticators = $parameters[Auth::PARAMETER] ?? [];
 
         $this->locate($container, AbilityVoter::class, '$rules', $permissions['rules'] ?? []);
+        $this->locate($container, AccessExplainer::class, '$rules', $permissions['rules'] ?? []);
         $this->locate($container, ExtensionAuthenticators::class, '$services', $authenticators);
     }
 

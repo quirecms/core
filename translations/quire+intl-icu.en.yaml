@@ -50,3 +50,12 @@
 "The link works for two days. If you didn't create an account, ignore this email.": "The link works for two days. If you didn't create an account, ignore this email."
 "Someone tried to create an account with your email address, but you already have one.": "Someone tried to create an account with your email address, but you already have one."
 "If it wasn't you, ignore this email: nothing changed.": "If it wasn't you, ignore this email: nothing changed."
+'You''re invited to {site}': 'You''re invited to {site}'
+'Choose your password': 'Choose your password'
+'Save password': 'Save password'
+'Welcome to {site}, {name}. Choose the password you''ll sign in with as {username}.': 'Welcome to {site}, {name}. Choose the password you''ll sign in with as {username}.'
+'Ask the person who invited you to send a new invitation.': 'Ask the person who invited you to send a new invitation.'
+'{admin} added you to {site}, as {username}. Choose your password to sign in:': '{admin} added you to {site}, as {username}. Choose your password to sign in:'
+'You were added to {site}, as {username}. Choose your password to sign in:': 'You were added to {site}, as {username}. Choose your password to sign in:'
+'The link works once, for seven days.': 'The link works once, for seven days.'
+'Welcome! Sign in with your new password.': 'Welcome! Sign in with your new password.'

@@ -13,12 +13,14 @@ use Quire\User\Event\UserDeleting;
 use Quire\User\Exception\IdentityLinkRefusedException;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Exception\UserNotFoundException;
+use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactoryInterface;
 use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Creates and changes users. Every change of a user goes through here, so the rules hold: emails and
- * usernames are unique, passwords are only stored hashed, and roles are known.
+ * usernames are unique, passwords are only stored hashed, roles are known, and the site keeps an active
+ * admin: the last one can't lose the role, be suspended or be deleted.
  *
  * @api
  */
@@ -39,6 +41,9 @@ final readonly class UserWriter
         private PasswordHasherFactoryInterface $hashers,
         private Permissions $permissions,
         private EventDispatcherInterface $dispatcher,
+        /** @var array{roles: array<string, list<string>>}|null */
+        #[Autowire(param: CurrentUser::HOST_PARAMETER)]
+        private ?array $host = null,
     ) {
     }
 
@@ -167,7 +172,13 @@ final readonly class UserWriter
             throw new InvalidUserException($violations);
         }
 
-        $this->connection->executeStatement('UPDATE quire.app_user SET roles = ?::text[], updated_at = now() WHERE id = ?', [$this->array($roles), $id]);
+        $this->transactional(function () use ($id, $roles): void {
+            if (!\in_array(Role::ADMIN, $roles, true)) {
+                $this->assertNotLastAdmin($id, 'take the admin role from');
+            }
+
+            $this->connection->executeStatement('UPDATE quire.app_user SET roles = ?::text[], updated_at = now() WHERE id = ?', [$this->array($roles), $id]);
+        });
 
         return $this->get($id);
     }
@@ -176,10 +187,15 @@ final readonly class UserWriter
      * A suspended user can't sign in, and is signed out on their next request.
      *
      * @throws UserNotFoundException
+     * @throws InvalidUserException  When they're the last active admin
      */
     public function suspend(string $id): User
     {
-        return $this->setStatus($id, User::SUSPENDED);
+        return $this->transactional(function () use ($id): User {
+            $this->assertNotLastAdmin($id, 'suspend');
+
+            return $this->setStatus($id, User::SUSPENDED);
+        });
     }
 
     /**
@@ -270,12 +286,13 @@ final readonly class UserWriter
      * @param string|null $reassignTo The ID of the user who gets their content
      *
      * @throws UserNotFoundException
-     * @throws InvalidUserException  When $reassignTo is the user
+     * @throws InvalidUserException  When $reassignTo is the user, or they're the last active admin
      */
     public function delete(string $id, ?string $reassignTo = null): void
     {
         $this->transactional(function () use ($id, $reassignTo): void {
             $user = $this->get($id);
+            $this->assertNotLastAdmin($id, 'delete');
             $heir = null === $reassignTo ? null : $this->get($reassignTo);
 
             if ($heir?->id === $user->id) {
@@ -301,6 +318,26 @@ final readonly class UserWriter
     public function unlinkIdentity(string $id, string $provider, string $subject): void
     {
         $this->connection->executeStatement('DELETE FROM quire.user_identity WHERE user_id = ? AND provider = ? AND subject = ?', [$id, $provider, $subject]);
+    }
+
+    /**
+     * Refuses to leave the site without an active admin, who could otherwise only be made again on the
+     * command line. The active admins are locked, so two admins can't demote each other at once. Not
+     * when the host application's users can be admins: they're mapped in on every request.
+     *
+     * @throws InvalidUserException
+     */
+    private function assertNotLastAdmin(string $id, string $action): void
+    {
+        if (\in_array(Role::ADMIN, array_merge(...array_values($this->host['roles'] ?? [])), true)) {
+            return;
+        }
+
+        $admins = $this->connection->fetchFirstColumn("SELECT id FROM quire.app_user WHERE status = 'active' AND ? = ANY(roles) FOR UPDATE", [Role::ADMIN]);
+
+        if ([$id] === $admins) {
+            throw InvalidUserException::single('roles', \sprintf('You can\'t %s the last active admin: the site needs one. Make another user an admin first.', $action));
+        }
     }
 
     private function setStatus(string $id, string $status): User

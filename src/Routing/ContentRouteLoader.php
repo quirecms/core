@@ -120,12 +120,13 @@ final class ContentRouteLoader extends Loader
             RegistrationController::RESEND_ROUTE => ['/verify-email', RegistrationController::class.'::resend', ['GET', 'HEAD', 'POST'], []],
             PasswordResetController::FORGOT_ROUTE => ['/forgot-password', PasswordResetController::class.'::forgot', ['GET', 'HEAD', 'POST'], []],
             PasswordResetController::RESET_ROUTE => ['/reset-password/{token}', PasswordResetController::class.'::reset', ['GET', 'HEAD', 'POST'], ['token' => '[0-9a-f]{32}\.[A-Za-z0-9_-]+']],
+            PasswordResetController::WELCOME_ROUTE => ['/accept-invitation/{token}', PasswordResetController::class.'::welcome', ['GET', 'HEAD', 'POST'], ['token' => '[0-9a-f]{32}\.[A-Za-z0-9_-]+']],
         ];
 
         foreach ($accounts as $name => [$path, $controller, $methods, $requirements]) {
             $collection->add($name, new Route(
                 path: $this->prefix.$path,
-                defaults: ['_controller' => $controller, ExtensionRouteLoader::QUIRE_ROUTE => true, ...(PasswordResetController::RESET_ROUTE === $name ? ['token' => null] : [])],
+                defaults: ['_controller' => $controller, ExtensionRouteLoader::QUIRE_ROUTE => true, ...(\in_array($name, [PasswordResetController::RESET_ROUTE, PasswordResetController::WELCOME_ROUTE], true) ? ['token' => null] : [])],
                 requirements: $requirements,
                 methods: $methods,
             ), self::PRIORITY + 1);

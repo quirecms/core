@@ -29,6 +29,9 @@ final class Permissions implements ResetInterface
 {
     public const string SETTING = 'quire.permissions.grants';
 
+    /** Roles the site added at runtime, name => label (see {@see SiteRoles}) */
+    public const string ROLES_SETTING = 'quire.permissions.roles';
+
     /** @var array<string, list<string>>|null Ability => roles, for this request */
     private ?array $grants = null;
 
@@ -43,11 +46,38 @@ final class Permissions implements ResetInterface
     }
 
     /**
-     * @return array<string, string> Name => label, "guest" first
+     * @return array<string, string> Name => label, "guest" first, then declared roles, then the site's own
      */
     public function roles(): array
     {
-        return [Role::GUEST => 'Everyone', ...array_map(static fn (array $role): string => $role['label'], $this->config['roles'])];
+        return [Role::GUEST => 'Everyone', ...array_map(static fn (array $role): string => $role['label'], $this->config['roles']), ...$this->siteRoles()];
+    }
+
+    /**
+     * Roles the site added at runtime, as opposed to those core and extensions declare.
+     *
+     * @return array<string, string> Name => label
+     */
+    public function siteRoles(): array
+    {
+        $value = $this->settings->get(self::ROLES_SETTING);
+        $roles = [];
+
+        foreach (\is_array($value) ? $value : [] as $name => $label) {
+            if (\is_string($name) && \is_string($label) && !isset($this->config['roles'][$name]) && Role::GUEST !== $name) {
+                $roles[$name] = $label;
+            }
+        }
+
+        return $roles;
+    }
+
+    /**
+     * The extension that declared the role, "core" for core's and Everyone, null for the site's own.
+     */
+    public function roleOwner(string $role): ?string
+    {
+        return Role::GUEST === $role ? 'core' : $this->config['roles'][$role]['owner'] ?? null;
     }
 
     public function hasRole(string $role): bool
@@ -97,11 +127,32 @@ final class Permissions implements ResetInterface
     }
 
     /**
+     * The roles that have the ability by default, as declared.
+     *
+     * @return list<string>
+     */
+    public function defaultRolesWith(string $ability): array
+    {
+        return $this->config['abilities'][$ability]['roles'] ?? [];
+    }
+
+    /**
+     * The abilities the role has through its grants, defaults and changes included; not those admins
+     * have because they have every ability that isn't strict.
+     *
+     * @return list<string>
+     */
+    public function abilitiesOf(string $role): array
+    {
+        return array_keys(array_filter($this->grants(), static fn (array $roles): bool => \in_array($role, $roles, true)));
+    }
+
+    /**
      * @param list<string> $abilities
      */
     public function grant(string $role, array $abilities): void
     {
-        $this->change($role, $abilities, 'grant', 'revoke');
+        $this->store($this->change($this->changes(), $role, $abilities, 'grant', 'revoke'));
     }
 
     /**
@@ -109,7 +160,36 @@ final class Permissions implements ResetInterface
      */
     public function revoke(string $role, array $abilities): void
     {
-        $this->change($role, $abilities, 'revoke', 'grant');
+        $this->store($this->change($this->changes(), $role, $abilities, 'revoke', 'grant'));
+    }
+
+    /**
+     * Gives the role exactly these abilities, at once: the others it had are revoked.
+     *
+     * @param list<string> $abilities
+     */
+    public function setAbilities(string $role, array $abilities): void
+    {
+        $changes = $this->change($this->changes(), $role, $abilities, 'grant', 'revoke');
+        $this->store($this->change($changes, $role, array_values(array_diff($this->abilitiesOf($role), $abilities)), 'revoke', 'grant'));
+    }
+
+    /**
+     * Forgets the role's grants and revocations, e.g. when the role is deleted.
+     *
+     * @internal
+     */
+    public function forgetRole(string $role): void
+    {
+        $changes = $this->changes();
+
+        foreach (['grant', 'revoke'] as $kind) {
+            foreach ($changes[$kind] as $ability => $roles) {
+                $changes[$kind][$ability] = array_values(array_diff($roles, [$role]));
+            }
+        }
+
+        $this->store($changes);
     }
 
     /**
@@ -176,17 +256,18 @@ final class Permissions implements ResetInterface
     }
 
     /**
-     * @param list<string>     $abilities
-     * @param 'grant'|'revoke' $kind
-     * @param 'grant'|'revoke' $opposite
+     * @param array{grant: array<string, list<string>>, revoke: array<string, list<string>>} $changes
+     * @param list<string>                                                                   $abilities
+     * @param 'grant'|'revoke'                                                               $kind
+     * @param 'grant'|'revoke'                                                               $opposite
+     *
+     * @return array{grant: array<string, list<string>>, revoke: array<string, list<string>>}
      */
-    private function change(string $role, array $abilities, string $kind, string $opposite): void
+    private function change(array $changes, string $role, array $abilities, string $kind, string $opposite): array
     {
         if (!$this->hasRole($role)) {
             throw new \InvalidArgumentException(\sprintf('Unknown role "%s". Roles: %s.', $role, implode(', ', array_keys($this->roles()))));
         }
-
-        $changes = $this->changes();
 
         foreach ($abilities as $ability) {
             if (!$this->has($ability)) {
@@ -202,7 +283,7 @@ final class Permissions implements ResetInterface
             }
         }
 
-        $this->store($changes);
+        return $changes;
     }
 
     /**

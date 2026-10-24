@@ -35,6 +35,8 @@ final readonly class UserMailer
 
     public const string VERIFICATION_LIFETIME = 'P2D';
 
+    public const string INVITATION_LIFETIME = 'P7D';
+
     public function __construct(
         private Settings $settings,
         private RouterInterface $router,
@@ -50,6 +52,17 @@ final readonly class UserMailer
     {
         $this->send($user, 'password_reset', 'Reset your password', [
             'url' => $this->link('quire_reset_password', ['token' => $token]),
+        ]);
+    }
+
+    /**
+     * For a user an admin added: a link to choose their password, so nobody else ever knows it.
+     */
+    public function sendInvitation(User $user, string $token, ?User $invitedBy = null): void
+    {
+        $this->send($user, 'invitation', 'You\'re invited to {site}', [
+            'url' => $this->link('quire_welcome', ['token' => $token]),
+            'invited_by' => $invitedBy,
         ]);
     }
 
@@ -87,7 +100,7 @@ final readonly class UserMailer
 
         $email = new TemplatedEmail()
             ->to(new Address($user->email, $user->displayName))
-            ->subject($this->translator->trans($subject, [], 'quire'))
+            ->subject($this->translator->trans($subject, ['site' => $this->settings->getString('site.title')], 'quire'))
             ->htmlTemplate(\sprintf('email/%s.html.twig', $template))
             ->textTemplate(\sprintf('email/%s.txt.twig', $template))
             ->context([...$context, 'user' => $user]);

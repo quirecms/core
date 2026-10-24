@@ -59,6 +59,7 @@ return [
         ->define('site.homepage_page', 'string', null, label: 'Homepage page', help: 'The page the homepage shows: its ID or its path, e.g. "home".', group: 'site', nullable: true)
         ->define('site.homepage_route', 'string', null, label: 'Homepage route', help: 'The name of the extension route the homepage shows. It must not need parameters.', group: 'site', nullable: true)
         ->define(Permissions::SETTING, 'json', [], label: 'Permission changes', help: 'Abilities granted to or revoked from roles, on top of the defaults. Change them with "bin/console quire:permissions:grant" and "revoke".', group: 'users')
+        ->define(Permissions::ROLES_SETTING, 'json', [], label: 'Site roles', help: 'Roles the site added, by name, with their labels. Change them with "bin/console quire:permissions:create-role" and "delete-role", or in the admin.', group: 'users')
         ->define(AccountSettings::REGISTRATION, 'bool', false, label: 'Registration', help: 'Whether visitors can create an account on the site, as members. Emails need a mailer (MAILER_DSN).', group: 'users')
         ->define(AccountSettings::EMAIL_VERIFICATION, 'bool', false, label: 'Confirm emails', help: 'Whether people who register confirm their email, by opening an emailed link, before they can sign in.', group: 'users')
         ->define(AccountSettings::PASSWORD_RESET, 'bool', false, label: 'Password reset', help: 'Whether users who forgot their password can choose a new one through an emailed link.', group: 'users')
@@ -77,7 +78,9 @@ return [
         // Site management: admins only (they have every ability), unless granted to other roles.
         ->ability('quire.settings.manage', 'Change the site\'s settings', roles: [], group: 'admin')
         ->ability('quire.themes.manage', 'Change the site\'s theme', roles: [], group: 'admin')
-        ->ability('quire.extensions.manage', 'Enable, disable and purge extensions', roles: [], group: 'admin'),
+        ->ability('quire.extensions.manage', 'Enable, disable and purge extensions', roles: [], group: 'admin')
+        ->ability('quire.users.manage', 'Add, change, suspend and delete users', roles: [], group: 'admin')
+        ->ability('quire.permissions.manage', 'Change roles and what they may do', roles: [], group: 'admin'),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

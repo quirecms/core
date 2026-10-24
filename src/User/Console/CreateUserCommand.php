@@ -6,6 +6,7 @@ namespace Quire\User\Console;
 
 use Quire\User\CreateUser;
 use Quire\User\Exception\InvalidUserException;
+use Quire\User\Invitations;
 use Quire\User\Role;
 use Quire\User\UserWriter;
 use Symfony\Component\Console\Attribute\Argument;
@@ -14,6 +15,7 @@ use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 
 #[AsCommand(
     name: 'quire:user:create',
@@ -25,13 +27,15 @@ use Symfony\Component\Console\Style\SymfonyStyle;
           <info>%command.full_name% grace@example.com --role=editor</info>
 
         You're asked for the password. Without a terminal (e.g. in a script), a strong password is
-        generated and shown once. Pass <comment>--no-password</comment> for users who sign in another way, e.g. with SSO.
+        generated and shown once. Pass <comment>--invite</comment> to email them a link to choose it themselves instead,
+        or <comment>--no-password</comment> for users who sign in another way, e.g. with SSO.
         HELP,
 )]
 final readonly class CreateUserCommand
 {
     public function __construct(
         private UserWriter $writer,
+        private Invitations $invitations,
     ) {
     }
 
@@ -53,8 +57,16 @@ final readonly class CreateUserCommand
         bool $admin = false,
         #[Option(description: 'Create the user without a password')]
         bool $noPassword = false,
+        #[Option(description: 'Email the user a link to choose their password')]
+        bool $invite = false,
     ): int {
-        $asked = $noPassword ? [null, false] : Passwords::askOrReport($io, $input->isInteractive());
+        if ($invite && null !== $reason = $this->invitations->unavailableReason()) {
+            $io->error($reason);
+
+            return Command::FAILURE;
+        }
+
+        $asked = $noPassword || $invite ? [null, false] : Passwords::askOrReport($io, $input->isInteractive());
 
         if (null === $asked) {
             return Command::FAILURE;
@@ -78,6 +90,17 @@ final readonly class CreateUserCommand
         }
 
         $io->success(\sprintf('Created %s (username "%s"%s).', $user->displayName, $user->username, [] === $user->roles ? '' : ', '.implode(', ', $user->roles)));
+
+        if ($invite) {
+            try {
+                $this->invitations->invite($user);
+                $io->writeln(\sprintf('Invited %s by email to choose a password.', $email));
+            } catch (InvalidUserException|TransportExceptionInterface $e) {
+                $io->error(\sprintf('The invitation couldn\'t be sent: %s Invite them again with "bin/console quire:user:invite %s".', $e->getMessage(), $user->username));
+
+                return Command::FAILURE;
+            }
+        }
 
         if ($generated) {
             $io->warning(\sprintf('The password is: %s', $password));

@@ -1,0 +1,9 @@
+{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}
+
+{% if invited_by %}{{ '{admin} added you to {site}, as {username}. Choose your password to sign in:'|trans({ admin: invited_by.displayName, site: site.title, username: user.username }, 'quire')|raw }}{% else %}{{ 'You were added to {site}, as {username}. Choose your password to sign in:'|trans({ site: site.title, username: user.username }, 'quire')|raw }}{% endif %}
+
+{{ url|raw }}
+
+{{ 'The link works once, for seven days.'|trans({}, 'quire') }}
+
+{{ site.title|raw }}

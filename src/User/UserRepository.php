@@ -64,6 +64,30 @@ final readonly class UserRepository
     }
 
     /**
+     * The identities at other providers linked to the user, e.g. a Google account, or the host
+     * application's user.
+     *
+     * @return list<array{provider: string, subject: string, claims: array<string, mixed>, created_at: \DateTimeImmutable, last_used_at: ?\DateTimeImmutable}>
+     */
+    public function identities(string $userId): array
+    {
+        $rows = $this->connection->fetchAllAssociative('SELECT provider, subject, claims, created_at, last_used_at FROM quire.user_identity WHERE user_id = ? ORDER BY provider, created_at', [$userId]);
+
+        return array_map(static function (array $values): array {
+            $row = new Row($values);
+            $claims = $row->jsonObject('claims');
+
+            return [
+                'provider' => $row->string('provider'),
+                'subject' => $row->string('subject'),
+                'claims' => array_filter($claims, \is_string(...), \ARRAY_FILTER_USE_KEY),
+                'created_at' => $row->date('created_at'),
+                'last_used_at' => $row->nullableDate('last_used_at'),
+            ];
+        }, $rows);
+    }
+
+    /**
      * What the provider said about a linked identity when it was last used.
      *
      * @return array<string, mixed>|null Null when no user has the identity
@@ -94,6 +118,75 @@ final readonly class UserRepository
         );
 
         return array_map($this->hydrate(...), $rows);
+    }
+
+    /**
+     * Users matching a search, a page at a time, e.g. for an admin's list of users.
+     *
+     * @param string|null $text   Part of the name, username or email
+     * @param string|null $role   Only users with this role
+     * @param string|null $status Only users with this status, e.g. {@see User::SUSPENDED}
+     * @param string      $sort   "name", "username", "created" or "login" (last sign-in, never last)
+     *
+     * @return array{users: list<User>, total: int} The page, and how many users match in all
+     */
+    public function search(?string $text = null, ?string $role = null, ?string $status = null, string $sort = 'name', bool $descending = false, int $limit = 50, int $offset = 0): array
+    {
+        [$conditions, $parameters] = [[], []];
+        $text = trim((string) $text);
+
+        if ('' !== $text) {
+            $conditions[] = '(display_name ILIKE ? OR username ILIKE ? OR email ILIKE ?)';
+            $pattern = '%'.addcslashes($text, '%_\\').'%';
+            $parameters[] = $pattern;
+            $parameters[] = $pattern;
+            $parameters[] = $pattern;
+        }
+
+        if (null !== $role) {
+            $conditions[] = '? = ANY(roles)';
+            $parameters[] = $role;
+        }
+
+        if (null !== $status) {
+            $conditions[] = 'status = ?';
+            $parameters[] = $status;
+        }
+
+        $order = match ($sort) {
+            'username' => 'username',
+            'created' => 'created_at',
+            'login' => 'last_login_at',
+            default => 'lower(display_name)',
+        };
+        $direction = $descending ? 'DESC' : 'ASC';
+
+        // The total comes with the page, in one query.
+        $rows = $this->connection->fetchAllAssociative(
+            \sprintf('SELECT %s, count(*) OVER () AS total FROM quire.app_user %s ORDER BY %s %s NULLS LAST, id LIMIT %d OFFSET %d', self::COLUMNS, [] === $conditions ? '' : 'WHERE '.implode(' AND ', $conditions), $order, $direction, max(0, $limit), max(0, $offset)),
+            $parameters,
+        );
+        $total = $rows[0]['total'] ?? null;
+
+        // Past the last page, the total needs its own query.
+        if ([] === $rows && $offset > 0) {
+            $total = $this->connection->fetchOne(\sprintf('SELECT count(*) FROM quire.app_user %s', [] === $conditions ? '' : 'WHERE '.implode(' AND ', $conditions)), $parameters);
+        }
+
+        return ['users' => array_map($this->hydrate(...), $rows), 'total' => is_numeric($total) ? (int) $total : 0];
+    }
+
+    /**
+     * How many users have each role, e.g. to show what changing a role affects.
+     *
+     * @return array<string, int> Role => users, active and suspended
+     */
+    public function countByRole(): array
+    {
+        /** @var array<string, int|string> $counts */
+        $counts = $this->connection->fetchAllKeyValue('SELECT role, count(*) FROM quire.app_user, unnest(roles) AS role GROUP BY role');
+
+        return array_map(static fn (int|string $count): int => (int) $count, $counts);
     }
 
     public function count(?string $role = null): int

@@ -23,6 +23,9 @@ final readonly class UserTokens
 
     public const string EMAIL_VERIFICATION = 'email_verification';
 
+    /** A new user, invited by an admin, chooses their password */
+    public const string INVITATION = 'invitation';
+
     public function __construct(
         private Connection $connection,
         private UserRepository $users,

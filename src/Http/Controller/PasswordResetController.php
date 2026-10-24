@@ -41,7 +41,11 @@ final readonly class PasswordResetController
 
     public const string RESET_ROUTE = 'quire_reset_password';
 
+    public const string WELCOME_ROUTE = 'quire_welcome';
+
     private const string SESSION_TOKEN = 'quire.password_reset_token';
+
+    private const string SESSION_INVITATION = 'quire.invitation_token';
 
     public function __construct(
         private Environment $twig,
@@ -104,44 +108,65 @@ final readonly class PasswordResetController
     public function reset(Request $request, ?string $token = null): Response
     {
         $this->assertOn();
-        $session = $request->getSession();
 
-        if (null !== $token) {
-            $session->set(self::SESSION_TOKEN, $token);
+        return $this->choosePassword($request, $token, UserTokens::PASSWORD_RESET, self::RESET_ROUTE, self::SESSION_TOKEN, 'Your password is changed. You can sign in with it now.');
+    }
 
-            return new RedirectResponse($this->urls->generate(self::RESET_ROUTE));
+    /**
+     * The link of an invitation (see {@see UserMailer::sendInvitation()}): the new user chooses their
+     * password. It works whether or not users may reset their passwords, while password sign-in is on.
+     */
+    public function welcome(Request $request, ?string $token = null): Response
+    {
+        if (!$this->settings->getBool(SignInListener::PASSWORD_LOGIN_SETTING)) {
+            throw new NotFoundHttpException('Signing in with a password is turned off.');
         }
 
-        $token = $session->get(self::SESSION_TOKEN);
-        $user = \is_string($token) ? $this->tokens->check($token, UserTokens::PASSWORD_RESET) : null;
+        return $this->choosePassword($request, $token, UserTokens::INVITATION, self::WELCOME_ROUTE, self::SESSION_INVITATION, 'Welcome! Sign in with your new password.');
+    }
+
+    private function choosePassword(Request $request, ?string $token, string $purpose, string $route, string $sessionKey, string $done): Response
+    {
+        $session = $request->getSession();
+        $variables = ['route' => $route, 'invitation' => UserTokens::INVITATION === $purpose];
+
+        if (null !== $token) {
+            $session->set($sessionKey, $token);
+
+            return new RedirectResponse($this->urls->generate($route));
+        }
+
+        $token = $session->get($sessionKey);
+        $user = \is_string($token) ? $this->tokens->check($token, $purpose) : null;
 
         if (!\is_string($token) || !$user instanceof User) {
-            return $this->render('security/link_expired.html.twig', ['retry_route' => self::FORGOT_ROUTE], Response::HTTP_GONE);
+            // An expired invitation can't be asked for again: the admin sends another.
+            return $this->render('security/link_expired.html.twig', ['retry_route' => UserTokens::INVITATION === $purpose ? null : self::FORGOT_ROUTE], Response::HTTP_GONE);
         }
 
         if (!$request->isMethod('POST')) {
-            return $this->render('security/reset_password.html.twig', ['user' => $user, 'errors' => []]);
+            return $this->render('security/reset_password.html.twig', [...$variables, 'user' => $user, 'errors' => []]);
         }
 
         if (!$this->csrf->isTokenValid(new CsrfToken('reset_password', $request->request->getString('_csrf_token')))) {
-            return $this->render('security/reset_password.html.twig', ['user' => $user, 'errors' => ['form' => 'The form expired. Please try again.']], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->render('security/reset_password.html.twig', [...$variables, 'user' => $user, 'errors' => ['form' => 'The form expired. Please try again.']], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
         try {
             // The token is used up only when the new password is accepted.
-            $this->connection->transactional(function () use ($token, $request): void {
-                $user = $this->tokens->consume($token, UserTokens::PASSWORD_RESET) ?? throw InvalidUserException::single('form', 'This link doesn\'t work anymore.');
+            $this->connection->transactional(function () use ($token, $purpose, $request): void {
+                $user = $this->tokens->consume($token, $purpose) ?? throw InvalidUserException::single('form', 'This link doesn\'t work anymore.');
                 $this->writer->changePassword($user->id, $request->request->getString('password'));
                 // Opening the link proved they read the email.
                 $this->writer->markEmailVerified($user->id);
             });
         } catch (InvalidUserException $e) {
-            return $this->render('security/reset_password.html.twig', ['user' => $user, 'errors' => $e->violations], Response::HTTP_UNPROCESSABLE_ENTITY);
+            return $this->render('security/reset_password.html.twig', [...$variables, 'user' => $user, 'errors' => $e->violations], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $session->remove(self::SESSION_TOKEN);
+        $session->remove($sessionKey);
         if ($session instanceof FlashBagAwareSessionInterface) {
-            $session->getFlashBag()->add('quire', 'Your password is changed. You can sign in with it now.');
+            $session->getFlashBag()->add('quire', $done);
         }
 
         return new RedirectResponse($this->urls->generate(LoginController::LOGIN_ROUTE));

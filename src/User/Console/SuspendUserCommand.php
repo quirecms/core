@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\User\Console;
 
+use Quire\User\Exception\InvalidUserException;
 use Quire\User\UserRepository;
 use Quire\User\UserWriter;
 use Symfony\Component\Console\Attribute\Argument;
@@ -36,7 +37,14 @@ final readonly class SuspendUserCommand
             return Command::FAILURE;
         }
 
-        $this->writer->suspend($found->id);
+        try {
+            $this->writer->suspend($found->id);
+        } catch (InvalidUserException $e) {
+            $io->error(array_values($e->violations));
+
+            return Command::FAILURE;
+        }
+
         $io->success(\sprintf('Suspended %s.', $found->displayName));
 
         return Command::SUCCESS;

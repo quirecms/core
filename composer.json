@@ -62,5 +62,10 @@
         "league/flysystem-async-aws-s3": "Storage disks on S3-compatible services (AWS S3, Cloudflare R2, Backblaze B2, SeaweedFS, Garage)"
     },
     "minimum-stability": "dev",
-    "prefer-stable": true
+    "prefer-stable": true,
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1.x-dev"
+        }
+    }
 }

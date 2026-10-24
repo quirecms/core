@@ -20,6 +20,7 @@ use Quire\Content\Query\RelationLoaderInterface;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Permission\Internal\Viewer;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Twig\Markup;
 
 /**
  * Runs content queries: applies the visibility rules, scopes and relations that extensions registered.
@@ -226,7 +227,7 @@ final readonly class QueryRunner
     {
         [$sql, $params] = $query->toSql();
 
-        return $this->loadRelations($query, array_map($this->hydrate(...), $this->rows($sql, $params)));
+        return $this->loadRelations($query, $this->addSnippets($query, array_map($this->hydrate(...), $this->rows($sql, $params))));
     }
 
     public function count(ContentQuery $query): int
@@ -244,11 +245,11 @@ final readonly class QueryRunner
         $rows = $this->rows($sql, $params);
         $total = [] === $rows ? ($page > 1 ? $this->count($query) : 0) : new Row($rows[0])->int('_total');
 
-        $items = $this->loadRelations($query, array_map(function (array $row): Content {
+        $items = $this->loadRelations($query, $this->addSnippets($query, array_map(function (array $row): Content {
             unset($row['_total']);
 
             return $this->hydrate($row);
-        }, $rows));
+        }, $rows)));
 
         return new ContentPage($items, $page, $perPage, $total);
     }
@@ -280,6 +281,32 @@ final readonly class QueryRunner
         }
 
         return $items;
+    }
+
+    /**
+     * The search snippets of the items, with one query for all of them, when the query asks for them.
+     *
+     * @param list<Content> $items
+     *
+     * @return list<Content>
+     */
+    private function addSnippets(ContentQuery $query, array $items): array
+    {
+        $search = $query->snippetSearch();
+
+        if (null === $search || [] === $items) {
+            return $items;
+        }
+
+        [$sql, $params] = SearchSql::snippets($search);
+        $snippets = [];
+
+        foreach ($this->connection->fetchAllAssociative($sql, [...$params, '{'.implode(',', array_map(static fn (Content $item): string => $item->id, $items)).'}']) as $row) {
+            $row = new Row($row);
+            $snippets[$row->string('id')] = new Markup(SearchSql::html($row->string('snippet')), 'UTF-8');
+        }
+
+        return array_map(static fn (Content $item): Content => $item->withAttributes(['search_snippet' => $snippets[$item->id] ?? null]), $items);
     }
 
     /**

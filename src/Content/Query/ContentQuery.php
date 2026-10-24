@@ -8,6 +8,7 @@ use Quire\Content\Content;
 use Quire\Content\ContentRepository;
 use Quire\Content\Query\Exception\InvalidQueryException;
 use Quire\Content\Query\Internal\QueryRunner;
+use Quire\Content\Query\Internal\SearchSql;
 use Quire\Content\Status;
 
 /**
@@ -71,6 +72,11 @@ final class ContentQuery implements \IteratorAggregate
 
     /** @var 'exclude'|'include'|'only' */
     private string $trashed = 'exclude';
+
+    /** @var array{query: string, terms: string}|null Set by {@see search()} */
+    private ?array $search = null;
+
+    private bool $snippets = false;
 
     /** @var list<Content>|null Fetched when the query is iterated */
     private ?array $results = null;
@@ -173,6 +179,40 @@ final class ContentQuery implements \IteratorAggregate
     public function childrenOf(Content|string|null $parent): self
     {
         return $this->where('parent_id', $parent instanceof Content ? $parent->id : $parent);
+    }
+
+    /**
+     * Only items that match the search terms, best matches first unless the query sets an order.
+     *
+     *     ->search('markdown editor')                  // both words
+     *     ->search('"site search" -plugin')           // a phrase, without "plugin"; "or" between words
+     *     ->search('mark', prefix: true)               // words starting with "mark", e.g. as you type
+     *     ->search('markdown', snippets: true)         // with passages that show the terms
+     *
+     * Terms are matched in each item's language, so "running" finds "run" in English items. Titles weigh
+     * most, then excerpts, then bodies. Each item gets the attribute "search_rank" (0 to 1), which the query
+     * can also sort by; with snippets, "search_snippet" too: HTML with the terms in <mark>, from the
+     * excerpt and the body, without Markdown's markup. Snippets take one query more, for the items returned.
+     *
+     * Like every condition, search leaves out what the viewer may not see. Blank terms change nothing.
+     *
+     * @param bool $prefix The last word matches words that start with it, and the terms are words only (no
+     *                     phrases, "or" or "-")
+     */
+    public function search(string $terms, bool $prefix = false, bool $snippets = false): self
+    {
+        $parsed = SearchSql::parse($terms, $prefix);
+
+        if (null === $parsed) {
+            return clone $this;
+        }
+
+        $query = $this->withCondition(SearchSql::condition($parsed));
+        $query->search = $parsed;
+        $query->snippets = $snippets;
+        $query->selects['search_rank'] = SearchSql::rank($parsed);
+
+        return $query;
     }
 
     /**
@@ -471,6 +511,16 @@ final class ContentQuery implements \IteratorAggregate
     /**
      * @internal
      *
+     * @return array{query: string, terms: string}|null The search, when it should come with snippets
+     */
+    public function snippetSearch(): ?array
+    {
+        return $this->snippets ? $this->search : null;
+    }
+
+    /**
+     * @internal
+     *
      * @return list<string>
      */
     public function relations(): array
@@ -546,7 +596,11 @@ final class ContentQuery implements \IteratorAggregate
             return [$sql, $params];
         }
 
-        $orders = [] === $this->orders ? $this->runner->defaultOrder($this->types) : $this->orders;
+        $orders = match (true) {
+            [] !== $this->orders => $this->orders,
+            null !== $this->search => [['sql' => '"search_rank"', 'direction' => 'DESC']],
+            default => $this->runner->defaultOrder($this->types),
+        };
         // The ID breaks ties, so pages never overlap or skip items that sort the same.
         $orders[] = ['sql' => 'c.id', 'direction' => array_last($orders)['direction']];
         $sql .= ' ORDER BY '.implode(', ', array_map(static fn (array $order): string => \sprintf('%s %s NULLS LAST', $order['sql'], $order['direction']), $orders));

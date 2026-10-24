@@ -60,6 +60,17 @@ final readonly class ContentWorkflow
     }
 
     /**
+     * @return list<string> Names of every transition, each once, in the order they were added
+     */
+    public function transitions(): array
+    {
+        return array_values(array_unique(array_map(
+            static fn (Transition $transition): string => $transition->getName(),
+            $this->machine->getDefinition()->getTransitions(),
+        )));
+    }
+
+    /**
      * @return list<string> Names of the transitions the item can take now, guards included
      */
     public function enabledTransitions(Content $content): array

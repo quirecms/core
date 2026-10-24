@@ -24,6 +24,16 @@ final class Locales
         'sv' => 'swedish', 'ta' => 'tamil', 'tr' => 'turkish', 'yi' => 'yiddish',
     ];
 
+    /**
+     * Every configuration that content can be indexed with.
+     *
+     * @return non-empty-list<string>
+     */
+    public static function searchConfigurations(): array
+    {
+        return array_values(array_unique([...array_values(self::SEARCH_CONFIGURATIONS), 'simple']));
+    }
+
     public static function isValid(string $locale): bool
     {
         return 1 === preg_match(self::PATTERN, $locale);

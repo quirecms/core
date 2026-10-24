@@ -30,17 +30,19 @@ final readonly class ListContentCommand
         bool $trashed = false,
         #[Option(description: 'How many items to list')]
         int $limit = 20,
+        #[Option(description: 'Only items matching these words, best matches first, e.g. "markdown -draft"')]
+        ?string $search = null,
     ): int {
-        return ConsoleErrors::handle($io, fn (): int => $this->list($io, $type, $status, $trashed, $limit));
+        return ConsoleErrors::handle($io, fn (): int => $this->list($io, $type, $status, $trashed, $limit, $search));
     }
 
-    private function list(SymfonyStyle $io, ?string $type, ?string $status, bool $trashed, int $limit): int
+    private function list(SymfonyStyle $io, ?string $type, ?string $status, bool $trashed, int $limit, ?string $search): int
     {
         // Editors see everything: drafts and items hidden from visitors included.
         $query = $this->repository->query(...null === $type ? array_keys($this->types->all()) : [$type])
             ->withoutVisibilityScope()
-            ->orderBy('created_at', 'desc')
             ->limit(max(1, $limit));
+        $query = null === $search ? $query->orderBy('created_at', 'desc') : $query->search($search);
 
         if ($trashed) {
             $query = $query->onlyTrashed();

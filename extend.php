@@ -73,7 +73,11 @@ return [
         ->role(Role::EDITOR, 'Editor')
         ->role(Role::ADMIN, 'Admin')
         // The pages of the admin interface, whichever extension adds them (routes in the group "admin").
-        ->ability(AdminAccessListener::ABILITY, 'Use the admin interface', roles: [Role::EDITOR], group: 'admin'),
+        ->ability(AdminAccessListener::ABILITY, 'Use the admin interface', roles: [Role::EDITOR], group: 'admin')
+        // Site management: admins only (they have every ability), unless granted to other roles.
+        ->ability('quire.settings.manage', 'Change the site\'s settings', roles: [], group: 'admin')
+        ->ability('quire.themes.manage', 'Change the site\'s theme', roles: [], group: 'admin')
+        ->ability('quire.extensions.manage', 'Enable, disable and purge extensions', roles: [], group: 'admin'),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

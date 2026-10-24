@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use Quire\Extension\Console\DisableExtensionCommand;
 use Quire\Extension\Console\EnableExtensionCommand;
 use Quire\Extension\ExtensionManager;
+use Quire\Extension\ExtensionSwitcher;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\ExtensionStateStoreInterface;
 use Quire\Extension\State\PinnedExtensionStateStore;
@@ -219,12 +220,12 @@ final class EnableDisableExtensionCommandTest extends TestCase
 
     private function enable(ExtensionStateStoreInterface $state): CommandTester
     {
-        return new CommandTester(new Command(null, new EnableExtensionCommand($this->manager($state), $this->rebuilder)));
+        return new CommandTester(new Command(null, new EnableExtensionCommand($manager = $this->manager($state), new ExtensionSwitcher($manager, $this->purger, $this->rebuilder))));
     }
 
     private function disable(ExtensionStateStoreInterface $state): CommandTester
     {
-        return new CommandTester(new Command(null, new DisableExtensionCommand($this->manager($state), $this->purger, $this->rebuilder)));
+        return new CommandTester(new Command(null, new DisableExtensionCommand($manager = $this->manager($state), new ExtensionSwitcher($manager, $this->purger, $this->rebuilder))));
     }
 
     private function manager(ExtensionStateStoreInterface $state): ExtensionManager

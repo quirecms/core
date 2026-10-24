@@ -4,10 +4,9 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Console;
 
-use Quire\Extension\Rebuild\AppRebuilderInterface;
 use Quire\Extension\Rebuild\RebuildFailedException;
 use Quire\Theme\Exception\ThemeException;
-use Quire\Theme\Themes;
+use Quire\Theme\ThemeSwitcher;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
@@ -31,8 +30,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 final readonly class UseThemeCommand
 {
     public function __construct(
-        private Themes $themes,
-        private AppRebuilderInterface $rebuilder,
+        private ThemeSwitcher $switcher,
     ) {
     }
 
@@ -49,39 +47,18 @@ final readonly class UseThemeCommand
             return Command::FAILURE;
         }
 
-        $previous = $this->themes->selected();
-
-        if ($id === $previous && null === $this->themes->problem()) {
-            $io->success(null === $id ? 'The site already uses Quire\'s built-in templates.' : \sprintf('The site already uses "%s".', $id));
-
-            return Command::SUCCESS;
-        }
-
         try {
-            $this->themes->use($id);
-        } catch (ThemeException $e) {
+            $changed = $this->switcher->use($id, $io->write(...));
+        } catch (ThemeException|RebuildFailedException $e) {
             $io->error($e->getMessage());
 
             return Command::FAILURE;
         }
 
-        $io->writeln('Rebuilding the application…');
+        if (!$changed) {
+            $io->success(null === $id ? 'The site already uses Quire\'s built-in templates.' : \sprintf('The site already uses "%s".', $id));
 
-        try {
-            $this->rebuilder->rebuild(true, $io->write(...));
-        } catch (RebuildFailedException $e) {
-            // Don't leave a theme set whose extenders or migrations failed.
-            try {
-                $this->themes->use($previous);
-            } catch (ThemeException) {
-                // E.g. the default theme, which isn't installed: setting it again is refused.
-                Themes::DEFAULT === $previous ? $this->themes->useDefault() : $this->themes->use(null);
-            }
-
-            $io->error(\sprintf('%s The previous theme is back in use.', $e->getMessage()));
-            $this->rebuilder->rebuild(false, $io->write(...));
-
-            return Command::FAILURE;
+            return Command::SUCCESS;
         }
 
         $io->success(null === $id ? 'The site uses Quire\'s built-in templates.' : \sprintf('The site uses "%s".', $id));

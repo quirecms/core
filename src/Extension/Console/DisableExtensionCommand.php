@@ -8,9 +8,7 @@ use Quire\Extension\Exception\DependencyException;
 use Quire\Extension\Exception\ExtensionStateException;
 use Quire\Extension\Exception\UnknownExtensionException;
 use Quire\Extension\ExtensionManager;
-use Quire\Extension\ExtensionManifest;
-use Quire\Extension\ExtensionPurgerInterface;
-use Quire\Extension\Rebuild\AppRebuilderInterface;
+use Quire\Extension\ExtensionSwitcher;
 use Quire\Extension\Rebuild\RebuildFailedException;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -39,8 +37,7 @@ final readonly class DisableExtensionCommand
 {
     public function __construct(
         private ExtensionManager $extensions,
-        private ExtensionPurgerInterface $purger,
-        private AppRebuilderInterface $rebuilder,
+        private ExtensionSwitcher $switcher,
     ) {
     }
 
@@ -81,20 +78,14 @@ final readonly class DisableExtensionCommand
             return Command::SUCCESS;
         }
 
-        $toPurge = [];
-
         if ($purge) {
-            $resolved = $this->extensions->resolve();
-            $notRunning = array_values(array_filter($plan, static fn (string $id): bool => !$resolved->isRunning($id)));
+            $problem = $this->switcher->purgeProblem($plan);
 
-            if ([] !== $notRunning) {
-                $io->error(\sprintf('Only running extensions can be purged, because their migrations must be loaded to roll them back. Not running: %s. Fix the problems shown by "quire:extension:list", or disable without --purge.', implode(', ', $notRunning)));
+            if (null !== $problem) {
+                $io->error($problem);
 
                 return Command::FAILURE;
             }
-
-            // Dependents first, so nothing outlives what it requires.
-            $toPurge = array_reverse(array_values(array_filter($resolved->bootOrder, static fn (ExtensionManifest $m): bool => \in_array($m->id, $plan, true))));
         }
 
         if ($dryRun) {
@@ -108,14 +99,8 @@ final readonly class DisableExtensionCommand
             return Command::FAILURE;
         }
 
-        if ([] !== $toPurge) {
-            $this->purger->purge($toPurge, $io->writeln(...));
-        }
-
         try {
-            $this->extensions->disable($plan);
-            $io->writeln('Rebuilding the application…');
-            $this->rebuilder->rebuild(false, $io->write(...));
+            $this->switcher->disable($ids, $purge, $io->write(...));
         } catch (UnknownExtensionException|DependencyException|ExtensionStateException|RebuildFailedException $e) {
             $io->error($e->getMessage());
 

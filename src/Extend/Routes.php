@@ -19,6 +19,13 @@ use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
  * A route with the same name as an existing one replaces it, so extensions can override core routes.
  * Controllers are registered as services automatically.
  *
+ * Pages of the admin interface go in the group "admin": their paths are under the admin's path
+ * (`/admin` by default, see "quire.routing.admin_prefix"), and only users with the ability
+ * "admin.access" may open them. Guests are asked to sign in.
+ *
+ *     new Extend\Routes(group: 'admin')
+ *         ->get('/reviews', 'acme_reviews_admin', ReviewsAdminController::class)   // /admin/reviews
+ *
  * @api
  */
 final class Routes implements ExtenderInterface
@@ -26,12 +33,26 @@ final class Routes implements ExtenderInterface
     /** @internal Parameter collecting the routes of every extension */
     public const string PARAMETER = 'quire.extension_routes';
 
+    /** The public pages of the site */
+    public const string SITE = 'site';
+
+    /** The admin interface */
+    public const string ADMIN = 'admin';
+
     private const string NAME_PATTERN = '/^[a-zA-Z0-9_.]+$/';
 
     /**
      * @var list<array{kind: 'route', path: string, name: string, controller: string|array<mixed>, methods: list<string>, requirements: array<string, string>, defaults: array<string, mixed>}|array{kind: 'controllers', namespace: string, directory: string, prefix: string}>
      */
     private array $entries = [];
+
+    /**
+     * @param string $group {@see SITE} or {@see ADMIN}
+     */
+    public function __construct(
+        private readonly string $group = self::SITE,
+    ) {
+    }
 
     /**
      * @param class-string|array{class-string, string} $controller   An invokable controller class, or [class, method]
@@ -89,6 +110,10 @@ final class Routes implements ExtenderInterface
 
     public function extend(ExtenderContext $context): void
     {
+        if (!\in_array($this->group, [self::SITE, self::ADMIN], true)) {
+            throw $context->error('Extend\Routes', \sprintf('Unknown group "%s". Use "site" or "admin".', $this->group));
+        }
+
         foreach ($this->entries as $entry) {
             if ('route' === $entry['kind']) {
                 $this->extendRoute($context, $entry);
@@ -134,6 +159,7 @@ final class Routes implements ExtenderInterface
         $context->appendToParameter(self::PARAMETER, [
             'type' => 'route',
             'extension' => $context->id,
+            'group' => $this->group,
             'name' => $route['name'],
             'path' => $route['path'],
             'controller' => '__invoke' === $method ? $class : $class.'::'.$method,
@@ -170,6 +196,7 @@ final class Routes implements ExtenderInterface
         $context->appendToParameter(self::PARAMETER, [
             'type' => 'import',
             'extension' => $context->id,
+            'group' => $this->group,
             'resource' => $controllers['directory'],
             'prefix' => $controllers['prefix'],
         ]);

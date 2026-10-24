@@ -10,8 +10,10 @@ use Quire\Content\Type\Capability;
 use Quire\Extend;
 use Quire\Formatter\Format;
 use Quire\Permission\Permissions;
+use Quire\Routing\AdminAccessListener;
 use Quire\Storage\Job\CollectGarbage;
 use Quire\Storage\Job\CollectGarbageHandler;
+use Quire\Theme\Internal\AdminAssetsSlot;
 use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
@@ -26,7 +28,8 @@ return [
 
     // The stylesheets and scripts of Extend\Assets, before other fragments of the "head" slot.
     new Extend\Views()
-        ->slot('head', AssetsSlot::class, priority: 1000),
+        ->slot('head', AssetsSlot::class, priority: 1000)
+        ->slot('admin.head', AdminAssetsSlot::class, priority: 1000),
 
     new Extend\Settings()
         ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)
@@ -54,7 +57,9 @@ return [
     new Extend\Permissions()
         ->role(Role::MEMBER, 'Member')
         ->role(Role::EDITOR, 'Editor')
-        ->role(Role::ADMIN, 'Admin'),
+        ->role(Role::ADMIN, 'Admin')
+        // The pages of the admin interface, whichever extension adds them (routes in the group "admin").
+        ->ability(AdminAccessListener::ABILITY, 'Use the admin interface', roles: [Role::EDITOR], group: 'admin'),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

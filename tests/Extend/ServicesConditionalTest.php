@@ -76,7 +76,7 @@ final class ServicesConditionalTest extends ExtenderTestCase
         );
 
         /** @var list<array{name: string}> $routes */
-        $routes = $this->container->getParameter(Routes::PARAMETER);
+        $routes = $this->parameter(Routes::PARAMETER);
         self::assertSame(['acme_seo', 'acme_always'], array_column($routes, 'name'));
     }
 

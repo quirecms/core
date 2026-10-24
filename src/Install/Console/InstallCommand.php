@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Quire\Install\Console;
 
+use Quire\Extension\ExtensionManager;
+use Quire\Extension\InstalledExtensions;
+use Quire\Routing\ExtensionRouteLoader;
 use Quire\Runtime\PhpBinary;
 use Quire\Settings\Exception\InvalidSettingValueException;
 use Quire\Settings\Settings;
@@ -26,7 +29,8 @@ use Symfony\Component\Process\Process;
     name: 'quire:install',
     description: 'Set up a new site: the database, the site\'s title and language, and the first admin',
     help: <<<'HELP'
-        Prepares the database, asks for the site's title and language, and creates the first admin:
+        Prepares the database, asks for the site's title and language, creates the first admin, and
+        enables the admin interface (the extension "quire-admin") when it's installed:
 
           <info>%command.full_name%</info>
 
@@ -45,14 +49,21 @@ final readonly class InstallCommand
     /**
      * @param (\Closure(list<string>, \Closure(string): void): int)|null $run Runs a command and returns its exit code; replaceable in tests
      */
+    /** The first-party admin interface, enabled on installation when it's installed */
+    public const string ADMIN_EXTENSION = 'quire-admin';
+
     public function __construct(
         private UserRepository $users,
+        private InstalledExtensions $extensions,
+        private ExtensionManager $manager,
         private UserWriter $writer,
         private Settings $settings,
         #[Autowire(param: 'kernel.project_dir')]
         private string $projectDir,
         #[Autowire(param: 'kernel.environment')]
         private string $environment,
+        #[Autowire(param: ExtensionRouteLoader::ADMIN_PREFIX_PARAMETER)]
+        private string $adminPrefix,
         ?\Closure $run = null,
     ) {
         $this->run = $run ?? $this->runProcess(...);
@@ -125,7 +136,8 @@ final readonly class InstallCommand
             return Command::FAILURE;
         }
 
-        $io->success(\sprintf('Quire is installed. %s (%s) is the admin.', $admin->displayName, $admin->email));
+        $adminInterface = $this->enableAdminInterface($io);
+        $io->success(\sprintf('Quire is installed. %s (%s) is the admin.', $admin->displayName, $admin->email).($adminInterface ? \sprintf(' Manage the site at %s.', $this->adminPrefix) : ''));
 
         if ($generated) {
             $io->warning(\sprintf('The admin\'s password is: %s', $password));
@@ -133,6 +145,35 @@ final readonly class InstallCommand
         }
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * @return bool Whether the site has the admin interface
+     */
+    private function enableAdminInterface(SymfonyStyle $io): bool
+    {
+        if (!$this->extensions->has(self::ADMIN_EXTENSION)) {
+            return false;
+        }
+
+        if ($this->manager->isEnabled(self::ADMIN_EXTENSION)) {
+            return true;
+        }
+
+        if (null !== $this->manager->readOnlyReason()) {
+            $io->note(\sprintf('The admin interface isn\'t enabled: %s', $this->manager->readOnlyReason()));
+
+            return false;
+        }
+
+        // In its own process: enabling rebuilds the application, which this process can't use any more.
+        if (0 !== ($this->run)([PhpBinary::path(), $this->projectDir.'/bin/console', 'quire:extension:enable', self::ADMIN_EXTENSION, '--no-interaction', '--env='.$this->environment], $io->write(...))) {
+            $io->warning(\sprintf('Enabling the admin interface failed; see the output above. Enable it with "bin/console quire:extension:enable %s".', self::ADMIN_EXTENSION));
+
+            return false;
+        }
+
+        return true;
     }
 
     private static function text(mixed $value): string

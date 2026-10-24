@@ -28,6 +28,7 @@ use Quire\Formatter\SourceProcessorInterface;
 use Quire\Jobs\Job;
 use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\PermissionsPass;
+use Quire\Routing\ExtensionRouteLoader;
 use Quire\Settings\SettingValidatorInterface;
 use Quire\Storage\Internal\DiskConfig;
 use Quire\Storage\StorageDisks;
@@ -82,6 +83,14 @@ final class QuireBundle extends AbstractBundle
                             ->validate()
                                 ->ifTrue(static fn (mixed $prefix): bool => !\is_string($prefix) || 1 !== preg_match('#^(?:/[a-z0-9._~-]+)*$#', $prefix))
                                 ->thenInvalid('"quire.routing.prefix" must be empty or a path such as "/cms": starting with "/", in lowercase, without a trailing "/".')
+                            ->end()
+                        ->end()
+                        ->scalarNode('admin_prefix')
+                            ->info('Path of the admin interface: the routes extensions register in the "admin" group, e.g. "/cms-admin" when the application uses "/admin" itself.')
+                            ->defaultValue('/admin')
+                            ->validate()
+                                ->ifTrue(static fn (mixed $prefix): bool => !\is_string($prefix) || 1 !== preg_match('#^(?:/[a-z0-9._~-]+)+$#', $prefix))
+                                ->thenInvalid('"quire.routing.admin_prefix" must be a path such as "/admin": starting with "/", in lowercase, without a trailing "/".')
                             ->end()
                         ->end()
                     ->end()
@@ -259,9 +268,10 @@ final class QuireBundle extends AbstractBundle
     {
         /** @var array{pinned: bool, enabled: list<string>} $extensions */
         $extensions = $config['extensions'];
-        /** @var array{prefix: string} $routing */
+        /** @var array{prefix: string, admin_prefix: string} $routing */
         $routing = $config['routing'];
         $builder->setParameter('quire.routing.prefix', $routing['prefix']);
+        $builder->setParameter(ExtensionRouteLoader::ADMIN_PREFIX_PARAMETER, $routing['admin_prefix']);
 
         /** @var array{login: ?bool, host: array{enabled: bool, roles: array<string, list<string>>, display_name: ?string, email: ?string}} $users */
         $users = $config['users'];

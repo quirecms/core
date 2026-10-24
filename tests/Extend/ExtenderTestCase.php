@@ -41,4 +41,13 @@ abstract class ExtenderTestCase extends TestCase
 
         self::fail('The extender accepted an invalid configuration.');
     }
+
+    /**
+     * A parameter the extenders set. (Read through all(), so static analysis doesn't take its type from the
+     * application's container.).
+     */
+    protected function parameter(string $name): mixed
+    {
+        return $this->container->getParameterBag()->all()[$name] ?? null;
+    }
 }

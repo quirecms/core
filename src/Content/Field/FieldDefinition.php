@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Quire\Content\Field;
 
+use Quire\Content\Field\Type\RelationField;
+
 /**
  * A field declared for a content type: its type, rules, and how admin interfaces should present it.
  *
@@ -99,6 +101,34 @@ final readonly class FieldDefinition
     public function expected(): string
     {
         return $this->implementation()->expected($this);
+    }
+
+    /**
+     * For relation fields: the content types it links to; empty for other fields.
+     *
+     * @return list<string>
+     */
+    public function relationTypes(): array
+    {
+        return FieldStorage::Relation === $this->storage() ? RelationField::targetTypes($this) : [];
+    }
+
+    /**
+     * For relation fields: whether it links to a list of items rather than one.
+     */
+    public function isMultipleRelation(): bool
+    {
+        return FieldStorage::Relation === $this->storage() && RelationField::isMultiple($this);
+    }
+
+    /**
+     * For relation fields that link to a list: the most items it may have; null for no limit.
+     */
+    public function relationLimit(): ?int
+    {
+        $limit = $this->options[RelationField::LIMIT] ?? null;
+
+        return $this->isMultipleRelation() && \is_int($limit) ? $limit : null;
     }
 
     /**

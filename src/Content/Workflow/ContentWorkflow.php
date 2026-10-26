@@ -82,6 +82,21 @@ final readonly class ContentWorkflow
     }
 
     /**
+     * A transition that leads from one status to another, e.g. "unpublish" from "published" to "draft";
+     * null when none does.
+     */
+    public function transitionBetween(string $from, string $to): ?string
+    {
+        foreach ($this->machine->getDefinition()->getTransitions() as $transition) {
+            if (\in_array($from, $transition->getFroms(), true) && ($transition->getTos()[0] ?? null) === $to) {
+                return $transition->getName();
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * The status the transition leads to from the item's current status, or null when there's no such transition.
      */
     public function target(Content $content, string $transition): ?string

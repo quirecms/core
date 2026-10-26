@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Doctrine\Migrations\DependencyFactory;
 use Doctrine\Migrations\Tools\Console\Command as MigrationCommand;
 use Quire\Audit\AuditLog;
+use Quire\Audit\AuditUndo;
 use Quire\Backup\BackupLog;
 use Quire\Content\Revision\PendingRevisionComments;
 use Quire\Content\Revision\PendingRevisionWriter;
@@ -86,6 +87,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
             '../src/Backup/{BackupContents,BackupRun}.php',
             '../src/User/{User,Role,CreateUser,UpdateUser,Invitation}.php',
+            '../src/Audit/UndoPlan.php',
             '../src/User/Preference/{PreferenceDefinition,InvalidPreferenceException}.php',
             '../src/Permission/UserAccess.php',
             '../src/User/Exception/',
@@ -113,6 +115,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ObjectStore::class)->public();
     // For extensions recording their actions.
     $services->set(AuditLog::class)->public();
+    // For admin interfaces: undoing what the audit log records.
+    $services->set(AuditUndo::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
     $services->set(PendingRevisionComments::class)->public();

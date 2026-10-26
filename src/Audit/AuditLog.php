@@ -178,6 +178,41 @@ final class AuditLog implements ResetInterface
         return new AuditPage(array_map($this->entry(...), $rows), $page, $perPage, $total);
     }
 
+    /**
+     * How many entries match on each day, in a time zone, e.g. for bars of the last 30 days. Days without
+     * any are left out.
+     *
+     * @return array<string, int> By day ("2026-10-26"), oldest first
+     */
+    public function countByDay(AuditQuery $query, \DateTimeZone $timezone): array
+    {
+        [$where, $parameters] = $this->where($query);
+        $counts = [];
+
+        foreach ($this->connection->fetchAllKeyValue("SELECT to_char(last_at AT TIME ZONE ?, 'YYYY-MM-DD') AS day, count(*) FROM quire.audit_entry".$where.' GROUP BY 1 ORDER BY 1', [$timezone->getName(), ...$parameters]) as $day => $count) {
+            $counts[(string) $day] = (int) $this->scalar($count);
+        }
+
+        return $counts;
+    }
+
+    /**
+     * How many entries match of each action, e.g. to filter by what was done.
+     *
+     * @return array<string, int> By action, most first
+     */
+    public function countByAction(AuditQuery $query): array
+    {
+        [$where, $parameters] = $this->where($query);
+        $counts = [];
+
+        foreach ($this->connection->fetchAllKeyValue('SELECT action, count(*) FROM quire.audit_entry'.$where.' GROUP BY 1 ORDER BY 2 DESC, 1', $parameters) as $action => $count) {
+            $counts[(string) $action] = (int) $this->scalar($count);
+        }
+
+        return $counts;
+    }
+
     public function get(string $id): ?AuditEntry
     {
         if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
@@ -249,6 +284,15 @@ final class AuditLog implements ResetInterface
         if ([] !== $query->exceptActions) {
             $conditions[] = 'action NOT IN ('.implode(', ', array_fill(0, \count($query->exceptActions), '?')).')';
             array_push($parameters, ...$query->exceptActions);
+        }
+
+        $text = trim((string) $query->text);
+
+        if ('' !== $text) {
+            // No index: the activity is searched within a period, which the index on last_at narrows.
+            $pattern = '%'.addcslashes($text, '%_\\').'%';
+            $conditions[] = '(subject_label ILIKE ? OR actor_name ILIKE ? OR action ILIKE ?'.([] === $query->textActions ? '' : ' OR action IN ('.implode(', ', array_fill(0, \count($query->textActions), '?')).')').')';
+            array_push($parameters, $pattern, $pattern, $pattern, ...$query->textActions);
         }
 
         if ($query->since instanceof \DateTimeImmutable) {

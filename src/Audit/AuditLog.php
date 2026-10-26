@@ -32,6 +32,9 @@ final class AuditLog implements ResetInterface
 
     public const string RETENTION_SETTING = 'quire.audit.retention_days';
 
+    /** Times compared with the stored ones keep their fractions: cut to the second, "until" could leave out its own second */
+    private const string PRECISE = 'Y-m-d\\TH:i:s.uP';
+
     public const string ABILITY = 'quire.audit.view';
 
     private const string COLUMNS = 'id, occurred_at, last_at, repeats, action, actor_id, actor_name, origin, via, subject_type, subject_id, subject_label, details, command, correlation_id';
@@ -213,6 +216,29 @@ final class AuditLog implements ResetInterface
         return $counts;
     }
 
+    /**
+     * Who did the entries that match, most first, e.g. to filter by person.
+     *
+     * @return array<string, array{name: ?string, count: int}> By actor's ID; entries without an actor are left out
+     */
+    public function countByActor(AuditQuery $query, int $limit = 10): array
+    {
+        [$where, $parameters] = $this->where($query);
+        $counts = [];
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT actor_id, max(actor_name) AS name, count(*) AS n FROM quire.audit_entry'.('' === $where ? ' WHERE' : $where.' AND').' actor_id IS NOT NULL GROUP BY 1 ORDER BY 3 DESC, 2 LIMIT ?',
+            [...$parameters, max(1, $limit)],
+        );
+
+        foreach ($rows as $row) {
+            if (\is_string($row['actor_id'])) {
+                $counts[$row['actor_id']] = ['name' => \is_string($row['name']) ? $row['name'] : null, 'count' => (int) $this->scalar($row['n'])];
+            }
+        }
+
+        return $counts;
+    }
+
     public function get(string $id): ?AuditEntry
     {
         if (1 !== preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', $id)) {
@@ -297,12 +323,12 @@ final class AuditLog implements ResetInterface
 
         if ($query->since instanceof \DateTimeImmutable) {
             $conditions[] = 'last_at >= ?';
-            $parameters[] = $query->since->format(\DATE_ATOM);
+            $parameters[] = $query->since->format(self::PRECISE);
         }
 
         if ($query->until instanceof \DateTimeImmutable) {
             $conditions[] = 'occurred_at < ?';
-            $parameters[] = $query->until->format(\DATE_ATOM);
+            $parameters[] = $query->until->format(self::PRECISE);
         }
 
         return [[] === $conditions ? '' : ' WHERE '.implode(' AND ', $conditions), $parameters];

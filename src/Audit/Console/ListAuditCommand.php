@@ -105,8 +105,8 @@ final readonly class ListAuditCommand
     private function jsonLines(SymfonyStyle $io, AuditQuery $query, int $limit): void
     {
         $written = 0;
-        // New entries would shift the pages.
-        $query = new AuditQuery($query->actorId, $query->subjectType, $query->subjectId, $query->action, $query->origin, $query->correlationId, $query->since, $query->until ?? new \DateTimeImmutable());
+        // New entries would shift the pages. Times are stored rounded to the second, so a moment ahead.
+        $query = new AuditQuery($query->actorId, $query->subjectType, $query->subjectId, $query->action, $query->origin, $query->correlationId, $query->since, $query->until ?? new \DateTimeImmutable('+1 second'), $query->exceptActions, $query->text, $query->textActions);
 
         for ($number = 1;; ++$number) {
             $page = $this->log->find($query, $number, 500);
@@ -116,23 +116,7 @@ final readonly class ListAuditCommand
                     return;
                 }
 
-                $io->writeln(json_encode([
-                    'id' => $entry->id,
-                    'occurred_at' => $entry->occurredAt->format(\DATE_ATOM),
-                    'last_at' => $entry->lastAt->format(\DATE_ATOM),
-                    'repeats' => $entry->repeats,
-                    'action' => $entry->action,
-                    'actor_id' => $entry->actorId,
-                    'actor_name' => $entry->actorName,
-                    'origin' => $entry->origin->value,
-                    'via' => $entry->via,
-                    'subject_type' => $entry->subjectType,
-                    'subject_id' => $entry->subjectId,
-                    'subject_label' => $entry->subjectLabel,
-                    'details' => (object) $entry->details,
-                    'command' => $entry->command,
-                    'correlation_id' => $entry->correlationId,
-                ], \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE), SymfonyStyle::OUTPUT_RAW);
+                $io->writeln(json_encode($entry->toArray(), \JSON_THROW_ON_ERROR | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE), SymfonyStyle::OUTPUT_RAW);
                 ++$written;
             }
 

@@ -29,6 +29,9 @@ use Quire\User\UserRepository;
  */
 final readonly class AuditUndo
 {
+    /** What can be undone, by its action in the log */
+    private const array UNDOABLE = ['content.transitioned', 'content.trashed', 'content.restored', 'user.suspended', 'user.activated', 'user.roles_changed', 'role.abilities_changed', 'role.renamed', 'setting.changed', 'theme.changed'];
+
     public function __construct(
         private Actions $actions,
         private ContentRepository $content,
@@ -47,8 +50,14 @@ final readonly class AuditUndo
      */
     public function plan(AuditEntry $entry): ?UndoPlan
     {
+        if (!\in_array($entry->action, self::UNDOABLE, true) || null === $entry->subjectType) {
+            return null;
+        }
+
         // Only the latest about its subject: what came after built on it (signing in doesn't count).
-        if (null === $entry->subjectType || $this->log->find(new AuditQuery(subjectType: $entry->subjectType, subjectId: $entry->subjectId, exceptActions: ['user.signed_in']), perPage: 1)->entries[0]->id !== $entry->id) {
+        $latest = $this->log->find(new AuditQuery(subjectType: $entry->subjectType, subjectId: $entry->subjectId, exceptActions: ['user.signed_in']), perPage: 1)->entries[0] ?? null;
+
+        if ($latest?->id !== $entry->id) {
             return null;
         }
 
@@ -71,8 +80,8 @@ final readonly class AuditUndo
             'role.abilities_changed' => null !== $role && $this->permissions->hasRole($role) ? $this->abilitiesBack($role, $this->strings($details['granted'] ?? []), $this->strings($details['revoked'] ?? [])) : null,
             'role.renamed' => null !== $role && null !== $from && ($this->permissions->roles()[$role] ?? null) === $to ? new UndoPlan('role.rename', ['role' => $role, 'label' => $from]) : null,
             'setting.changed' => $this->settingBack($entry),
-            'theme.changed' => $this->settings->get(Themes::SETTING) === ($details['to'] ?? null) ? new UndoPlan('theme.use', ['theme' => $from]) : null,
-            default => null,
+            // The theme.
+            default => $this->settings->get(Themes::SETTING) === ($details['to'] ?? null) ? new UndoPlan('theme.use', ['theme' => $from]) : null,
         };
     }
 

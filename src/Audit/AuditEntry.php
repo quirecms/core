@@ -42,4 +42,30 @@ final readonly class AuditEntry
         public \DateTimeImmutable $lastAt,
     ) {
     }
+
+    /**
+     * The entry as data, e.g. one line of a JSON Lines export: what "quire:audit:list --format jsonl" prints.
+     *
+     * @return array<string, mixed>
+     */
+    public function toArray(): array
+    {
+        return [
+            'id' => $this->id,
+            'occurred_at' => $this->occurredAt->format(\DATE_ATOM),
+            'last_at' => $this->lastAt->format(\DATE_ATOM),
+            'repeats' => $this->repeats,
+            'action' => $this->action,
+            'actor_id' => $this->actorId,
+            'actor_name' => $this->actorName,
+            'origin' => $this->origin->value,
+            'via' => $this->via,
+            'subject_type' => $this->subjectType,
+            'subject_id' => $this->subjectId,
+            'subject_label' => $this->subjectLabel,
+            'details' => (object) $this->details,
+            'command' => $this->command,
+            'correlation_id' => $this->correlationId,
+        ];
+    }
 }

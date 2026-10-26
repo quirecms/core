@@ -7,6 +7,8 @@ namespace Quire\Content\Query\Internal;
 use Doctrine\DBAL\Connection;
 use Doctrine\DBAL\ParameterType;
 use Psr\Container\ContainerInterface;
+use Quire\Content\Check\ContentChecker;
+use Quire\Content\Check\Level;
 use Quire\Content\Content;
 use Quire\Content\ContentRepository;
 use Quire\Content\Field\FieldStorage;
@@ -19,6 +21,7 @@ use Quire\Content\Query\Exception\InvalidQueryException;
 use Quire\Content\Query\RelationLoaderInterface;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Permission\Internal\Viewer;
+use Quire\Settings\Settings;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Twig\Markup;
 
@@ -47,6 +50,12 @@ final readonly class QueryRunner
 
     private QueryFields $fields;
 
+    /** What countBy() counts: columns with few values */
+    private const array FACET_COLUMNS = ['type', 'status', 'locale', 'author_id', 'parent_id'];
+
+    /** Periods of dates, and how a period is written: "2026", "2026-10", "2026-W43", "2026-10-26" */
+    private const array PERIODS = ['year' => 'YYYY', 'month' => 'YYYY-MM', 'week' => 'IYYY-"W"IW', 'day' => 'YYYY-MM-DD'];
+
     /**
      * @param array<string, mixed> $config
      * @param ContainerInterface   $services The scope, visibility and relation classes, set by {@see QueryServicesPass}
@@ -58,6 +67,8 @@ final readonly class QueryRunner
         array $config,
         private ContainerInterface $services,
         private Viewer $viewer,
+        private Settings $settings,
+        private ContentChecker $checker,
         /** @var array<string, array<string, list<array{type: string, field: string}>>> Inverses of relation fields: target type → name → sources */
         #[Autowire(param: RelationFieldsPass::INVERSES_PARAMETER)]
         private array $inverses = [],
@@ -228,6 +239,72 @@ final readonly class QueryRunner
         [$sql, $params] = $query->toSql();
 
         return $this->loadRelations($query, $this->addSnippets($query, array_map($this->hydrate(...), $this->rows($sql, $params))));
+    }
+
+    /**
+     * What a facet of {@see ContentQuery::countBy()} groups by: an SQL expression, its parameters, and a
+     * join (with its parameters) for properties that give an item several values.
+     *
+     * @param list<string> $types
+     *
+     * @return array{select: string, params: list<mixed>, join: string, joinParams: list<mixed>}
+     *
+     * @throws InvalidQueryException
+     */
+    public function facet(array $types, string $property, ?string $per): array
+    {
+        $dates = ['published_at', 'created_at', 'updated_at'];
+
+        if (null !== $per && (!\in_array($property, $dates, true) || !isset(self::PERIODS[$per]))) {
+            throw new InvalidQueryException(\in_array($property, $dates, true) ? \sprintf('Count dates per year, month, week or day, not per "%s".', $per) : \sprintf('Only dates (%s) are counted per period.', implode(', ', $dates)));
+        }
+
+        return match (true) {
+            \in_array($property, $dates, true) => null === $per
+                ? throw new InvalidQueryException(\sprintf('Count "%s" per year, month, week or day.', $property)) /* In the site's time zone: a post of 23:30 on the 31st belongs to the month its readers saw. */ : ['select' => \sprintf('to_char(date_trunc(?, c.%s AT TIME ZONE ?), ?)', $property), 'params' => [$per, $this->timezone(), self::PERIODS[$per]], 'join' => '', 'joinParams' => []],
+            \in_array($property, self::FACET_COLUMNS, true) => ['select' => \sprintf('c.%s::text', $property), 'params' => [], 'join' => '', 'joinParams' => []],
+            str_starts_with($property, 'fields.') => ['params' => [], ...$this->fields->facet($types, substr($property, \strlen('fields.')))],
+            'checks' === $property => ['select' => 'k.check_id', 'params' => [], 'join' => 'JOIN quire.content_check_result k ON k.content_id = c.id AND k.check_id = ANY(CAST(? AS text[]))', 'joinParams' => ['{'.implode(',', array_map(static fn (string $id): string => '"'.$id.'"', $this->activeChecks())).'}']],
+            default => throw new InvalidQueryException(\sprintf('Content can\'t be counted by "%s". Use one of: %s; %s per period; a filterable field as "fields.<name>"; or checks.', $property, implode(', ', self::FACET_COLUMNS), implode(', ', $dates))),
+        };
+    }
+
+    /**
+     * @param list<mixed> $params
+     *
+     * @return array<int|string, int>
+     */
+    public function facetCounts(string $sql, array $params): array
+    {
+        $counts = [];
+
+        foreach ($this->connection->fetchAllNumeric($sql, $params, $this->parameterTypes($params)) as [$value, $count]) {
+            if (\is_scalar($value) && is_numeric($count)) {
+                $counts[\is_bool($value) ? ($value ? 'true' : 'false') : (string) $value] = (int) $count;
+            }
+        }
+
+        return $counts;
+    }
+
+    /**
+     * The checks that are on, at this level or of this ID.
+     *
+     * @return list<string>
+     */
+    public function activeChecks(?Level $level = null, ?string $check = null): array
+    {
+        return array_values(array_map(
+            static fn (array $definition): string => $definition['id'],
+            array_filter($this->checker->checks(), static fn (array $definition): bool => null !== $definition['level'] && (!$level instanceof Level || $level === $definition['level']) && (null === $check || $check === $definition['id'])),
+        ));
+    }
+
+    private function timezone(): string
+    {
+        $timezone = $this->settings->get('site.timezone');
+
+        return \is_string($timezone) && '' !== $timezone ? $timezone : 'UTC';
     }
 
     public function count(ContentQuery $query): int

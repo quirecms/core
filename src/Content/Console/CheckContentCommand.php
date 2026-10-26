@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Content\Console;
 
 use Quire\Content\Check\CheckResult;
+use Quire\Content\Check\CheckResults;
 use Quire\Content\Check\ContentChecker;
 use Quire\Content\Check\Level;
 use Quire\Content\ContentRepository;
@@ -24,6 +25,10 @@ use Symfony\Component\Console\Style\SymfonyStyle;
         <info>%command.full_name% --id=0192b6a0-…</info>
         <info>%command.full_name% --strict</info>             warnings fail it too
         <info>%command.full_name% --list</info>               the checks, and their levels
+        <info>%command.full_name% --store</info>              every item, storing what's found for the admin's lists
+
+        Admin lists show and filter by stored findings. Items are checked when they're saved and every
+        night; --store checks them now, e.g. after an upgrade, with items in any status unless --status says.
 
         It exits with 1 when a check finds an error (with --strict, a warning too). Change the level of a
         check with the setting "quire.content.check_levels", e.g. {"core.alt-text": "error"}.
@@ -37,6 +42,7 @@ final readonly class CheckContentCommand
         private ContentChecker $checker,
         private ContentRepository $content,
         private ContentTypeRegistry $types,
+        private CheckResults $results,
     ) {
     }
 
@@ -52,8 +58,10 @@ final readonly class CheckContentCommand
         bool $strict = false,
         #[Option(description: 'List the checks and their levels instead')]
         bool $list = false,
+        #[Option(description: 'Store what the checks find, as when items are saved; items in any status unless --status says')]
+        bool $store = false,
     ): int {
-        return ConsoleErrors::handle($io, function () use ($io, $type, $status, $id, $strict, $list): int {
+        return ConsoleErrors::handle($io, function () use ($io, $type, $status, $id, $strict, $list, $store): int {
             if ($list) {
                 $io->table(['Check', 'What it checks', 'Level', 'Types', 'From'], array_map(static fn (array $check): array => [
                     $check['id'], $check['label'], $check['level']->value ?? 'off', null === $check['types'] ? 'all' : implode(', ', $check['types']), $check['owner'],
@@ -65,10 +73,10 @@ final readonly class CheckContentCommand
             $rows = [];
             [$errors, $warnings, $checked] = [0, 0, 0];
 
-            foreach ($this->items($type, $status, $id) as $item) {
+            foreach ($this->items($type, $status, $id, $store) as $item) {
                 ++$checked;
 
-                foreach ($this->checker->check($item)->results as $result) {
+                foreach (($store ? $this->results->refresh($item) : $this->checker->check($item))->results as $result) {
                     Level::Error === $result->level ? ++$errors : ++$warnings;
                     $rows[] = [$item->title, $item->id, $result->level->value, $this->where($result), $result->finding->message];
                 }
@@ -89,7 +97,7 @@ final readonly class CheckContentCommand
     /**
      * @return iterable<\Quire\Content\Content>
      */
-    private function items(?string $type, ?string $status, ?string $id): iterable
+    private function items(?string $type, ?string $status, ?string $id, bool $everyStatus): iterable
     {
         if (null !== $id) {
             yield $this->content->get($id);
@@ -98,7 +106,11 @@ final readonly class CheckContentCommand
         }
 
         $query = $this->content->query(...null === $type ? array_keys($this->types->all()) : [$type])->withoutVisibilityScope();
-        $query = null === $status ? $query->status(Status::PUBLISHED, Status::SCHEDULED) : $query->status($status);
+        $query = match (true) {
+            null !== $status => $query->status($status),
+            $everyStatus => $query,
+            default => $query->status(Status::PUBLISHED, Status::SCHEDULED),
+        };
 
         for ($page = 1;; ++$page) {
             $batch = $query->orderBy('created_at')->paginate($page, self::BATCH);

@@ -20,6 +20,9 @@ final readonly class ContentRepository
     /** @internal */
     public const string COLUMNS = 'id, type, status, locale, translation_group_id, title, slug, path, parent_id, position, excerpt, body, body_format, fields, author_id, version, published_at, created_at, updated_at, deleted_at';
 
+    /** The methods of ContentQuery that {@see toArray()} writes down */
+    private const array REPLAYED = ['where', 'whereSql', 'withIssues', 'published', 'search', 'scope', 'withoutVisibilityScope', 'withTrashed', 'onlyTrashed', 'select', 'join', 'with', 'orderBy', 'limit', 'offset'];
+
     public function __construct(
         private Connection $connection,
         private QueryRunner $queries,
@@ -36,6 +39,33 @@ final readonly class ContentRepository
     public function query(string $type, string ...$types): ContentQuery
     {
         return $this->queries->query([$type, ...array_values($types)]);
+    }
+
+    /**
+     * Makes a query again from what {@see ContentQuery::toArray()} wrote down, e.g. in a background job
+     * that acts on every item a list shows.
+     *
+     * Only for what Quire's or an extension's code wrote down: never from what a visitor sent, as it may
+     * hold SQL.
+     *
+     * @param array{types: non-empty-list<string>, template?: bool, calls?: list<array{0: string, 1: list<mixed>}>} $query
+     *
+     * @throws Query\Exception\InvalidQueryException
+     * @throws Type\Exception\UnknownContentTypeException
+     */
+    public function queryFromArray(array $query): ContentQuery
+    {
+        $made = $this->queries->query($query['types'], $query['template'] ?? false);
+
+        foreach ($query['calls'] ?? [] as [$method, $arguments]) {
+            if (!\in_array($method, self::REPLAYED, true)) {
+                throw new Query\Exception\InvalidQueryException(\sprintf('A query can\'t be made with "%s()".', $method));
+            }
+
+            $made = [$made, $method](...array_map(ContentQuery::decode(...), $arguments));
+        }
+
+        return $made;
     }
 
     public function find(string $id): ?Content

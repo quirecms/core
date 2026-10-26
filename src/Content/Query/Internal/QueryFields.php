@@ -85,6 +85,27 @@ final readonly class QueryFields
     }
 
     /**
+     * How a facet of a filterable field is counted: what to group by, and a join for lists and relations,
+     * which give an item several values.
+     *
+     * @param list<string> $types
+     *
+     * @return array{select: string, join: string, joinParams: list<mixed>}
+     *
+     * @throws InvalidQueryException
+     */
+    public function facet(array $types, string $name): array
+    {
+        $definition = $this->field($types, $name, 'filtered');
+
+        return match ($definition->storage()) {
+            FieldStorage::Relation => ['select' => 'fr.target_id::text', 'join' => 'JOIN quire.content_relation fr ON fr.source_id = c.id AND fr.field = ?', 'joinParams' => [$definition->name]],
+            FieldStorage::TextList => ['select' => 'fv.value', 'join' => \sprintf("CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(%1\$s) = 'array' THEN %1\$s END) AS fv(value)", FieldExpression::json($definition, 'c.fields')), 'joinParams' => []],
+            default => ['select' => FieldExpression::value($definition, 'c.fields'), 'join' => '', 'joinParams' => []],
+        };
+    }
+
+    /**
      * @param list<string> $types
      * @param list<string> $aliases Names of the query's selected values, which can be sorted by too
      *

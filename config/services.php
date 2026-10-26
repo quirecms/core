@@ -66,6 +66,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Storage/{Disk,StoredObject}.php',
             '../src/Storage/Job/CollectGarbage.php',
             '../src/Content/Job/PublishDueContent.php',
+            '../src/Content/Check/Job/{RecheckContent,RecheckLinkingContent}.php',
             '../src/Audit/{AuditEntry,AuditPage,AuditQuery,Origin}.php',
             '../src/Audit/Event/',
             '../src/Audit/Job/PruneAuditLog.php',

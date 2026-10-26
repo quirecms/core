@@ -10,6 +10,7 @@ use Quire\Content\Check\Internal\AltTextCheck;
 use Quire\Content\Check\Internal\ExcerptCheck;
 use Quire\Content\Check\Internal\LinksCheck;
 use Quire\Content\Check\Internal\TitleLengthCheck;
+use Quire\Content\Check\Job\RecheckContent;
 use Quire\Content\ContentWriter;
 use Quire\Content\Job\PublishDueContent;
 use Quire\Content\Query\Relation;
@@ -138,7 +139,8 @@ return [
     new Extend\Jobs()
         ->schedule('quire.publish-due', 'every 1 minute', PublishDueContent::class)
         ->schedule('quire.collect-garbage', '30 3 * * *', CollectGarbage::class)
-        ->schedule('quire.prune-audit-log', '45 3 * * *', PruneAuditLog::class),
+        ->schedule('quire.prune-audit-log', '45 3 * * *', PruneAuditLog::class)
+        ->schedule('quire.recheck-content', '15 4 * * *', RecheckContent::class),
 
     new Extend\ContentWorkflow()
         ->status(Status::DRAFT)

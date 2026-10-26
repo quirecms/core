@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Content\Query;
 
+use Quire\Content\Check\Level;
 use Quire\Content\Content;
 use Quire\Content\ContentRepository;
 use Quire\Content\Query\Exception\InvalidQueryException;
@@ -33,7 +34,10 @@ use Quire\Content\Status;
  *
  * @implements \IteratorAggregate<int, Content>
  *
- * @phpstan-type Condition array{sql: string, params: list<mixed>}
+ * A query can be written down with {@see toArray()} and made again with
+ * {@see ContentRepository::queryFromArray()}, e.g. to run it in a background job.
+ *
+ * @phpstan-type Condition array{sql: string, params: list<mixed>, field?: string}
  */
 final class ContentQuery implements \IteratorAggregate
 {
@@ -80,6 +84,9 @@ final class ContentQuery implements \IteratorAggregate
 
     /** @var list<Content>|null Fetched when the query is iterated */
     private ?array $results = null;
+
+    /** @var list<array{0: string, 1: list<mixed>}> The methods called to make it, for {@see toArray()} */
+    private array $calls = [];
 
     /**
      * @internal Create queries with {@see ContentRepository::query()}
@@ -129,7 +136,85 @@ final class ContentQuery implements \IteratorAggregate
             throw new InvalidQueryException(\sprintf('The operator for "%s" must be a string such as ">=".', $field));
         }
 
-        return $this->withCondition($this->runner->fields()->condition($this->types, $field, $operator, $value));
+        return $this->withCondition($this->runner->fields()->condition($this->types, $field, $operator, $value), $field)
+            ->record('where', [$field, $operator, $value]);
+    }
+
+    /**
+     * The query without its filters on these fields, e.g. to count a facet's values whatever value of it
+     * is chosen: `$query->withoutWhere('status')->countBy('status')`. Takes off what {@see where()} and
+     * the methods that use it (status(), locale(), …) added, and "checks" what {@see withIssues()} did.
+     */
+    public function withoutWhere(string ...$fields): self
+    {
+        $query = clone $this;
+        $query->conditions = array_values(array_filter($this->conditions, static fn (array $condition): bool => !\in_array($condition['field'] ?? null, $fields, true)));
+        $query->calls = array_values(array_filter($this->calls, static fn (array $call): bool => !match ($call[0]) {
+            'where' => \in_array($call[1][0], $fields, true),
+            'withIssues' => \in_array('checks', $fields, true),
+            default => false,
+        }));
+
+        return $query;
+    }
+
+    /**
+     * Only items whose stored check results have findings (see {@see \Quire\Content\Check\CheckResults}),
+     * of checks at this level, or of this check. Checks the site turned off don't count.
+     *
+     *     ->withIssues()                          // something to look at
+     *     ->withIssues(Level::Error)              // blocks publishing
+     *     ->withIssues(check: 'core.alt-text')
+     */
+    public function withIssues(Level|string|null $level = null, ?string $check = null): self
+    {
+        $level = \is_string($level) ? Level::from($level) : $level;
+        $checks = $this->runner->activeChecks($level, $check);
+        $condition = [] === $checks
+            ? ['sql' => 'FALSE', 'params' => []]
+            : ['sql' => 'EXISTS (SELECT 1 FROM quire.content_check_result k WHERE k.content_id = c.id AND k.check_id = ANY(CAST(? AS text[])))', 'params' => ['{'.implode(',', array_map(static fn (string $id): string => '"'.$id.'"', $checks)).'}']];
+
+        return $this->withCondition($condition, 'checks')->record('withIssues', [$level?->value, $check]);
+    }
+
+    /**
+     * How many items match, for each value of a property: a facet. Items with several values, e.g. of a
+     * list field, count for each; items without a value don't count. Most items first, or for dates the
+     * latest first.
+     *
+     *     ->countBy('status')                         // ["published" => 40, "draft" => 10, …]
+     *     ->countBy('published_at', per: 'month')     // ["2026-10" => 12, "2026-09" => 30, …], in the site's time zone
+     *     ->countBy('fields.tags')                    // a list field: each tag
+     *     ->countBy('fields.topics')                  // a relation: by the linked item's ID
+     *     ->countBy('checks')                         // by check, of items with findings (see withIssues())
+     *
+     * Properties: type, status, locale, author_id, parent_id; published_at, created_at and updated_at
+     * per year, month, week or day; a filterable field as "fields.<name>"; and "checks". One query each.
+     *
+     * @param 'year'|'month'|'week'|'day'|null $per   For dates
+     * @param int                              $limit The most values to return
+     *
+     * @return array<int|string, int> Counts by value
+     *
+     * @throws InvalidQueryException
+     */
+    public function countBy(string $property, ?string $per = null, int $limit = 100): array
+    {
+        $facet = $this->runner->facet($this->types, $property, $per);
+        [$sql, $params] = $this->toSql('count');
+        $from = 'SELECT count(*) FROM quire.content c';
+        \assert(str_starts_with($sql, $from));
+
+        $sql = \sprintf(
+            'SELECT value, n FROM (SELECT %s AS value, count(DISTINCT c.id) AS n FROM quire.content c %s%s GROUP BY 1) f WHERE value IS NOT NULL ORDER BY %s LIMIT %d',
+            $facet['select'],
+            $facet['join'],
+            substr($sql, \strlen($from)),
+            null === $per ? 'n DESC, value ASC' : 'value DESC',
+            max(1, $limit),
+        );
+
+        return $this->runner->facetCounts($sql, [...$facet['params'], ...$facet['joinParams'], ...$params]);
     }
 
     /**
@@ -145,7 +230,7 @@ final class ContentQuery implements \IteratorAggregate
     {
         $this->assertNotTemplate('whereSql()');
 
-        return $this->withCondition(['sql' => '('.$sql.')', 'params' => $params]);
+        return $this->withCondition(['sql' => '('.$sql.')', 'params' => $params])->record('whereSql', [$sql, $params]);
     }
 
     /**
@@ -157,7 +242,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->publishedOnly = true;
 
-        return $query;
+        return $query->record('published', []);
     }
 
     /**
@@ -212,7 +297,7 @@ final class ContentQuery implements \IteratorAggregate
         $query->snippets = $snippets;
         $query->selects['search_rank'] = SearchSql::rank($parsed);
 
-        return $query;
+        return $query->record('search', [$terms, $prefix, $snippets]);
     }
 
     /**
@@ -228,6 +313,8 @@ final class ContentQuery implements \IteratorAggregate
 
         $query = clone $this->runner->scope($trusted, $name, array_values($arguments));
         $query->template = $this->template;
+        // The scope, not what it does: made again, the query applies it again.
+        $query->calls = [...$this->calls, ['scope', [$name, ...array_values($arguments)]]];
 
         return $query;
     }
@@ -245,7 +332,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->visibility = false;
 
-        return $query;
+        return $query->record('withoutVisibilityScope', []);
     }
 
     public function withTrashed(): self
@@ -254,7 +341,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->trashed = 'include';
 
-        return $query;
+        return $query->record('withTrashed', []);
     }
 
     public function onlyTrashed(): self
@@ -263,7 +350,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->trashed = 'only';
 
-        return $query;
+        return $query->record('onlyTrashed', []);
     }
 
     /**
@@ -293,7 +380,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->selects[$name] = ['sql' => $sql, 'params' => $params];
 
-        return $query;
+        return $query->record('select', [$name, $sql, $params]);
     }
 
     /**
@@ -320,7 +407,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->joins[] = ['sql' => $sql, 'params' => $params];
 
-        return $query;
+        return $query->record('join', [$sql, $params]);
     }
 
     /**
@@ -339,7 +426,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->relations = array_values(array_unique([...$this->relations, ...array_values($relations)]));
 
-        return $query;
+        return $query->record('with', array_values($relations));
     }
 
     /**
@@ -362,7 +449,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->orders[] = ['sql' => $this->runner->fields()->sortExpression($this->types, $field, array_keys($this->selects)), 'direction' => $direction];
 
-        return $query;
+        return $query->record('orderBy', [$field, strtolower($direction)]);
     }
 
     /**
@@ -396,7 +483,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->limit = $limit;
 
-        return $query;
+        return $query->record('limit', [$limit]);
     }
 
     public function offset(int $offset): self
@@ -408,7 +495,7 @@ final class ContentQuery implements \IteratorAggregate
         $query = clone $this;
         $query->offset = $offset;
 
-        return $query;
+        return $query->record('offset', [$offset]);
     }
 
     /**
@@ -543,6 +630,26 @@ final class ContentQuery implements \IteratorAggregate
     }
 
     /**
+     * The query written down, as values JSON can hold: its types and the methods called to make it. Make
+     * it again with {@see ContentRepository::queryFromArray()}, e.g. in a background job.
+     *
+     * It holds what the query's code wrote, e.g. the SQL of whereSql(): keep it on the server, and never
+     * make a query from what a visitor sent.
+     *
+     * @return array{types: non-empty-list<string>, template: bool, calls: list<array{0: string, 1: list<mixed>}>}
+     *
+     * @throws InvalidQueryException when an argument can't be written down, e.g. an object passed to a scope
+     */
+    public function toArray(): array
+    {
+        return [
+            'types' => $this->types,
+            'template' => $this->template,
+            'calls' => array_map(static fn (array $call): array => [$call[0], array_map(self::encode(...), $call[1])], $this->calls),
+        ];
+    }
+
+    /**
      * @internal
      *
      * @param 'rows'|'count'|'page' $mode Page mode adds the total count as "_total"
@@ -644,14 +751,52 @@ final class ContentQuery implements \IteratorAggregate
     }
 
     /**
+     * Writes down an argument of a call for {@see toArray()}; {@see ContentRepository::queryFromArray()} reads it.
+     */
+    public static function encode(mixed $value): mixed
+    {
+        return match (true) {
+            null === $value, \is_scalar($value) => $value,
+            \is_array($value) => array_map(self::encode(...), $value),
+            $value instanceof \DateTimeInterface => ['@datetime' => $value->format('Y-m-d\TH:i:s.uP')],
+            $value instanceof \BackedEnum => $value->value,
+            default => throw new InvalidQueryException(\sprintf('The query can\'t be written down: it was made with %s, which isn\'t a value JSON can hold.', get_debug_type($value))),
+        };
+    }
+
+    /**
+     * Reads an argument that {@see encode()} wrote down.
+     */
+    public static function decode(mixed $value): mixed
+    {
+        return match (true) {
+            \is_array($value) && 1 === \count($value) && \is_string($value['@datetime'] ?? null) => new \DateTimeImmutable($value['@datetime']),
+            \is_array($value) => array_map(self::decode(...), $value),
+            default => $value,
+        };
+    }
+
+    /**
      * @param Condition $condition
      */
-    private function withCondition(array $condition): self
+    private function withCondition(array $condition, ?string $field = null): self
     {
         $query = clone $this;
-        $query->conditions[] = $condition;
+        $query->conditions[] = null === $field ? $condition : [...$condition, 'field' => $field];
 
         return $query;
+    }
+
+    /**
+     * Notes a call on a query this query's method just made.
+     *
+     * @param list<mixed> $arguments
+     */
+    private function record(string $method, array $arguments): self
+    {
+        $this->calls[] = [$method, $arguments];
+
+        return $this;
     }
 
     private function assertNotTemplate(string $method): void

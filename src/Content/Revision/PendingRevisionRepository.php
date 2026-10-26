@@ -65,6 +65,22 @@ final readonly class PendingRevisionRepository
     }
 
     /**
+     * Changes to be published in this time, the soonest first, e.g. for a calendar or a week's plan. Items
+     * in the trash are left out.
+     *
+     * @return list<PendingRevision>
+     */
+    public function scheduledBetween(\DateTimeImmutable $from, \DateTimeImmutable $to, int $limit = 200): array
+    {
+        $rows = $this->connection->fetchAllAssociative(
+            \sprintf('SELECT %s FROM quire.content_pending_revision p WHERE publish_at >= ? AND publish_at < ? AND EXISTS (SELECT 1 FROM quire.content c WHERE c.id = p.content_id AND c.deleted_at IS NULL) ORDER BY publish_at, id LIMIT ?', self::COLUMNS),
+            [$from->format(\DATE_ATOM), $to->format(\DATE_ATOM), max(1, $limit)],
+        );
+
+        return array_map($this->hydrate(...), $rows);
+    }
+
+    /**
      * Pending revisions waiting for a reviewer, of items not in the trash: e.g. for a reviewer's list of
      * work.
      *

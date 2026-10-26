@@ -246,6 +246,11 @@ final class AuditLog implements ResetInterface
             $parameters[] = $prefix ? addcslashes($query->action, '%_\\').'%' : $query->action;
         }
 
+        if ([] !== $query->exceptActions) {
+            $conditions[] = 'action NOT IN ('.implode(', ', array_fill(0, \count($query->exceptActions), '?')).')';
+            array_push($parameters, ...$query->exceptActions);
+        }
+
         if ($query->since instanceof \DateTimeImmutable) {
             $conditions[] = 'last_at >= ?';
             $parameters[] = $query->since->format(\DATE_ATOM);

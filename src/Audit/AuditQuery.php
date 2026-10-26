@@ -12,7 +12,8 @@ namespace Quire\Audit;
 final readonly class AuditQuery
 {
     /**
-     * @param string|null $action An action, e.g. "user.suspended", or a prefix ending with a dot, e.g. "content."
+     * @param string|null  $action        An action, e.g. "user.suspended", or a prefix ending with a dot, e.g. "content."
+     * @param list<string> $exceptActions Actions left out, e.g. ["user.signed_in"] for what people did
      */
     public function __construct(
         public ?string $actorId = null,
@@ -23,6 +24,7 @@ final readonly class AuditQuery
         public ?string $correlationId = null,
         public ?\DateTimeImmutable $since = null,
         public ?\DateTimeImmutable $until = null,
+        public array $exceptActions = [],
     ) {
     }
 }

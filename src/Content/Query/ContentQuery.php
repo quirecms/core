@@ -143,7 +143,8 @@ final class ContentQuery implements \IteratorAggregate
     /**
      * The query without its filters on these fields, e.g. to count a facet's values whatever value of it
      * is chosen: `$query->withoutWhere('status')->countBy('status')`. Takes off what {@see where()} and
-     * the methods that use it (status(), locale(), …) added, and "checks" what {@see withIssues()} did.
+     * the methods that use it (status(), locale(), …) added, what {@see whereSql()} added for these
+     * fields, and "checks" what {@see withIssues()} did.
      */
     public function withoutWhere(string ...$fields): self
     {
@@ -151,6 +152,7 @@ final class ContentQuery implements \IteratorAggregate
         $query->conditions = array_values(array_filter($this->conditions, static fn (array $condition): bool => !\in_array($condition['field'] ?? null, $fields, true)));
         $query->calls = array_values(array_filter($this->calls, static fn (array $call): bool => !match ($call[0]) {
             'where' => \in_array($call[1][0], $fields, true),
+            'whereSql' => \in_array($call[1][2] ?? null, $fields, true),
             'withIssues' => \in_array('checks', $fields, true),
             default => false,
         }));
@@ -225,12 +227,13 @@ final class ContentQuery implements \IteratorAggregate
      * Not available in templates: wrap SQL in a scope (see {@see \Quire\Extend\Query::scope()}).
      *
      * @param list<mixed> $params
+     * @param string|null $field  What it filters by, e.g. "status", so {@see withoutWhere()} takes it off too
      */
-    public function whereSql(string $sql, array $params = []): self
+    public function whereSql(string $sql, array $params = [], ?string $field = null): self
     {
         $this->assertNotTemplate('whereSql()');
 
-        return $this->withCondition(['sql' => '('.$sql.')', 'params' => $params])->record('whereSql', [$sql, $params]);
+        return $this->withCondition(['sql' => '('.$sql.')', 'params' => $params], $field)->record('whereSql', [$sql, $params, $field]);
     }
 
     /**

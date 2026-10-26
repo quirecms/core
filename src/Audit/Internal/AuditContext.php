@@ -117,12 +117,14 @@ final class AuditContext implements ResetInterface
     }
 
     /**
-     * The signed-in user; none in console commands and jobs. Only looked up: users of a host application
-     * get their Quire user on their first request (see {@see CurrentUser}), which is recorded too.
+     * The signed-in user: in a request, or in a job that acts for someone, e.g. one that takes a list's
+     * action on all the items that match; none in console commands and other jobs. Only looked up: users
+     * of a host application get their Quire user on their first request (see {@see CurrentUser}), which
+     * is recorded too.
      */
     public function user(): ?User
     {
-        $user = Origin::Web === $this->origin() ? $this->security->getUser() : null;
+        $user = Origin::Console === $this->origin() ? null : $this->security->getUser();
 
         return match (true) {
             $user instanceof User, !$user instanceof UserInterface => $user,

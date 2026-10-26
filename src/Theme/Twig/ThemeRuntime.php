@@ -11,6 +11,7 @@ use Quire\Theme\Exception\AssetNotFoundException;
 use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Slots;
 use Quire\Theme\ThemeAssets;
+use Quire\Theme\ThemePreview;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\RequestStack;
 use Twig\Error\RuntimeError;
@@ -33,6 +34,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
         #[Autowire(param: ExtensionBooter::BOOT_ORDER_PARAMETER)]
         private array $extensions,
         private RequestStack $requests,
+        private ThemePreview $preview,
     ) {
     }
 
@@ -60,6 +62,11 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
      */
     public function setting(string $key): mixed
     {
+        // A previewed theme's own settings aren't declared: at their defaults.
+        if (\array_key_exists($key, $this->preview->settings())) {
+            return $this->preview->settings()[$key];
+        }
+
         if (!$this->schema->has($key) || !$this->schema->get($key)->exposed) {
             throw new RuntimeError(\sprintf('The setting "%s" isn\'t available to templates. Settings are, when they\'re declared with "exposed: true", or by a theme.', $key));
         }

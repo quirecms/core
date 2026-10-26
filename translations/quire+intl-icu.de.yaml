@@ -60,3 +60,6 @@
 "Seeing as someone else": "Ansicht als jemand anderes"
 "You’re seeing this as {name}: nothing can be changed.": "Du siehst das als {name}: Nichts kann geändert werden."
 "Stop seeing as {name}": "Nicht mehr als {name} ansehen"
+"Theme preview": "Theme-Vorschau"
+"You’re previewing the theme “{theme}”: only you see it.": "Du siehst das Theme „{theme}“ in der Vorschau: Nur du siehst es."
+"Stop the preview": "Vorschau beenden"

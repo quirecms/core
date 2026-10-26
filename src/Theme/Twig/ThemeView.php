@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Theme\Twig;
 
 use Quire\Settings\Settings;
+use Quire\Theme\ThemePreview;
 use Quire\Theme\Themes;
 
 /**
@@ -17,6 +18,7 @@ final readonly class ThemeView
     public function __construct(
         private Themes $themes,
         private Settings $settings,
+        private ThemePreview $preview,
     ) {
     }
 
@@ -45,8 +47,10 @@ final readonly class ThemeView
 
         foreach (array_reverse($this->themes->chain()) as $id) {
             $prefix = 'theme.'.$id.'.';
+            // A previewed theme's settings aren't declared: at their defaults.
+            $values = [...$this->settings->all($prefix), ...array_filter($this->preview->settings(), static fn (string $key): bool => str_starts_with($key, $prefix), \ARRAY_FILTER_USE_KEY)];
 
-            foreach ($this->settings->all($prefix) as $key => $value) {
+            foreach ($values as $key => $value) {
                 $settings[substr($key, \strlen($prefix))] = $value;
             }
         }

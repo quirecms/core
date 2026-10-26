@@ -72,6 +72,16 @@ final class Settings implements ExtenderInterface
         return $this;
     }
 
+    /**
+     * @internal What it declares, by key, with defaults, e.g. for previewing a theme
+     *
+     * @return array<string, mixed>
+     */
+    public function defaults(): array
+    {
+        return array_column($this->definitions, 'default', 'key');
+    }
+
     public function extend(ExtenderContext $context): void
     {
         $container = $context->container();

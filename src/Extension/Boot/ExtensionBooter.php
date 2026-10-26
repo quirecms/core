@@ -22,7 +22,9 @@ use Quire\Extension\ResolvedExtensions;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Exception\ThemeException;
 use Quire\Theme\Internal\ThemeChain;
+use Quire\Theme\Internal\ThemePreviews;
 use Quire\Theme\Slots;
+use Quire\Theme\ThemePreview;
 use Quire\Theme\Themes;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
@@ -124,6 +126,7 @@ final readonly class ExtensionBooter
         }
 
         $this->addTranslations($container, $resolved, $themes);
+        $container->setParameter(ThemePreview::PARAMETER, ThemePreviews::analyze($this->installed->themes(), $bootOrder));
 
         $container->setParameter(Themes::ACTIVE_PARAMETER, $activeTheme);
         $container->setParameter(Themes::CHAIN_PARAMETER, array_map(static fn (ExtensionManifest $theme): array => ['id' => $theme->id, 'path' => $theme->path], $themes));
@@ -206,7 +209,10 @@ final readonly class ExtensionBooter
     {
         $paths = [];
 
-        foreach ([...$resolved->bootOrder, ...array_reverse($themes)] as $manifest) {
+        // First, so they never win: the other installed themes', for previewing them.
+        $others = array_values(array_filter($this->installed->themes(), static fn (ExtensionManifest $theme): bool => !\in_array($theme, $themes, true)));
+
+        foreach ([...$others, ...$resolved->bootOrder, ...array_reverse($themes)] as $manifest) {
             $directory = $manifest->path.\DIRECTORY_SEPARATOR.'translations';
             $container->addResource(new FileExistenceResource($directory));
 

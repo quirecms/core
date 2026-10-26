@@ -11,6 +11,7 @@ use Quire\Content\Revision\PendingRevisionComments;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
+use Quire\Extension\ExtensionContributions;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
 use Quire\Http\Session\SessionHandlerFactory;
@@ -90,6 +91,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/User/{User,Role,CreateUser,UpdateUser,Invitation}.php',
             '../src/Audit/UndoPlan.php',
             '../src/Settings/SettingsImport.php',
+            '../src/Extension/Contributions.php',
             '../src/User/Preference/{PreferenceDefinition,InvalidPreferenceException}.php',
             '../src/Permission/UserAccess.php',
             '../src/User/Exception/',
@@ -97,7 +99,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Backup/Exception/',
             '../src/Theme/{Exception,Event}/',
             '../src/Theme/Seo/SeoTags.php',
-            '../src/Theme/Internal/{ThemeChain,TemplatePathsPass,SlotsPass,AssetsPass,ImportMapConfigReader}.php',
+            '../src/Theme/Internal/{ThemeChain,ThemePreviews,TemplatePathsPass,SlotsPass,AssetsPass,ImportMapConfigReader}.php',
         ]);
 
     $services->set(InstalledExtensions::class)
@@ -121,6 +123,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(AuditUndo::class)->public();
     // For admin interfaces: moving settings between sites.
     $services->set(SettingsTransfer::class)->public();
+    // For admin interfaces: what each extension adds.
+    $services->set(ExtensionContributions::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
     $services->set(PendingRevisionComments::class)->public();

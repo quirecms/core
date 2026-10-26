@@ -6,6 +6,8 @@ namespace Quire\Theme\Internal;
 
 use Quire\Extend\Assets;
 use Quire\Theme\ThemeAssets;
+use Quire\Theme\ThemePreview;
+use Quire\Theme\Themes;
 use Symfony\Component\AssetMapper\ImportMap\ImportMapRenderer;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -19,6 +21,7 @@ final readonly class AssetsRenderer
 {
     /**
      * @param list<array{type: string, path: string, group: string, owner: string}> $assets
+     * @param list<array{id: string, path: string}>                                 $themes
      */
     public function __construct(
         private ThemeAssets $themeAssets,
@@ -28,7 +31,29 @@ final readonly class AssetsRenderer
         private ImportMapConfigReader $importMapConfig,
         #[Autowire(param: Assets::PARAMETER)]
         private array $assets,
+        #[Autowire(param: Themes::CHAIN_PARAMETER)]
+        private array $themes,
+        private ThemePreview $preview,
     ) {
+    }
+
+    /**
+     * What the extenders added; while someone previews a theme, its stylesheets instead of the theme in use's.
+     *
+     * @return list<array{type: string, path: string, group: string, owner: string}>
+     */
+    private function assets(): array
+    {
+        $previewed = $this->preview->chain();
+
+        if (null === $previewed) {
+            return $this->assets;
+        }
+
+        $inUse = array_column($this->themes, 'id');
+        $kept = array_values(array_filter($this->assets, static fn (array $asset): bool => !\in_array($asset['owner'], $inUse, true)));
+
+        return [...$kept, ...array_map(static fn (string $path): array => ['type' => 'stylesheet', 'path' => $path, 'group' => 'site', 'owner' => $previewed[0]['id']], $this->preview->stylesheets())];
     }
 
     /**
@@ -40,7 +65,7 @@ final readonly class AssetsRenderer
     {
         $html = '';
 
-        foreach ($this->assets as $asset) {
+        foreach ($this->assets() as $asset) {
             if ($group === $asset['group'] && 'stylesheet' === $asset['type']) {
                 $html .= \sprintf('<link rel="stylesheet" href="%s">'."\n", htmlspecialchars($this->themeAssets->url($asset['path'])));
             }
@@ -57,7 +82,7 @@ final readonly class AssetsRenderer
         $stylesheets = [];
         $entrypoints = [];
 
-        foreach ($this->assets as $asset) {
+        foreach ($this->assets() as $asset) {
             if ($group !== $asset['group']) {
                 continue;
             }

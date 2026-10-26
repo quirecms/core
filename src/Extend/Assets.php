@@ -74,6 +74,16 @@ final class Assets implements ExtenderInterface
         return $this;
     }
 
+    /**
+     * @internal What it declares, e.g. for previewing a theme
+     *
+     * @return list<array{type: string, path: string, group: string}>
+     */
+    public function declared(): array
+    {
+        return $this->assets;
+    }
+
     public function extend(ExtenderContext $context): void
     {
         foreach ($this->assets as $asset) {

@@ -10,6 +10,7 @@ use Quire\Http\Controller\LoginController;
 use Quire\Http\Controller\PasswordResetController;
 use Quire\Http\Controller\RegistrationController;
 use Quire\Http\Controller\StorageController;
+use Quire\Http\Controller\ThemePreviewController;
 use Quire\Http\Controller\ViewAsController;
 use Quire\Permission\ViewAs;
 use Quire\User\CurrentUser;
@@ -97,6 +98,18 @@ final class ContentRouteLoader extends Loader
         $collection->add(ViewAsController::STOP_ROUTE, new Route(
             path: $this->prefix.'/_quire/view-as/stop',
             defaults: ['_controller' => ViewAsController::class.'::stop', ExtensionRouteLoader::QUIRE_ROUTE => true, ViewAs::ALLOWED_ROUTE => true],
+            methods: ['POST'],
+        ), self::PRIORITY + 1);
+
+        // Previewing a theme, only for who looks.
+        $collection->add(ThemePreviewController::START_ROUTE, new Route(
+            path: $this->prefix.'/_quire/theme-preview',
+            defaults: ['_controller' => ThemePreviewController::class.'::start', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            methods: ['POST'],
+        ), self::PRIORITY + 1);
+        $collection->add(ThemePreviewController::STOP_ROUTE, new Route(
+            path: $this->prefix.'/_quire/theme-preview/stop',
+            defaults: ['_controller' => ThemePreviewController::class.'::stop', ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['POST'],
         ), self::PRIORITY + 1);
 

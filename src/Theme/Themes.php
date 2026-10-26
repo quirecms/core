@@ -60,6 +60,7 @@ final readonly class Themes
         private ?string $problem,
         #[Autowire(param: self::PINNED_PARAMETER)]
         private bool $pinned,
+        private ?ThemePreview $preview = null,
     ) {
     }
 
@@ -72,12 +73,13 @@ final readonly class Themes
     }
 
     /**
-     * The theme the site is built with; null when it uses Quire's built-in templates, either because no
+     * The theme the site is built with (or, while someone previews a theme, the one their page renders
+     * with, see {@see ThemePreview}); null when it uses Quire's built-in templates, either because no
      * theme is set or because the theme that is set can't be used (see {@see problem()}).
      */
     public function active(): ?ExtensionManifest
     {
-        $id = $this->chain[0]['id'] ?? null;
+        $id = ($this->preview?->chain() ?? $this->chain)[0]['id'] ?? null;
 
         return null === $id ? null : ($this->installed->themes()[$id] ?? null);
     }
@@ -104,7 +106,7 @@ final readonly class Themes
      */
     public function chain(): array
     {
-        return array_column($this->chain, 'id');
+        return array_column($this->preview?->chain() ?? $this->chain, 'id');
     }
 
     /**

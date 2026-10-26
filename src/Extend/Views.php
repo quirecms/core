@@ -40,6 +40,16 @@ final class Views implements ExtenderInterface
     private array $globals = [];
 
     /**
+     * @internal What it declares, e.g. for previewing a theme
+     *
+     * @return array{namespaces: array<string, string>, slots: int, globals: int}
+     */
+    public function declared(): array
+    {
+        return ['namespaces' => $this->namespaces, 'slots' => \count($this->slots), 'globals' => \count($this->globals)];
+    }
+
+    /**
      * Makes the templates in $directory available as `@namespace/...`.
      */
     public function namespace(string $namespace, string $directory): self

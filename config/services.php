@@ -6,6 +6,7 @@ use Doctrine\Migrations\DependencyFactory;
 use Doctrine\Migrations\Tools\Console\Command as MigrationCommand;
 use Quire\Audit\AuditLog;
 use Quire\Backup\BackupLog;
+use Quire\Content\Revision\PendingRevisionComments;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
@@ -61,7 +62,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/{Content,Status}.php',
             '../src/Content/{Command,Event,Exception}/',
             '../src/Content/Internal/{Locales,Row}.php',
-            '../src/Content/Revision/{Diff,DiffLine,Merge,PendingRevision,Review,ReviewState,Revision,Snapshot,Verdict}.php',
+            '../src/Content/Revision/{Comment,CommentAnchor,CommentThread,Diff,DiffLine,Merge,PendingRevision,Review,ReviewState,Revision,Snapshot,Verdict}.php',
             '../src/Content/Revision/Internal/',
             '../src/Content/Workflow/ContentSubject.php',
             '../src/Content/Console/ConsoleErrors.php',
@@ -110,6 +111,7 @@ return static function (ContainerConfigurator $container): void {
     $services->set(AuditLog::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
+    $services->set(PendingRevisionComments::class)->public();
     // For admin interfaces' previews of how items will appear.
     $services->set(ContentPreviews::class)->public();
     // For telling people when the site was last backed up.

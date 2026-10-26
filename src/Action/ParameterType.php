@@ -16,6 +16,8 @@ enum ParameterType: string
 
     case Bool = 'bool';
 
+    case Integer = 'integer';
+
     /** A time with its offset or time zone, as ISO 8601, e.g. "2026-12-24T09:00:00+01:00" */
     case DateTime = 'datetime';
 
@@ -49,9 +51,9 @@ enum ParameterType: string
     /** An extension's ID */
     case Extension = 'extension';
 
-    /** Whether values of this type are strings (all but booleans and JSON values). */
+    /** Whether values of this type are strings (all but booleans, integers and JSON values). */
     public function isText(): bool
     {
-        return self::Bool !== $this && self::Value !== $this;
+        return !\in_array($this, [self::Bool, self::Integer, self::Value], true);
     }
 }

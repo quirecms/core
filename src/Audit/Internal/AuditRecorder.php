@@ -15,6 +15,8 @@ use Quire\Content\Event\ContentPurged;
 use Quire\Content\Event\ContentRestored;
 use Quire\Content\Event\ContentStatusChanged;
 use Quire\Content\Event\ContentUpdated;
+use Quire\Content\Event\PendingRevisionCommented;
+use Quire\Content\Event\PendingRevisionCommentResolved;
 use Quire\Content\Event\PendingRevisionDiscarded;
 use Quire\Content\Event\PendingRevisionPublishFailed;
 use Quire\Content\Event\PendingRevisionReviewed;
@@ -171,6 +173,43 @@ final readonly class AuditRecorder
         $pending = $event->pendingRevision;
 
         $this->pending('content.changes_discarded', $pending, $event->actorId, [], $this->command('content.discard_changes', ['content' => $pending->contentId, 'pending_revision' => $pending->id]));
+    }
+
+    #[AsEventListener]
+    public function onPendingCommented(PendingRevisionCommented $event): void
+    {
+        $pending = $event->pendingRevision;
+        $comment = $event->comment;
+        $anchor = $comment->anchor;
+
+        // The command has the comment, as a review's has its message, so it can be made again.
+        $this->pending('content.changes_commented', $pending, $comment->authorId, array_filter([
+            'comment' => $comment->id,
+            'reply_to' => $comment->parentId,
+            'on' => $anchor?->property,
+        ], \is_string(...)), $this->command('content.comment_changes', [
+            'content' => $pending->contentId,
+            'pending_revision' => $pending->id,
+            'message' => $comment->body,
+            'property' => $anchor?->property,
+            'quote' => $anchor?->quote,
+            'line' => $anchor?->line,
+            'reply_to' => $comment->parentId,
+        ]));
+    }
+
+    #[AsEventListener]
+    public function onCommentResolved(PendingRevisionCommentResolved $event): void
+    {
+        $pending = $event->pendingRevision;
+        $resolved = $event->comment->isResolved();
+
+        $this->pending($resolved ? 'content.comment_resolved' : 'content.comment_reopened', $pending, $event->actorId, ['comment' => $event->comment->id], $this->command('content.resolve_comment', [
+            'content' => $pending->contentId,
+            'pending_revision' => $pending->id,
+            'comment' => $event->comment->id,
+            'reopen' => $resolved ? null : true,
+        ]));
     }
 
     #[AsEventListener]

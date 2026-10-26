@@ -108,6 +108,8 @@ return [
         ->action('content.schedule_changes', ContentAction\ScheduleChanges::class)
         ->action('content.publish_changes', ContentAction\PublishChanges::class)
         ->action('content.discard_changes', ContentAction\DiscardChanges::class)
+        ->action('content.comment_changes', ContentAction\CommentOnChanges::class)
+        ->action('content.resolve_comment', ContentAction\ResolveComment::class)
         ->action('user.create', UserAction\CreateUser::class)
         ->action('user.invite', UserAction\InviteUsers::class)
         ->action('user.update', UserAction\UpdateUser::class)

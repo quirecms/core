@@ -24,6 +24,7 @@ final class ArgumentsTest extends TestCase
             new Parameter('tags', ParameterType::Text, 'Tags', required: false, multiple: true),
             new Parameter('at', ParameterType::DateTime, 'When', required: false),
             new Parameter('data', ParameterType::Value, 'Data', required: false),
+            new Parameter('line', ParameterType::Integer, 'Line', required: false),
         ]);
     }
 
@@ -35,6 +36,8 @@ final class ArgumentsTest extends TestCase
 
         self::assertSame(['42', '3', true, ['a', 'b'], ['any' => [1, null]]], [$arguments->string('review'), $arguments->optionalString('stars'), $arguments->bool('notify'), $arguments->strings('tags'), $arguments->value('data')]);
         self::assertSame('2026-12-24T08:00:00+00:00', $arguments->dateTime('at')?->setTimezone(new \DateTimeZone('UTC'))->format(\DATE_ATOM));
+        self::assertSame(12, Arguments::check('acme.approve', $this->definition, ['review' => '42', 'line' => 12])->integer('line'));
+        self::assertNull($arguments->integer('line'));
     }
 
     public function testLeftOutAndNullAreTheSame(): void
@@ -48,7 +51,7 @@ final class ArgumentsTest extends TestCase
     public function testEveryProblemIsReportedByParameter(): void
     {
         try {
-            Arguments::check('acme.approve', $this->definition, ['stars' => '5', 'notify' => 'yes', 'tags' => 'a', 'at' => '2026-12-24 09:00', 'colour' => 'red']);
+            Arguments::check('acme.approve', $this->definition, ['stars' => '5', 'notify' => 'yes', 'tags' => 'a', 'at' => '2026-12-24 09:00', 'colour' => 'red', 'line' => '12']);
             self::fail('Invalid arguments were accepted.');
         } catch (InvalidArgumentsException $e) {
             self::assertSame('acme.approve', $e->action);
@@ -59,6 +62,7 @@ final class ArgumentsTest extends TestCase
                 'notify' => 'Give true or false.',
                 'tags' => 'Give a list.',
                 'at' => 'Give a time with its offset, e.g. "2026-12-24T09:00:00+01:00".',
+                'line' => 'Give a whole number.',
             ], $e->errors);
         }
     }

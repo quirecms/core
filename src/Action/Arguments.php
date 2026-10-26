@@ -75,6 +75,13 @@ final readonly class Arguments
         return true === ($this->values[$name] ?? false);
     }
 
+    public function integer(string $name): ?int
+    {
+        $value = $this->values[$name] ?? null;
+
+        return \is_int($value) ? $value : null;
+    }
+
     /**
      * A list argument (of a parameter with "multiple"), empty when it's left out.
      *
@@ -125,6 +132,7 @@ final readonly class Arguments
         foreach ($values as $item) {
             $error = match (true) {
                 ParameterType::Bool === $parameter->type => \is_bool($item) ? null : 'Give true or false.',
+                ParameterType::Integer === $parameter->type => \is_int($item) ? null : 'Give a whole number.',
                 ParameterType::Value === $parameter->type => null,
                 !\is_string($item) || '' === $item => 'Give a text.',
                 null !== $parameter->choices && !\in_array($item, $parameter->choices, true) => \sprintf('Give one of %s.', implode(', ', $parameter->choices)),

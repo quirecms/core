@@ -10,6 +10,8 @@ use Quire\Http\Controller\LoginController;
 use Quire\Http\Controller\PasswordResetController;
 use Quire\Http\Controller\RegistrationController;
 use Quire\Http\Controller\StorageController;
+use Quire\Http\Controller\ViewAsController;
+use Quire\Permission\ViewAs;
 use Quire\User\CurrentUser;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -84,6 +86,18 @@ final class ContentRouteLoader extends Loader
             defaults: ['_controller' => StorageController::class.'::file', ExtensionRouteLoader::QUIRE_ROUTE => true],
             requirements: ['disk' => '[a-z][a-z0-9_-]*', 'key' => StorageController::KEY_PATTERN],
             methods: ['GET', 'HEAD'],
+        ), self::PRIORITY + 1);
+
+        // Seeing the site as another user: stopping is let through while it's on.
+        $collection->add(ViewAsController::START_ROUTE, new Route(
+            path: $this->prefix.'/_quire/view-as',
+            defaults: ['_controller' => ViewAsController::class.'::start', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            methods: ['POST'],
+        ), self::PRIORITY + 1);
+        $collection->add(ViewAsController::STOP_ROUTE, new Route(
+            path: $this->prefix.'/_quire/view-as/stop',
+            defaults: ['_controller' => ViewAsController::class.'::stop', ExtensionRouteLoader::QUIRE_ROUTE => true, ViewAs::ALLOWED_ROUTE => true],
+            methods: ['POST'],
         ), self::PRIORITY + 1);
 
         $collection->add(Permalinks::CONTENT_ROUTE, new Route(

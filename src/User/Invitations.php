@@ -40,6 +40,22 @@ final readonly class Invitations
     }
 
     /**
+     * Invitations not used yet: the users invited who haven't chosen their password. Expired ones are
+     * there too, so their user can be invited again.
+     *
+     * @param list<string>|null $userIds Only these users' invitations, e.g. those of a page of a list
+     *
+     * @return array<string, Invitation> By user ID
+     */
+    public function pending(?array $userIds = null): array
+    {
+        return array_map(
+            static fn (array $token): Invitation => new Invitation($token['issuedAt'], $token['expiresAt']),
+            $this->tokens->issued(UserTokens::INVITATION, $userIds),
+        );
+    }
+
+    /**
      * @param User|null $by Who invites them, named in the email
      *
      * @throws InvalidUserException        when the user has no email, or users can't be invited

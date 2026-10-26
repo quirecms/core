@@ -21,6 +21,7 @@ use Quire\Extension\Action as ExtensionAction;
 use Quire\Formatter\Format;
 use Quire\Permission\Action as PermissionAction;
 use Quire\Permission\Permissions;
+use Quire\Permission\ViewAs;
 use Quire\Routing\AdminAccessListener;
 use Quire\Settings\Action\SetSetting;
 use Quire\Storage\Job\CollectGarbage;
@@ -32,6 +33,7 @@ use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
 use Quire\User\Action as UserAction;
+use Quire\User\Preference\UserPreferences;
 use Quire\User\Role;
 use Quire\User\Security\SignInListener;
 
@@ -52,6 +54,9 @@ return [
         ->check('core.links', LinksCheck::class, 'Links to the site lead to pages visitors can see')
         ->check('core.excerpt', ExcerptCheck::class, 'Items have an excerpt')
         ->check('core.title-length', TitleLengthCheck::class, 'Titles fit in search results'),
+
+    new Extend\Preferences()
+        ->define(UserPreferences::LANGUAGE, 'string', null, nullable: true),
 
     new Extend\Settings()
         ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)
@@ -93,7 +98,8 @@ return [
         ->ability('quire.extensions.manage', 'Enable, disable and purge extensions', roles: [], group: 'admin')
         ->ability('quire.users.manage', 'Add, change, suspend and delete users', roles: [], group: 'admin')
         ->ability('quire.permissions.manage', 'Change roles and what they may do', roles: [], group: 'admin')
-        ->ability(AuditLog::ABILITY, 'See the audit log: who did what, and when', roles: [], group: 'admin'),
+        ->ability(AuditLog::ABILITY, 'See the audit log: who did what, and when', roles: [], group: 'admin')
+        ->ability(ViewAs::ABILITY, 'See the site and the admin as another user, without changing anything', roles: [], group: 'admin'),
 
     // What people do with the site: admin interfaces, APIs and the audit log go through them (see docs/extensions.md#extendactions).
     new Extend\Actions()

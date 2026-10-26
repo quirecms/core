@@ -65,6 +65,35 @@ final readonly class UserTokens
     }
 
     /**
+     * The tokens for the purpose not used yet, expired ones too: when each user's was issued and until when it works.
+     *
+     * @param list<string>|null $userIds Only these users' tokens
+     *
+     * @return array<string, array{issuedAt: \DateTimeImmutable, expiresAt: \DateTimeImmutable}> By user ID
+     */
+    public function issued(string $purpose, ?array $userIds = null): array
+    {
+        if ([] === $userIds) {
+            return [];
+        }
+
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT user_id, max(created_at) AS issued_at, max(expires_at) AS expires_at FROM quire.user_token WHERE purpose = ?'
+            .(null === $userIds ? '' : ' AND user_id IN ('.implode(', ', array_fill(0, \count($userIds), '?')).')').' GROUP BY user_id',
+            [$purpose, ...$userIds ?? []],
+        );
+        $issued = [];
+
+        foreach ($rows as $row) {
+            if (\is_string($row['user_id']) && \is_string($row['issued_at']) && \is_string($row['expires_at'])) {
+                $issued[$row['user_id']] = ['issuedAt' => new \DateTimeImmutable($row['issued_at']), 'expiresAt' => new \DateTimeImmutable($row['expires_at'])];
+            }
+        }
+
+        return $issued;
+    }
+
+    /**
      * The user the token is for, if it's valid; it stays valid.
      */
     public function check(string $token, string $purpose): ?User

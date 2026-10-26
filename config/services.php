@@ -13,11 +13,13 @@ use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
 use Quire\Http\Session\SessionHandlerFactory;
+use Quire\Permission\Access;
 use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
 use Quire\Storage\ObjectStore;
 use Quire\Storage\StorageDisks;
 use Quire\Theme\ContentPreviews;
+use Quire\User\Preference\UserPreferences;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler;
 
@@ -83,7 +85,9 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Permalink/{PermalinkPattern,Redirect,Resolution}.php',
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
             '../src/Backup/{BackupContents,BackupRun}.php',
-            '../src/User/{User,Role,CreateUser,UpdateUser}.php',
+            '../src/User/{User,Role,CreateUser,UpdateUser,Invitation}.php',
+            '../src/User/Preference/{PreferenceDefinition,InvalidPreferenceException}.php',
+            '../src/Permission/UserAccess.php',
             '../src/User/Exception/',
             '../src/Permission/Internal/{ContentAbilities,PermissionsPass}.php',
             '../src/Backup/Exception/',
@@ -116,6 +120,9 @@ return static function (ContainerConfigurator $container): void {
     $services->set(ContentPreviews::class)->public();
     // For telling people when the site was last backed up.
     $services->set(BackupLog::class)->public();
+    // For admin interfaces and extensions: what another user may do, and each person's preferences.
+    $services->set(Access::class)->public();
+    $services->set(UserPreferences::class)->public();
 
     // Sessions in PostgreSQL, for applications that choose them (framework.session.handler_id).
     $services->set(SessionHandlerFactory::SERVICE, PdoSessionHandler::class)

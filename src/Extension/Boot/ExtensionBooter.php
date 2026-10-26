@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Extension\Boot;
 
 use Quire\Database\MigrationOrder;
+use Quire\Extend\Actions;
 use Quire\Extend\Assets;
 use Quire\Extend\Auth;
 use Quire\Extend\ContentChecks;
@@ -75,6 +76,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Permissions::PARAMETER, ['roles' => [], 'abilities' => [], 'rules' => []]);
         $container->setParameter(Auth::PARAMETER, []);
         $container->setParameter(ContentChecks::PARAMETER, []);
+        $container->setParameter(Actions::PARAMETER, []);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));

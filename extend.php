@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Quire\Audit\AuditLog;
 use Quire\Audit\Job\PruneAuditLog;
+use Quire\Content\Action as ContentAction;
 use Quire\Content\Check\ContentChecker;
 use Quire\Content\Check\Internal\AltTextCheck;
 use Quire\Content\Check\Internal\ExcerptCheck;
@@ -15,15 +16,20 @@ use Quire\Content\Query\Relation;
 use Quire\Content\Status;
 use Quire\Content\Type\Capability;
 use Quire\Extend;
+use Quire\Extension\Action as ExtensionAction;
 use Quire\Formatter\Format;
+use Quire\Permission\Action as PermissionAction;
 use Quire\Permission\Permissions;
 use Quire\Routing\AdminAccessListener;
+use Quire\Settings\Action\SetSetting;
 use Quire\Storage\Job\CollectGarbage;
 use Quire\Storage\Job\CollectGarbageHandler;
+use Quire\Theme\Action\UseTheme;
 use Quire\Theme\Internal\AdminAssetsSlot;
 use Quire\Theme\Internal\AssetsSlot;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
+use Quire\User\Action as UserAction;
 use Quire\User\Role;
 use Quire\User\Security\SignInListener;
 
@@ -85,6 +91,39 @@ return [
         ->ability('quire.users.manage', 'Add, change, suspend and delete users', roles: [], group: 'admin')
         ->ability('quire.permissions.manage', 'Change roles and what they may do', roles: [], group: 'admin')
         ->ability(AuditLog::ABILITY, 'See the audit log: who did what, and when', roles: [], group: 'admin'),
+
+    // What people do with the site: admin interfaces, APIs and the audit log go through them (see docs/extensions.md#extendactions).
+    new Extend\Actions()
+        ->action('content.create', ContentAction\CreateContent::class)
+        ->action('content.update', ContentAction\UpdateContent::class)
+        ->action('content.transition', ContentAction\TransitionContent::class)
+        ->action('content.trash', ContentAction\TrashContent::class)
+        ->action('content.restore', ContentAction\RestoreContent::class)
+        ->action('content.purge', ContentAction\PurgeContent::class)
+        ->action('content.submit_changes', ContentAction\SubmitChanges::class)
+        ->action('content.review_changes', ContentAction\ReviewChanges::class)
+        ->action('content.schedule_changes', ContentAction\ScheduleChanges::class)
+        ->action('content.publish_changes', ContentAction\PublishChanges::class)
+        ->action('content.discard_changes', ContentAction\DiscardChanges::class)
+        ->action('user.create', UserAction\CreateUser::class)
+        ->action('user.invite', UserAction\InviteUsers::class)
+        ->action('user.update', UserAction\UpdateUser::class)
+        ->action('user.change_roles', UserAction\ChangeRoles::class)
+        ->action('user.suspend', UserAction\SuspendUser::class)
+        ->action('user.activate', UserAction\ActivateUser::class)
+        ->action('user.set_password', UserAction\SetPassword::class)
+        ->action('user.remove_password', UserAction\RemovePassword::class)
+        ->action('user.delete', UserAction\DeleteUser::class)
+        ->action('role.create', PermissionAction\CreateRole::class)
+        ->action('role.rename', PermissionAction\RenameRole::class)
+        ->action('role.delete', PermissionAction\DeleteRole::class)
+        ->action('role.grant', PermissionAction\GrantAbilities::class)
+        ->action('role.revoke', PermissionAction\RevokeAbilities::class)
+        ->action('setting.set', SetSetting::class)
+        ->action('theme.use', UseTheme::class)
+        ->action('extension.enable', ExtensionAction\EnableExtensions::class)
+        ->action('extension.disable', ExtensionAction\DisableExtensions::class)
+        ->action('extension.purge', ExtensionAction\PurgeExtensions::class),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Quire\Audit\Internal;
 
+use Quire\Action\Actions;
+use Quire\Action\Exception\InvalidArgumentsException;
 use Quire\Audit\AuditEntry;
 use Quire\Audit\AuditLog;
 use Quire\Content\Content;
@@ -19,8 +21,10 @@ use Quire\Content\Event\PendingRevisionReviewed;
 use Quire\Content\Event\PendingRevisionSaved;
 use Quire\Content\Event\PendingRevisionScheduled;
 use Quire\Content\Event\PendingRevisionSubmitted;
+use Quire\Content\Internal\Fields;
 use Quire\Content\Revision\PendingRevision;
 use Quire\Content\Status;
+use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Extension\Event\ExtensionDisabled;
 use Quire\Extension\Event\ExtensionEnabled;
 use Quire\Extension\Event\ExtensionPurging;
@@ -28,7 +32,6 @@ use Quire\Permission\Permissions;
 use Quire\Settings\Event\SettingChanged;
 use Quire\Settings\SettingDefinition;
 use Quire\Settings\SettingsSchema;
-use Quire\Settings\SettingType;
 use Quire\Theme\Themes;
 use Quire\User\Event\UserCreated;
 use Quire\User\Event\UserDeleted;
@@ -41,8 +44,9 @@ use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 
 /**
  * Records core's actions in the audit log, from core's events, with the console command that does the
- * same where there is one. Listeners run after the change was made (for content and users, after it
- * was committed).
+ * same where there is one: the event is written as a call of the action that has the same effect (see
+ * {@see Actions}), which knows its command. Listeners run after the change was made (for content and
+ * users, after it was committed), so they see changes however they were made.
  *
  * @internal
  */
@@ -52,13 +56,21 @@ final readonly class AuditRecorder
         private AuditLog $log,
         private SettingsSchema $schema,
         private Permissions $permissions,
+        private Actions $actions,
+        private ContentTypeRegistry $types,
     ) {
     }
 
     #[AsEventListener]
     public function onContentCreated(ContentCreated $event): void
     {
-        $this->content('content.created', $event->content, ['type' => $event->content->type, 'status' => $event->content->status, 'locale' => $event->content->locale]);
+        $content = $event->content;
+        // The command creates an empty draft: items created with text or published at once have none.
+        $command = Status::DRAFT === $content->status && '' === $content->body && $content->fields === Fields::withDefaults($this->types->get($content->type), [])
+            ? $this->command('content.create', ['type' => $content->type, 'title' => $content->title, 'slug' => $content->slug, 'locale' => $content->locale, 'parent' => $content->parentId, 'author' => $content->authorId])
+            : null;
+
+        $this->content('content.created', $content, ['type' => $content->type, 'status' => $content->status, 'locale' => $content->locale], $command);
     }
 
     #[AsEventListener]
@@ -69,12 +81,18 @@ final readonly class AuditRecorder
 
         if ($pending instanceof PendingRevision) {
             // In the background (quire.publish-due), on behalf of who scheduled it.
-            $this->content('content.changes_published', $event->content, [...$details, 'pending_revision' => $pending->id], CommandLine::of('quire:content:pending', [$pending->contentId], ['publish' => $pending->id]), $pending->scheduledBy);
+            $this->content('content.changes_published', $event->content, [...$details, 'pending_revision' => $pending->id], $this->command('content.publish_changes', ['content' => $pending->contentId, 'pending_revision' => $pending->id]), $pending->scheduledBy);
 
             return;
         }
 
-        $this->content('content.updated', $event->content, $details, coalesce: true);
+        // Renamed only: the text and fields are written in an editor, not on a command line.
+        $renamed = array_intersect_key(['title' => $event->content->title, 'slug' => $event->content->slug, 'excerpt' => $event->content->excerpt], array_flip($details['changed']));
+        $command = [] !== $renamed && \count($renamed) === \count($details['changed']) && !\in_array(null, $renamed, true)
+            ? $this->command('content.update', ['content' => $event->content->id, ...$renamed])
+            : null;
+
+        $this->content('content.updated', $event->content, $details, $command, coalesce: true);
     }
 
     #[AsEventListener]
@@ -88,25 +106,25 @@ final readonly class AuditRecorder
             'from' => $event->before->status,
             'to' => $content->status,
             ...null === $at ? [] : ['at' => $at],
-        ], CommandLine::of('quire:content:transition', [$content->id, $event->transition], ['at' => $at]));
+        ], $this->command('content.transition', ['content' => $content->id, 'transition' => $event->transition, 'at' => $at]));
     }
 
     #[AsEventListener]
     public function onContentDeleted(ContentDeleted $event): void
     {
-        $this->content('content.trashed', $event->content, [], CommandLine::of('quire:content:delete', [$event->content->id]));
+        $this->content('content.trashed', $event->content, [], $this->command('content.trash', ['content' => $event->content->id]));
     }
 
     #[AsEventListener]
     public function onContentRestored(ContentRestored $event): void
     {
-        $this->content('content.restored', $event->content, [], CommandLine::of('quire:content:restore', [$event->content->id]));
+        $this->content('content.restored', $event->content, [], $this->command('content.restore', ['content' => $event->content->id]));
     }
 
     #[AsEventListener]
     public function onContentPurged(ContentPurged $event): void
     {
-        $this->content('content.purged', $event->content, [], CommandLine::of('quire:content:delete', [$event->content->id], ['purge' => true, 'force' => true]));
+        $this->content('content.purged', $event->content, [], $this->command('content.purge', ['content' => $event->content->id]));
     }
 
     #[AsEventListener]
@@ -119,13 +137,23 @@ final readonly class AuditRecorder
     #[AsEventListener]
     public function onPendingSubmitted(PendingRevisionSubmitted $event): void
     {
-        $this->pending('content.changes_submitted', $event->pendingRevision, $event->actorId);
+        $pending = $event->pendingRevision;
+
+        $this->pending('content.changes_submitted', $pending, $event->actorId, [], $this->command('content.submit_changes', ['content' => $pending->contentId, 'pending_revision' => $pending->id]));
     }
 
     #[AsEventListener]
     public function onPendingReviewed(PendingRevisionReviewed $event): void
     {
-        $this->pending('content.changes_reviewed', $event->pendingRevision, $event->review->reviewerId, ['verdict' => $event->review->verdict->value]);
+        $pending = $event->pendingRevision;
+        $review = $event->review;
+
+        $this->pending('content.changes_reviewed', $pending, $review->reviewerId, ['verdict' => $review->verdict->value], $this->command('content.review_changes', [
+            'content' => $pending->contentId,
+            'pending_revision' => $pending->id,
+            'verdict' => $review->verdict->value,
+            'message' => $review->message,
+        ]));
     }
 
     #[AsEventListener]
@@ -134,7 +162,7 @@ final readonly class AuditRecorder
         $pending = $event->pendingRevision;
         $at = $pending->publishAt?->format(\DATE_ATOM);
 
-        $this->pending('content.changes_scheduled', $pending, $event->actorId, ['at' => $at], CommandLine::of('quire:content:pending', [$pending->contentId], ['schedule' => $pending->id, 'at' => $at ?? 'none']));
+        $this->pending('content.changes_scheduled', $pending, $event->actorId, ['at' => $at], $this->command('content.schedule_changes', ['content' => $pending->contentId, 'pending_revision' => $pending->id, 'at' => $at]));
     }
 
     #[AsEventListener]
@@ -142,7 +170,7 @@ final readonly class AuditRecorder
     {
         $pending = $event->pendingRevision;
 
-        $this->pending('content.changes_discarded', $pending, $event->actorId, [], CommandLine::of('quire:content:pending', [$pending->contentId], ['discard' => $pending->id]));
+        $this->pending('content.changes_discarded', $pending, $event->actorId, [], $this->command('content.discard_changes', ['content' => $pending->contentId, 'pending_revision' => $pending->id]));
     }
 
     #[AsEventListener]
@@ -156,11 +184,14 @@ final readonly class AuditRecorder
     {
         $user = $event->user;
 
-        $command = null === $user->email ? null : CommandLine::of('quire:user:create', [$user->email], [
+        // The password stays out of it: the command asks for one.
+        $command = null === $user->email ? null : $this->command('user.create', [
+            'email' => $user->email,
             'name' => $user->displayName,
             'username' => $user->username,
-            'no-password' => null === $user->passwordHash ? true : null,
-        ]).$this->options('role', $user->roles);
+            'roles' => $user->roles,
+            'password' => null === $user->passwordHash ? null : '********',
+        ]);
 
         $this->user('user.created', $user, ['roles' => $user->roles], $command);
     }
@@ -191,7 +222,7 @@ final readonly class AuditRecorder
         ]));
 
         if ([] !== $profile) {
-            // Which, not the values: the log isn't another copy of personal data.
+            // Which, not the values: the log isn't another copy of personal data (nor is a command with them).
             $this->user('user.updated', $user, ['changed' => $profile]);
         }
 
@@ -199,19 +230,19 @@ final readonly class AuditRecorder
         $removed = array_values(array_diff($before->roles, $user->roles));
 
         if ([] !== $added || [] !== $removed) {
-            $this->user('user.roles_changed', $user, ['added' => $added, 'removed' => $removed], $this->roleCommand($username, $added, $removed));
+            $this->user('user.roles_changed', $user, ['added' => $added, 'removed' => $removed], $this->command('user.change_roles', ['user' => $username, 'add' => $added, 'remove' => $removed]));
         }
 
         if ($before->status !== $user->status) {
             $suspended = User::SUSPENDED === $user->status;
-            $this->user($suspended ? 'user.suspended' : 'user.activated', $user, [], CommandLine::of($suspended ? 'quire:user:suspend' : 'quire:user:activate', [$username]));
+            $this->user($suspended ? 'user.suspended' : 'user.activated', $user, [], $this->command($suspended ? 'user.suspend' : 'user.activate', ['user' => $username]));
         }
 
         if ($before->passwordHash !== $user->passwordHash && null !== $before->passwordHash && null === $user->passwordHash) {
-            $this->user('user.password_removed', $user, [], CommandLine::of('quire:user:password', [$username], ['remove' => true]));
+            $this->user('user.password_removed', $user, [], $this->command('user.remove_password', ['user' => $username]));
         } elseif ($before->passwordHash !== $user->passwordHash && null !== $user->passwordHash) {
             // The user's own reset or invitation, an admin, or the command line; without the password.
-            $this->user('user.password_changed', $user, [], CommandLine::of('quire:user:password', [$username]));
+            $this->user('user.password_changed', $user, [], $this->command('user.set_password', ['user' => $username, 'password' => '********']));
         }
     }
 
@@ -221,16 +252,13 @@ final readonly class AuditRecorder
         $user = $event->user;
         $heir = $event->reassignTo;
 
-        $this->user('user.deleted', $user, $heir instanceof User ? ['reassigned_to' => $heir->displayName] : [], CommandLine::of('quire:user:delete', [$user->username], [
-            'reassign' => $heir?->username,
-            'keep-content' => $heir instanceof User ? null : true,
-        ]));
+        $this->user('user.deleted', $user, $heir instanceof User ? ['reassigned_to' => $heir->displayName] : [], $this->command('user.delete', ['user' => $user->username, 'reassign' => $heir?->username]));
     }
 
     #[AsEventListener]
     public function onUserInvited(UserInvited $event): void
     {
-        $this->user('user.invited', $event->user, [], CommandLine::of('quire:user:invite', [$event->user->username]), $event->by?->id);
+        $this->user('user.invited', $event->user, [], $this->command('user.invite', ['users' => [$event->user->username]]), $event->by?->id);
     }
 
     #[AsEventListener]
@@ -244,7 +272,7 @@ final readonly class AuditRecorder
     {
         $extension = $event->extension;
 
-        $this->log->record('extension.enabled', 'extension', $extension->id, $extension->title, ['version' => $extension->version], CommandLine::of('quire:extension:enable', [$extension->id]));
+        $this->log->record('extension.enabled', 'extension', $extension->id, $extension->title, ['version' => $extension->version], $this->command('extension.enable', ['extensions' => [$extension->id]]));
     }
 
     #[AsEventListener]
@@ -252,7 +280,7 @@ final readonly class AuditRecorder
     {
         $extension = $event->extension;
 
-        $this->log->record('extension.purged', 'extension', $extension->id, $extension->title, ['version' => $extension->version], CommandLine::of('quire:extension:disable', [$extension->id], ['purge' => true, 'force' => true]));
+        $this->log->record('extension.purged', 'extension', $extension->id, $extension->title, ['version' => $extension->version], $this->command('extension.purge', ['extensions' => [$extension->id]]));
     }
 
     #[AsEventListener]
@@ -263,7 +291,7 @@ final readonly class AuditRecorder
             return;
         }
 
-        $this->log->record('extension.disabled', 'extension', $event->id, $event->extension->title ?? $event->id, [], CommandLine::of('quire:extension:disable', [$event->id]));
+        $this->log->record('extension.disabled', 'extension', $event->id, $event->extension->title ?? $event->id, [], $this->command('extension.disable', ['extensions' => [$event->id]]));
     }
 
     #[AsEventListener]
@@ -275,7 +303,7 @@ final readonly class AuditRecorder
             Themes::SETTING => $this->log->record('theme.changed', 'theme', \is_string($event->newValue) ? $event->newValue : null, \is_string($event->newValue) ? $event->newValue : null, [
                 'from' => $event->oldValue,
                 'to' => $event->newValue,
-            ], \is_string($event->newValue) && '' !== $event->newValue ? CommandLine::of('quire:theme:use', [$event->newValue]) : CommandLine::of('quire:theme:use', options: ['none' => true])),
+            ], $this->command('theme.use', ['theme' => \is_string($event->newValue) && '' !== $event->newValue ? $event->newValue : null])),
             default => $this->settingChanged($event),
         };
     }
@@ -294,25 +322,7 @@ final readonly class AuditRecorder
         $this->log->record('setting.changed', 'setting', $event->key, $definition->label ?? $event->key, [
             'from' => $event->oldValue,
             'to' => $event->newValue,
-        ], $this->settingCommand($definition, $event->newValue));
-    }
-
-    private function settingCommand(SettingDefinition $definition, mixed $value): ?string
-    {
-        $text = match (true) {
-            null === $value => null,
-            SettingType::Bool === $definition->type => true === $value ? 'true' : 'false',
-            SettingType::List === $definition->type, SettingType::Json === $definition->type => json_encode($value, \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE),
-            \is_scalar($value) => (string) $value,
-            default => null,
-        };
-
-        if (\is_string($text)) {
-            return CommandLine::of('quire:settings:set', [$definition->key, $text]);
-        }
-
-        // Null can only be had as the default.
-        return null === $value && null === $definition->default ? CommandLine::of('quire:settings:set', [$definition->key], ['default' => true]) : null;
+        ], $this->command('setting.set', ['setting' => $event->key, 'value' => $event->newValue]));
     }
 
     private function grantsChanged(mixed $old, mixed $new): void
@@ -337,12 +347,12 @@ final readonly class AuditRecorder
         foreach ($changes as $role => $change) {
             $granted = $change['granted'] ?? [];
             $revoked = $change['revoked'] ?? [];
-            $commands = [
-                ...[] === $granted ? [] : [CommandLine::of('quire:permissions:grant', [$role, ...$granted])],
-                ...[] === $revoked ? [] : [CommandLine::of('quire:permissions:revoke', [$role, ...$revoked])],
-            ];
+            $commands = array_filter([
+                [] === $granted ? null : $this->command('role.grant', ['role' => $role, 'abilities' => $granted]),
+                [] === $revoked ? null : $this->command('role.revoke', ['role' => $role, 'abilities' => $revoked]),
+            ], \is_string(...));
 
-            $this->log->record('role.abilities_changed', 'role', $role, $labels[$role] ?? $role, ['granted' => $granted, 'revoked' => $revoked], implode("\n", $commands));
+            $this->log->record('role.abilities_changed', 'role', $role, $labels[$role] ?? $role, ['granted' => $granted, 'revoked' => $revoked], [] === $commands ? null : implode("\n", $commands));
         }
     }
 
@@ -353,14 +363,14 @@ final readonly class AuditRecorder
 
         foreach ($after as $name => $label) {
             if (!isset($before[$name])) {
-                $this->log->record('role.created', 'role', $name, $label, [], CommandLine::of('quire:permissions:create-role', [$name, $label]));
+                $this->log->record('role.created', 'role', $name, $label, [], $this->command('role.create', ['role' => $name, 'label' => $label]));
             } elseif ($before[$name] !== $label) {
-                $this->log->record('role.renamed', 'role', $name, $label, ['from' => $before[$name], 'to' => $label]);
+                $this->log->record('role.renamed', 'role', $name, $label, ['from' => $before[$name], 'to' => $label], $this->command('role.rename', ['role' => $name, 'label' => $label]));
             }
         }
 
         foreach (array_diff_key($before, $after) as $name => $label) {
-            $command = CommandLine::of('quire:permissions:delete-role', [$name], ['force' => true]);
+            $command = $this->command('role.delete', ['role' => $name]);
             // Its grants were forgotten a moment ago, as part of deleting it.
             $grants = $this->recordedFor('role', $name, 'role.abilities_changed');
 
@@ -379,22 +389,18 @@ final readonly class AuditRecorder
     }
 
     /**
-     * @param list<string> $added
-     * @param list<string> $removed
-     */
-    private function roleCommand(string $username, array $added, array $removed): string
-    {
-        return CommandLine::of('quire:user:role', [$username]).$this->options('add', $added).$this->options('remove', $removed);
-    }
-
-    /**
-     * A repeatable option, e.g. " --role=editor --role=translator".
+     * The console command of the action that does what the event says was done.
      *
-     * @param list<string> $values
+     * @param array<string, mixed> $arguments
      */
-    private function options(string $name, array $values): string
+    private function command(string $action, array $arguments): ?string
     {
-        return implode('', array_map(static fn (string $value): string => ' --'.$name.'='.CommandLine::quote($value), $values));
+        try {
+            return $this->actions->commandLine($action, $arguments);
+        } catch (InvalidArgumentsException) {
+            // E.g. a username that isn't one any more: better no command than a wrong one, or none of the entry.
+            return null;
+        }
     }
 
     /**

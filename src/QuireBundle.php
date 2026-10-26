@@ -6,11 +6,13 @@ namespace Quire;
 
 use Composer\Autoload\ClassLoader;
 use League\CommonMark\Extension\ExtensionInterface as CommonMarkExtensionInterface;
+use Quire\Action\ActionInterface;
 use Quire\Content\Check\ContentCheckInterface;
 use Quire\Content\ContentRenderer;
 use Quire\Content\Internal\RelationFieldsPass;
 use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
+use Quire\Extend\Actions;
 use Quire\Extend\ContentChecks;
 use Quire\Extend\ExtenderContext;
 use Quire\Extend\Permissions;
@@ -290,6 +292,7 @@ final class QuireBundle extends AbstractBundle
         $builder->registerForAutoconfiguration(SettingValidatorInterface::class)->addTag(SettingValidatorInterface::TAG);
         // Content checks too: core's own classes are registered again by services.php.
         $builder->registerForAutoconfiguration(ContentCheckInterface::class)->addTag(ContentChecks::TAG);
+        $builder->registerForAutoconfiguration(ActionInterface::class)->addTag(Actions::TAG);
 
         foreach ([FormatInterface::class, ShortcodeInterface::class, SourceProcessorInterface::class, HtmlProcessorInterface::class, CommonMarkExtensionInterface::class] as $interface) {
             $builder->registerForAutoconfiguration($interface)->addTag(Formatter::SERVICE_TAG);

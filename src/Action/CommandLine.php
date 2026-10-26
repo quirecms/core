@@ -2,12 +2,16 @@
 
 declare(strict_types=1);
 
-namespace Quire\Audit\Internal;
+namespace Quire\Action;
 
 /**
- * Writes a console command as someone would type it in a POSIX shell.
+ * Writes a console command as someone would type it in a POSIX shell, e.g. for an action's
+ * {@see ActionInterface::commandLine()}.
  *
- * @internal
+ *     CommandLine::of('quire:content:transition', [$id, 'publish'], ['at' => '2026-12-24T09:00:00+01:00'])
+ *     // bin/console quire:content:transition 0192… publish --at=2026-12-24T09:00:00+01:00
+ *
+ * @api
  */
 final class CommandLine
 {
@@ -32,6 +36,16 @@ final class CommandLine
         }
 
         return implode(' ', $words);
+    }
+
+    /**
+     * A repeatable option, e.g. " --role=editor --role=translator", to append to {@see of()}.
+     *
+     * @param list<string> $values
+     */
+    public static function repeated(string $name, array $values): string
+    {
+        return implode('', array_map(static fn (string $value): string => ' --'.$name.'='.self::quote($value), $values));
     }
 
     public static function quote(string $word): string

@@ -9,6 +9,9 @@ use Quire\Content\ContentWriter;
 use Quire\Content\Revision\PendingRevision;
 use Quire\Content\Revision\PendingRevisionRepository;
 use Quire\Content\Revision\PendingRevisionWriter;
+use Quire\Content\Revision\Verdict;
+use Quire\User\Exception\UserNotFoundException;
+use Quire\User\UserRepository;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
@@ -18,17 +21,22 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand(
     name: 'quire:content:pending',
-    description: 'List the pending revisions of a content item (changes not published yet), show, publish, schedule or discard one',
+    description: 'List the pending revisions of a content item (changes not published yet); show, submit, review, publish, schedule or discard one',
     help: <<<'HELP'
         <info>%command.full_name% 0192b6a0-…</info>
         <info>%command.full_name% 0192b6a0-… --show 0192b6a1-…</info>
+        <info>%command.full_name% 0192b6a0-… --submit 0192b6a1-…</info>
+        <info>%command.full_name% 0192b6a0-… --approve 0192b6a1-…</info>
+        <info>%command.full_name% 0192b6a0-… --request-changes 0192b6a1-… --message "Please add a source."</info>
+        <info>%command.full_name% 0192b6a0-… --comment 0192b6a1-… --message "Looks good so far."</info>
         <info>%command.full_name% 0192b6a0-… --publish 0192b6a1-…</info>
         <info>%command.full_name% 0192b6a0-… --discard 0192b6a1-…</info>
         <info>%command.full_name% 0192b6a0-… --schedule 0192b6a1-… --at "2026-12-24 09:00 Europe/Berlin"</info>
         <info>%command.full_name% 0192b6a0-… --schedule 0192b6a1-… --at none</info>
 
         Showing a pending revision prints what it changes, as a diff, and whether it merges with the
-        live item. Publishing merges it into the item. Scheduled changes are published at their time by
+        live item. Submitting asks for a review; reviewers approve, request changes or comment, as the
+        user of --as. Publishing merges it into the item. Scheduled changes are published at their time by
         the task quire.publish-due, with the same rules; "--at none" clears the time.
         HELP,
 )]
@@ -39,6 +47,7 @@ final readonly class PendingRevisionsCommand
         private PendingRevisionRepository $repository,
         private PendingRevisionWriter $pending,
         private ContentWriter $writer,
+        private UserRepository $users,
     ) {
     }
 
@@ -56,12 +65,53 @@ final readonly class PendingRevisionsCommand
         ?string $schedule = null,
         #[Option(description: 'When to publish it, with a time zone or offset, e.g. "2026-12-24 09:00 Europe/Berlin"; "none" clears it')]
         ?string $at = null,
+        #[Option(description: 'ID of a pending revision to ask for a review of')]
+        ?string $submit = null,
+        #[Option(description: 'ID of a pending revision to approve')]
+        ?string $approve = null,
+        #[Option(description: 'ID of a pending revision to ask for changes to')]
+        ?string $requestChanges = null,
+        #[Option(description: 'ID of a pending revision to comment on (with --message)')]
+        ?string $comment = null,
+        #[Option(description: 'What the review says')]
+        ?string $message = null,
+        #[Option(description: 'Who reviews or submits: a user\'s ID, email or username; approving needs someone other than the author')]
+        ?string $as = null,
     ): int {
-        return ConsoleErrors::handle($io, function () use ($io, $id, $show, $publish, $discard, $schedule, $at): int {
+        return ConsoleErrors::handle($io, function () use ($io, $id, $show, $publish, $discard, $schedule, $at, $submit, $approve, $requestChanges, $comment, $message, $as): int {
             $content = $this->content->get($id);
+            $actor = null === $as ? null : ($this->users->findByReference($as) ?? throw UserNotFoundException::for($as))->id;
 
-            if (\count(array_filter([$show, $publish, $discard, $schedule], static fn (?string $option): bool => null !== $option)) > 1) {
-                throw new \InvalidArgumentException('Pass one of --show, --publish, --schedule and --discard.');
+            if (\count(array_filter([$show, $publish, $discard, $schedule, $submit, $approve, $requestChanges, $comment], static fn (?string $option): bool => null !== $option)) > 1) {
+                throw new \InvalidArgumentException('Pass one of --show, --submit, --approve, --request-changes, --comment, --publish, --schedule and --discard.');
+            }
+
+            if (null !== $submit) {
+                $pending = $this->ofItem($submit, $content->id);
+                $this->pending->submit($pending->id, $pending->version, $actor ?? $pending->authorId);
+                $io->success('The changes are waiting for a review.');
+
+                return Command::SUCCESS;
+            }
+
+            $verdict = match (true) {
+                null !== $approve => [Verdict::Approve, $approve],
+                null !== $requestChanges => [Verdict::RequestChanges, $requestChanges],
+                null !== $comment => [Verdict::Comment, $comment],
+                default => null,
+            };
+
+            if (null !== $verdict) {
+                [$kind, $pendingId] = $verdict;
+                $pending = $this->ofItem($pendingId, $content->id);
+                $this->pending->review($pending->id, $pending->version, $kind, $actor, $message);
+                $io->success(match ($kind) {
+                    Verdict::Approve => 'Approved the changes.',
+                    Verdict::RequestChanges => 'Asked for changes.',
+                    Verdict::Comment => 'Commented on the changes.',
+                });
+
+                return Command::SUCCESS;
             }
 
             if (null !== $schedule) {

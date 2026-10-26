@@ -2,11 +2,11 @@
 
 declare(strict_types=1);
 
-namespace Quire\Tests\Audit;
+namespace Quire\Tests\Action;
 
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
-use Quire\Audit\Internal\CommandLine;
+use Quire\Action\CommandLine;
 
 final class CommandLineTest extends TestCase
 {

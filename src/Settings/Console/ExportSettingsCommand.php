@@ -4,8 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Settings\Console;
 
-use Quire\Settings\Settings;
-use Quire\Settings\SettingsSchema;
+use Quire\Settings\SettingsTransfer;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
@@ -17,6 +16,7 @@ use Symfony\Component\Console\Output\OutputInterface;
     description: 'Print the settings the site changed, as JSON, e.g. to copy them to another site with quire:settings:import',
     help: <<<'HELP'
         <info>%command.full_name% > settings.json</info>
+        <info>%command.full_name% --format yaml > settings.yaml</info>
         <info>%command.full_name% site. --all</info>
 
         Only settings stored in the database are printed: not defaults (unless --all), nor values of
@@ -27,8 +27,7 @@ use Symfony\Component\Console\Output\OutputInterface;
 final readonly class ExportSettingsCommand
 {
     public function __construct(
-        private SettingsSchema $schema,
-        private Settings $settings,
+        private SettingsTransfer $transfer,
     ) {
     }
 
@@ -40,19 +39,15 @@ final readonly class ExportSettingsCommand
         bool $all = false,
         #[Option(description: 'Also sensitive settings, e.g. API keys')]
         bool $includeSensitive = false,
+        #[Option(description: 'Output format: "json" or "yaml"')]
+        string $format = 'json',
     ): int {
-        $values = [];
-
-        foreach ($this->schema->all($prefix) as $key => $definition) {
-            $source = $this->settings->source($key);
-
-            if ((!$definition->sensitive || $includeSensitive) && ('database' === $source || ($all && 'default' === $source))) {
-                $values[$key] = $this->settings->get($key);
-            }
+        if (!\in_array($format, ['json', 'yaml'], true)) {
+            throw new \InvalidArgumentException('--format takes "json" or "yaml".');
         }
 
-        ksort($values);
-        $output->writeln([] === $values ? '{}' : json_encode($values, \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        $values = $this->transfer->export($prefix, $all, $includeSensitive);
+        $output->write('yaml' === $format ? $this->transfer->toYaml($values) : $this->transfer->toJson($values)."\n", false, OutputInterface::OUTPUT_RAW);
 
         return Command::SUCCESS;
     }

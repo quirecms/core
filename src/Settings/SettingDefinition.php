@@ -12,10 +12,12 @@ namespace Quire\Settings;
 final readonly class SettingDefinition
 {
     /**
-     * @param string           $owner     ID of the extension that declared it, "core" or "site"
-     * @param list<string|int> $choices   Allowed values for {@see SettingType::Enum}
-     * @param bool             $sensitive Hidden in listings, e.g. API keys
-     * @param bool             $exposed   Readable by templates with quire_setting()
+     * @param string                $owner       ID of the extension that declared it, "core" or "site"
+     * @param list<string|int>      $choices     Allowed values for {@see SettingType::Enum}
+     * @param bool                  $sensitive   Hidden in listings, e.g. API keys
+     * @param bool                  $exposed     Readable by templates with quire_setting()
+     * @param string|null           $phrase      The setting in a sentence, with {value}, e.g. "This site is called {value}."
+     * @param array<string, string> $valueLabels How values read in the sentence: by choice for "enum", "on" and "off" for "bool"
      */
     public function __construct(
         public string $key,
@@ -30,7 +32,23 @@ final readonly class SettingDefinition
         public bool $nullable = false,
         public bool $sensitive = false,
         public bool $exposed = false,
+        public ?string $phrase = null,
+        public array $valueLabels = [],
     ) {
+    }
+
+    /**
+     * How a value reads in the setting's sentence, untranslated: its label, or null to show the value itself.
+     */
+    public function valueLabel(mixed $value): ?string
+    {
+        $key = match (true) {
+            \is_bool($value) => $value ? 'on' : 'off',
+            \is_string($value), \is_int($value) => (string) $value,
+            default => null,
+        };
+
+        return null === $key ? null : ($this->valueLabels[$key] ?? null);
     }
 
     /**
@@ -74,6 +92,8 @@ final readonly class SettingDefinition
             'nullable' => $this->nullable,
             'sensitive' => $this->sensitive,
             'exposed' => $this->exposed,
+            'phrase' => $this->phrase,
+            'value_labels' => $this->valueLabels,
         ];
     }
 
@@ -84,7 +104,7 @@ final readonly class SettingDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool} $definition */
+        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool, phrase?: ?string, value_labels?: array<string, string>} $definition */
         $definition = $data;
 
         return new self(
@@ -100,6 +120,8 @@ final readonly class SettingDefinition
             nullable: $definition['nullable'],
             sensitive: $definition['sensitive'],
             exposed: $definition['exposed'] ?? false,
+            phrase: $definition['phrase'] ?? null,
+            valueLabels: $definition['value_labels'] ?? [],
         );
     }
 }

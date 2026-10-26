@@ -17,6 +17,7 @@ use Quire\Http\Session\SessionHandlerFactory;
 use Quire\Permission\Access;
 use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
+use Quire\Settings\SettingsTransfer;
 use Quire\Storage\ObjectStore;
 use Quire\Storage\StorageDisks;
 use Quire\Theme\ContentPreviews;
@@ -88,6 +89,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Backup/{BackupContents,BackupRun}.php',
             '../src/User/{User,Role,CreateUser,UpdateUser,Invitation}.php',
             '../src/Audit/UndoPlan.php',
+            '../src/Settings/SettingsImport.php',
             '../src/User/Preference/{PreferenceDefinition,InvalidPreferenceException}.php',
             '../src/Permission/UserAccess.php',
             '../src/User/Exception/',
@@ -117,6 +119,8 @@ return static function (ContainerConfigurator $container): void {
     $services->set(AuditLog::class)->public();
     // For admin interfaces: undoing what the audit log records.
     $services->set(AuditUndo::class)->public();
+    // For admin interfaces: moving settings between sites.
+    $services->set(SettingsTransfer::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
     $services->set(PendingRevisionComments::class)->public();

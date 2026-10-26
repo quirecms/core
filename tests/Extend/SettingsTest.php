@@ -32,6 +32,19 @@ final class SettingsTest extends ExtenderTestCase
         self::assertSame('QUIRE_SETTING__ACME_REVIEWS__PER_PAGE', $perPage->environmentVariable());
     }
 
+    public function testSettingsReadAsSentences(): void
+    {
+        $this->apply(new Settings()
+            ->define('acme-reviews.units', 'enum', 'metric', choices: ['metric', 'imperial'], phrase: 'Quantities are shown in {value} units.', valueLabels: ['metric' => 'metric', 'imperial' => 'imperial'])
+            ->define('acme-reviews.moderate', 'bool', true, phrase: 'Reviews {value} before they show.', valueLabels: ['on' => 'wait for a moderator', 'off' => 'don\'t wait']));
+
+        $moderate = $this->schema()->get('acme-reviews.moderate');
+        self::assertSame('Reviews {value} before they show.', $moderate->phrase);
+        self::assertSame(['wait for a moderator', 'don\'t wait'], [$moderate->valueLabel(true), $moderate->valueLabel(false)]);
+        self::assertSame('imperial', $this->schema()->get('acme-reviews.units')->valueLabel('imperial'));
+        self::assertNull($this->schema()->get('acme-reviews.units')->valueLabel(12));
+    }
+
     public function testCoreAndSitePrefixes(): void
     {
         new Settings()->define('site.tagline', 'string', '')
@@ -53,6 +66,9 @@ final class SettingsTest extends ExtenderTestCase
         $this->assertExtenderFails(new Settings()->define('acme-reviews.per_page', 'int', '20'), 'The default value doesn\'t fit the setting: expected an integer.');
         $this->assertExtenderFails(new Settings()->define('acme-reviews.api_key', 'string', null), 'can\'t be empty (null)');
         $this->assertExtenderFails(new Settings()->define('acme-reviews.api_key', 'string', '', sensitive: true, exposed: true), 'Sensitive settings can\'t be exposed to templates.');
+        $this->assertExtenderFails(new Settings()->define('acme-reviews.units', 'string', 'metric', phrase: 'Quantities are metric.'), 'The phrase says where the value goes with {value}');
+        $this->assertExtenderFails(new Settings()->define('acme-reviews.units', 'string', 'metric', valueLabels: ['metric' => 'metric']), 'Only "enum" and "bool" settings have labels for their values.');
+        $this->assertExtenderFails(new Settings()->define('acme-reviews.on', 'bool', true, valueLabels: ['yes' => 'shown']), 'Labels are for the values on, off.');
     }
 
     public function testExposedSettingsAndThemeSettings(): void

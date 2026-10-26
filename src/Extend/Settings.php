@@ -26,15 +26,17 @@ final class Settings implements ExtenderInterface
 {
     private const string KEY_PATTERN = '/^[a-z0-9]+(?:[-_][a-z0-9]+)*(?:\.[a-z0-9]+(?:[-_][a-z0-9]+)*)+$/';
 
-    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed: bool}> */
+    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed: bool, phrase: ?string, value_labels: array<string, string>}> */
     private array $definitions = [];
 
     /**
-     * @param SettingType|string $type      "string", "bool", "int", "float", "enum", "list" or "json"
-     * @param list<string|int>   $choices   Allowed values, for the "enum" type
-     * @param string|null        $widget    Hint for admin interfaces, e.g. "textarea" or "color"
-     * @param bool               $sensitive Hide the value in listings, e.g. for API keys
-     * @param bool               $exposed   Let templates read it with quire_setting(), e.g. a footer text
+     * @param SettingType|string    $type        "string", "bool", "int", "float", "enum", "list" or "json"
+     * @param list<string|int>      $choices     Allowed values, for the "enum" type
+     * @param string|null           $widget      Hint for admin interfaces, e.g. "textarea" or "color"
+     * @param bool                  $sensitive   Hide the value in listings, e.g. for API keys
+     * @param bool                  $exposed     Let templates read it with quire_setting(), e.g. a footer text
+     * @param string|null           $phrase      The setting in a sentence of the settings document, with {value}, e.g. "Quantities are shown in {value} units."
+     * @param array<string, string> $valueLabels How values read in that sentence: by choice for "enum", "on" and "off" for "bool", e.g. ["on" => "need a reviewer's approval", "off" => "go live when published"]
      */
     public function define(
         string $key,
@@ -48,6 +50,8 @@ final class Settings implements ExtenderInterface
         bool $nullable = false,
         bool $sensitive = false,
         bool $exposed = false,
+        ?string $phrase = null,
+        array $valueLabels = [],
     ): self {
         $this->definitions[] = [
             'key' => $key,
@@ -61,6 +65,8 @@ final class Settings implements ExtenderInterface
             'nullable' => $nullable,
             'sensitive' => $sensitive,
             'exposed' => $exposed,
+            'phrase' => $phrase,
+            'value_labels' => $valueLabels,
         ];
 
         return $this;
@@ -99,6 +105,20 @@ final class Settings implements ExtenderInterface
                 throw $context->error($where, 'Settings of type "enum" need a list of choices.');
             }
 
+            if (null !== $definition['phrase'] && !str_contains($definition['phrase'], '{value}')) {
+                throw $context->error($where, 'The phrase says where the value goes with {value}, e.g. "Quantities are shown in {value} units."');
+            }
+
+            $labelled = match ($type) {
+                SettingType::Bool => ['on', 'off'],
+                SettingType::Enum => array_map(strval(...), $definition['choices']),
+                default => [],
+            };
+
+            if ([] !== array_diff(array_map(strval(...), array_keys($definition['value_labels'])), $labelled)) {
+                throw $context->error($where, [] === $labelled ? 'Only "enum" and "bool" settings have labels for their values.' : \sprintf('Labels are for the values %s.', implode(', ', $labelled)));
+            }
+
             if (SettingType::Enum !== $type && [] !== $definition['choices']) {
                 throw $context->error($where, 'Choices only apply to settings of type "enum".');
             }
@@ -117,6 +137,8 @@ final class Settings implements ExtenderInterface
                 sensitive: $definition['sensitive'],
                 // A theme's settings exist for its templates.
                 exposed: $definition['exposed'] || $context->theme,
+                phrase: $definition['phrase'],
+                valueLabels: $definition['value_labels'],
             );
 
             $error = $setting->validate($definition['default']);

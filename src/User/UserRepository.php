@@ -27,6 +27,31 @@ final readonly class UserRepository
     }
 
     /**
+     * The users with these IDs, in one query, e.g. for a list that names them. IDs of no user are left out.
+     *
+     * @param iterable<string> $ids
+     *
+     * @return array<string, User> By ID
+     */
+    public function findMany(iterable $ids): array
+    {
+        $ids = array_values(array_unique(array_filter([...$ids], Row::isUuid(...))));
+
+        if ([] === $ids) {
+            return [];
+        }
+
+        $users = [];
+
+        foreach ($this->connection->fetchAllAssociative(\sprintf('SELECT %s FROM quire.app_user WHERE id = ANY(CAST(? AS uuid[]))', self::COLUMNS), ['{'.implode(',', $ids).'}']) as $row) {
+            $user = $this->hydrate($row);
+            $users[$user->id] = $user;
+        }
+
+        return $users;
+    }
+
+    /**
      * Emails are compared regardless of case.
      */
     public function findByEmail(string $email): ?User

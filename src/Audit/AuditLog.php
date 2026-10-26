@@ -182,6 +182,53 @@ final class AuditLog implements ResetInterface
     }
 
     /**
+     * The latest entry about each of the subjects, in one query, e.g. to tell for a page of entries which
+     * came last about what they changed. Entries of $exceptActions don't count.
+     *
+     * @param iterable<array{0: string, 1: string}> $subjects      Each a subject's type and ID
+     * @param list<string>                          $exceptActions
+     *
+     * @return array<string, string> The latest entry's ID, by "type id"; subjects without entries are left out
+     */
+    public function latestAbout(iterable $subjects, array $exceptActions = []): array
+    {
+        $types = $ids = [];
+
+        foreach ($subjects as [$type, $id]) {
+            $types[] = $type;
+            $ids[] = $id;
+        }
+
+        if ([] === $types) {
+            return [];
+        }
+
+        $rows = $this->connection->fetchAllAssociative(
+            'SELECT DISTINCT ON (e.subject_type, e.subject_id) e.subject_type, e.subject_id, e.id
+             FROM quire.audit_entry e
+             JOIN unnest(CAST(? AS text[]), CAST(? AS text[])) AS s(type, id) ON e.subject_type = s.type AND e.subject_id = s.id
+             WHERE e.action <> ALL(CAST(? AS text[]))
+             ORDER BY e.subject_type, e.subject_id, e.last_at DESC, e.id DESC',
+            [$this->textArray($types), $this->textArray($ids), $this->textArray($exceptActions)],
+        );
+        $latest = [];
+
+        foreach ($rows as $row) {
+            $latest[$this->scalar($row['subject_type']).' '.$this->scalar($row['subject_id'])] = $this->scalar($row['id']);
+        }
+
+        return $latest;
+    }
+
+    /**
+     * @param list<string> $values
+     */
+    private function textArray(array $values): string
+    {
+        return '{'.implode(',', array_map(static fn (string $value): string => '"'.addcslashes($value, '"\\').'"', $values)).'}';
+    }
+
+    /**
      * How many entries match on each day, in a time zone, e.g. for bars of the last 30 days. Days without
      * any are left out.
      *

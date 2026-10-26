@@ -80,6 +80,31 @@ final readonly class ContentRepository
     }
 
     /**
+     * The items with these IDs, in one query, e.g. for a list that names them. IDs of no item are left out.
+     *
+     * @param iterable<string> $ids
+     *
+     * @return array<string, Content> By ID
+     */
+    public function findMany(iterable $ids): array
+    {
+        $ids = array_values(array_unique(array_filter([...$ids], Row::isUuid(...))));
+
+        if ([] === $ids) {
+            return [];
+        }
+
+        $items = [];
+
+        foreach ($this->connection->fetchAllAssociative(\sprintf('SELECT %s FROM quire.content WHERE id = ANY(CAST(? AS uuid[]))', self::COLUMNS), ['{'.implode(',', $ids).'}']) as $row) {
+            $item = self::hydrate($row);
+            $items[$item->id] = $item;
+        }
+
+        return $items;
+    }
+
+    /**
      * @throws ContentNotFoundException
      */
     public function get(string $id): Content

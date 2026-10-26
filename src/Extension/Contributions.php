@@ -20,7 +20,7 @@ final readonly class Contributions
      * @param list<string>       $preferences  People's preferences, by name
      * @param list<string>       $abilities    Abilities, by name
      * @param list<string>       $roles        Roles, by name
-     * @param array<string, int> $routes       Pages, how many in each group ("site", "admin"); routes from controller directories count once
+     * @param array<string, int> $routes       Pages (routes that can be opened, GET), how many in each group ("site", "admin"); a directory of controllers counts once
      * @param list<string>       $checks       Content checks, by ID
      * @param list<string>       $actions      Actions of the catalogue, by ID
      * @param list<string>       $scheduled    Scheduled tasks, by name

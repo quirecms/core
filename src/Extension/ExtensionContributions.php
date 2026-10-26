@@ -58,7 +58,10 @@ final readonly class ExtensionContributions
         $routes = [];
 
         foreach ($this->list(Routes::PARAMETER) as $route) {
-            if (($route['extension'] ?? null) === $id) {
+            // Pages: what can be opened, not what forms post to; a directory of controllers counts once.
+            $methods = \is_array($route['methods'] ?? null) ? $route['methods'] : [];
+
+            if (($route['extension'] ?? null) === $id && ([] === $methods || \in_array('GET', $methods, true))) {
                 $group = \is_string($route['group'] ?? null) ? $route['group'] : Routes::SITE;
                 $routes[$group] = ($routes[$group] ?? 0) + 1;
             }

@@ -65,8 +65,8 @@ final class SearchSql
         $any = implode(' || ', array_map(static fn (string $configuration): string => \sprintf($parsed['query'], "'".$configuration."'::regconfig"), $configurations));
 
         return [
-            'sql' => \sprintf('(c.search @@ (%s) AND c.search @@ %s)', $any, self::ownQuery($parsed)),
-            'params' => [...array_fill(0, \count($configurations), $parsed['terms']), $parsed['terms']],
+            'sql' => \sprintf('(c.search @@ (%s) AND c.search @@ %s)', $any, self::itemQuery($parsed)),
+            'params' => [...array_fill(0, \count($configurations), $parsed['terms']), $parsed['terms'], $parsed['terms']],
         ];
     }
 
@@ -80,7 +80,7 @@ final class SearchSql
      */
     public static function rank(array $parsed): array
     {
-        return ['sql' => \sprintf('ts_rank(c.search, %s, 1 | 32)', self::ownQuery($parsed)), 'params' => [$parsed['terms']]];
+        return ['sql' => \sprintf('ts_rank(c.search, %s, 1 | 32)', self::itemQuery($parsed)), 'params' => [$parsed['terms'], $parsed['terms']]];
     }
 
     /**
@@ -118,5 +118,16 @@ final class SearchSql
     private static function ownQuery(array $parsed): string
     {
         return \sprintf($parsed['query'], 'c.search_config');
+    }
+
+    /**
+     * The terms in the item's language, or as they're written: titles are in the search vector both
+     * ways, so a title of stop words ("About") is found too.
+     *
+     * @param array{query: string, terms: string} $parsed
+     */
+    private static function itemQuery(array $parsed): string
+    {
+        return \sprintf('(%s || %s)', self::ownQuery($parsed), \sprintf($parsed['query'], "'simple'::regconfig"));
     }
 }

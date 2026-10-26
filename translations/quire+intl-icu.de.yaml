@@ -57,3 +57,6 @@
 "You were added to {site}, as {username}. Choose your password to sign in:": "Sie wurden zu {site} hinzugefügt, als {username}. Wählen Sie Ihr Passwort, um sich anzumelden:"
 "The link works once, for seven days.": "Der Link funktioniert einmal, sieben Tage lang."
 "Welcome! Sign in with your new password.": "Willkommen! Melden Sie sich mit Ihrem neuen Passwort an."
+"Seeing as someone else": "Ansicht als jemand anderes"
+"You’re seeing this as {name}: nothing can be changed.": "Du siehst das als {name}: Nichts kann geändert werden."
+"Stop seeing as {name}": "Nicht mehr als {name} ansehen"

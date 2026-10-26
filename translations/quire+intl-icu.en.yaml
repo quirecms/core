@@ -59,3 +59,6 @@
 'You were added to {site}, as {username}. Choose your password to sign in:': 'You were added to {site}, as {username}. Choose your password to sign in:'
 'The link works once, for seven days.': 'The link works once, for seven days.'
 'Welcome! Sign in with your new password.': 'Welcome! Sign in with your new password.'
+"Seeing as someone else": "Seeing as someone else"
+"You’re seeing this as {name}: nothing can be changed.": "You’re seeing this as {name}: nothing can be changed."
+"Stop seeing as {name}": "Stop seeing as {name}"

@@ -123,14 +123,15 @@ final readonly class UserRepository
     /**
      * Users matching a search, a page at a time, e.g. for an admin's list of users.
      *
-     * @param string|null $text   Part of the name, username or email
-     * @param string|null $role   Only users with this role
-     * @param string|null $status Only users with this status, e.g. {@see User::SUSPENDED}
-     * @param string      $sort   "name", "username", "created" or "login" (last sign-in, never last)
+     * @param string|null $text    Part of the name, username or email
+     * @param string|null $role    Only users with this role
+     * @param string|null $status  Only users with this status, e.g. {@see User::SUSPENDED}
+     * @param string      $sort    "name", "username", "created" or "login" (last sign-in, never last)
+     * @param bool|null   $invited Only users invited who haven't chosen their password yet (true), or the others (false)
      *
      * @return array{users: list<User>, total: int} The page, and how many users match in all
      */
-    public function search(?string $text = null, ?string $role = null, ?string $status = null, string $sort = 'name', bool $descending = false, int $limit = 50, int $offset = 0): array
+    public function search(?string $text = null, ?string $role = null, ?string $status = null, string $sort = 'name', bool $descending = false, int $limit = 50, int $offset = 0, ?bool $invited = null): array
     {
         [$conditions, $parameters] = [[], []];
         $text = trim((string) $text);
@@ -151,6 +152,10 @@ final readonly class UserRepository
         if (null !== $status) {
             $conditions[] = 'status = ?';
             $parameters[] = $status;
+        }
+
+        if (null !== $invited) {
+            $conditions[] = ($invited ? '' : 'NOT ')."EXISTS (SELECT 1 FROM quire.user_token t WHERE t.user_id = app_user.id AND t.purpose = 'invitation')";
         }
 
         $order = match ($sort) {

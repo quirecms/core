@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use Quire\Audit\AuditLog;
+use Quire\Audit\Job\PruneAuditLog;
 use Quire\Content\Check\ContentChecker;
 use Quire\Content\Check\Internal\AltTextCheck;
 use Quire\Content\Check\Internal\ExcerptCheck;
@@ -64,6 +66,7 @@ return [
         ->define(AccountSettings::EMAIL_VERIFICATION, 'bool', false, label: 'Confirm emails', help: 'Whether people who register confirm their email, by opening an emailed link, before they can sign in.', group: 'users')
         ->define(AccountSettings::PASSWORD_RESET, 'bool', false, label: 'Password reset', help: 'Whether users who forgot their password can choose a new one through an emailed link.', group: 'users')
         ->define(AccountSettings::MAIL_FROM, 'string', null, label: 'Email sender', help: 'Who emails come from, e.g. "Tournament news <news@example.com>". Empty for the site title and noreply@ the site\'s domain.', group: 'users', nullable: true)
+        ->define(AuditLog::RETENTION_SETTING, 'int', 365, label: 'Keep the audit log', help: 'For how many days the audit log keeps who did what. 0 keeps it forever.', group: 'users')
         ->define(SignInListener::PASSWORD_LOGIN_SETTING, 'bool', true, label: 'Password sign-in', help: 'Whether users can sign in with a password. Turn it off when everyone signs in another way, e.g. with single sign-on.', group: 'users')
         // Read when the application is built: changing it rebuilds the application (quire:theme:use does that right away).
         ->define(Themes::SETTING, 'string', Themes::DEFAULT, label: 'Theme', help: 'The ID of the site\'s theme, e.g. "acme-dark". Empty for Quire\'s built-in templates.', group: 'appearance', nullable: true),
@@ -80,7 +83,8 @@ return [
         ->ability('quire.themes.manage', 'Change the site\'s theme', roles: [], group: 'admin')
         ->ability('quire.extensions.manage', 'Enable, disable and purge extensions', roles: [], group: 'admin')
         ->ability('quire.users.manage', 'Add, change, suspend and delete users', roles: [], group: 'admin')
-        ->ability('quire.permissions.manage', 'Change roles and what they may do', roles: [], group: 'admin'),
+        ->ability('quire.permissions.manage', 'Change roles and what they may do', roles: [], group: 'admin')
+        ->ability(AuditLog::ABILITY, 'See the audit log: who did what, and when', roles: [], group: 'admin'),
 
     new Extend\Formatter()
         ->format('markdown', Format\MarkdownFormat::class)
@@ -94,7 +98,8 @@ return [
     // Tasks of core that run on a schedule, in the background (see docs/jobs.md).
     new Extend\Jobs()
         ->schedule('quire.publish-due', 'every 1 minute', PublishDueContent::class)
-        ->schedule('quire.collect-garbage', '30 3 * * *', CollectGarbage::class),
+        ->schedule('quire.collect-garbage', '30 3 * * *', CollectGarbage::class)
+        ->schedule('quire.prune-audit-log', '45 3 * * *', PruneAuditLog::class),
 
     new Extend\ContentWorkflow()
         ->status(Status::DRAFT)

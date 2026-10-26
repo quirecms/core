@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Doctrine\Migrations\DependencyFactory;
 use Doctrine\Migrations\Tools\Console\Command as MigrationCommand;
+use Quire\Audit\AuditLog;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
@@ -65,6 +66,10 @@ return static function (ContainerConfigurator $container): void {
             '../src/Storage/{Disk,StoredObject}.php',
             '../src/Storage/Job/CollectGarbage.php',
             '../src/Content/Job/PublishDueContent.php',
+            '../src/Audit/{AuditEntry,AuditPage,AuditQuery,Origin}.php',
+            '../src/Audit/Event/',
+            '../src/Audit/Job/PruneAuditLog.php',
+            '../src/Audit/Internal/CommandLine.php',
             '../src/Jobs/{Job,JobReport,ScheduledTask}.php',
             '../src/Storage/Exception/',
             '../src/Content/Query/{ContentPage,ContentQuery}.php',
@@ -97,6 +102,8 @@ return static function (ContainerConfigurator $container): void {
     // Storage is for extensions; nothing in core uses it yet, and unused private services are removed.
     $services->set(StorageDisks::class)->public();
     $services->set(ObjectStore::class)->public();
+    // For extensions recording their actions.
+    $services->set(AuditLog::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
 

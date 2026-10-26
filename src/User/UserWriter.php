@@ -9,7 +9,10 @@ use Doctrine\DBAL\Exception\UniqueConstraintViolationException;
 use Quire\Content\Internal\Slugs;
 use Quire\Permission\Permissions;
 use Quire\User\Event\IdentityLinking;
+use Quire\User\Event\UserCreated;
+use Quire\User\Event\UserDeleted;
 use Quire\User\Event\UserDeleting;
+use Quire\User\Event\UserUpdated;
 use Quire\User\Exception\IdentityLinkRefusedException;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Exception\UserNotFoundException;
@@ -63,7 +66,7 @@ final readonly class UserWriter
             throw new InvalidUserException($violations);
         }
 
-        return $this->transactional(function () use ($command, $displayName, $email, $roles, $hash, $username): User {
+        $user = $this->transactional(function () use ($command, $displayName, $email, $roles, $hash, $username): User {
             $this->lockUsernames();
 
             if (null === $username) {
@@ -79,6 +82,9 @@ final readonly class UserWriter
 
             return $this->get(\is_string($id) ? $id : throw new \LogicException('The new user has no ID.'));
         });
+        $this->dispatcher->dispatch(new UserCreated($user));
+
+        return $user;
     }
 
     /**
@@ -110,7 +116,7 @@ final readonly class UserWriter
             $columns['email_verified_at'] = null;
         }
 
-        return $this->transactional(function () use ($command, $columns): User {
+        $user = $this->transactional(function () use ($command, $columns): User {
             if (isset($columns['username'])) {
                 $this->lockUsernames();
 
@@ -123,6 +129,8 @@ final readonly class UserWriter
 
             return $this->get($command->id);
         });
+
+        return $this->updated($current, $user);
     }
 
     /**
@@ -133,7 +141,7 @@ final readonly class UserWriter
      */
     public function changePassword(string $id, #[\SensitiveParameter] ?string $password): User
     {
-        $this->get($id);
+        $before = $this->get($id);
         $violations = [];
         $hash = null === $password ? null : $this->hash($password, $violations);
 
@@ -143,7 +151,7 @@ final readonly class UserWriter
 
         $this->set($id, ['password_hash' => $hash]);
 
-        return $this->get($id);
+        return $this->updated($before, $this->get($id));
     }
 
     /**
@@ -164,7 +172,7 @@ final readonly class UserWriter
      */
     public function setRoles(string $id, array $roles): User
     {
-        $this->get($id);
+        $before = $this->get($id);
         $violations = [];
         $roles = $this->roles($roles, $violations);
 
@@ -180,7 +188,7 @@ final readonly class UserWriter
             $this->connection->executeStatement('UPDATE quire.app_user SET roles = ?::text[], updated_at = now() WHERE id = ?', [$this->array($roles), $id]);
         });
 
-        return $this->get($id);
+        return $this->updated($before, $this->get($id));
     }
 
     /**
@@ -191,11 +199,13 @@ final readonly class UserWriter
      */
     public function suspend(string $id): User
     {
-        return $this->transactional(function () use ($id): User {
+        $before = $this->get($id);
+
+        return $this->updated($before, $this->transactional(function () use ($id): User {
             $this->assertNotLastAdmin($id, 'suspend');
 
             return $this->setStatus($id, User::SUSPENDED);
-        });
+        }));
     }
 
     /**
@@ -203,7 +213,9 @@ final readonly class UserWriter
      */
     public function activate(string $id): User
     {
-        return $this->setStatus($id, User::ACTIVE);
+        $before = $this->get($id);
+
+        return $this->updated($before, $this->setStatus($id, User::ACTIVE));
     }
 
     public function recordLogin(string $id): void
@@ -260,10 +272,10 @@ final readonly class UserWriter
      */
     public function markEmailVerified(string $id): User
     {
-        $this->get($id);
+        $before = $this->get($id);
         $this->connection->executeStatement('UPDATE quire.app_user SET email_verified_at = now(), updated_at = now() WHERE id = ? AND email_verified_at IS NULL', [$id]);
 
-        return $this->get($id);
+        return $this->updated($before, $this->get($id));
     }
 
     /**
@@ -290,7 +302,7 @@ final readonly class UserWriter
      */
     public function delete(string $id, ?string $reassignTo = null): void
     {
-        $this->transactional(function () use ($id, $reassignTo): void {
+        [$user, $heir] = $this->transactional(function () use ($id, $reassignTo): array {
             $user = $this->get($id);
             $this->assertNotLastAdmin($id, 'delete');
             $heir = null === $reassignTo ? null : $this->get($reassignTo);
@@ -302,7 +314,10 @@ final readonly class UserWriter
             $this->connection->executeStatement('UPDATE quire.content SET author_id = ? WHERE author_id = ?', [$heir?->id, $user->id]);
             $this->dispatcher->dispatch(new UserDeleting($user, $heir));
             $this->connection->executeStatement('DELETE FROM quire.app_user WHERE id = ?', [$user->id]);
+
+            return [$user, $heir];
         });
+        $this->dispatcher->dispatch(new UserDeleted($user, $heir));
     }
 
     /**
@@ -367,6 +382,27 @@ final readonly class UserWriter
         } catch (UniqueConstraintViolationException $e) {
             throw $this->duplicate($e);
         }
+    }
+
+    /**
+     * Dispatches {@see UserUpdated} when something changed (the update time aside).
+     */
+    private function updated(User $before, User $after): User
+    {
+        $changed = $before->email !== $after->email
+            || $before->username !== $after->username
+            || $before->displayName !== $after->displayName
+            || $before->passwordHash !== $after->passwordHash
+            || $before->roles !== $after->roles
+            || $before->status !== $after->status
+            || $before->attributes !== $after->attributes
+            || $before->emailVerifiedAt?->getTimestamp() !== $after->emailVerifiedAt?->getTimestamp();
+
+        if ($changed) {
+            $this->dispatcher->dispatch(new UserUpdated($before, $after));
+        }
+
+        return $after;
     }
 
     private function get(string $id): User

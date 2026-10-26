@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Quire\User;
 
 use Quire\Settings\Settings;
+use Quire\User\Event\UserInvited;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Mail\UserMailer;
 use Quire\User\Security\SignInListener;
 use Quire\User\Token\UserTokens;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 
 /**
  * Invites users by email to choose their password, e.g. after an admin added them, so nobody but them ever
@@ -23,6 +25,7 @@ final readonly class Invitations
         private UserTokens $tokens,
         private UserMailer $mailer,
         private Settings $settings,
+        private EventDispatcherInterface $dispatcher,
     ) {
     }
 
@@ -51,5 +54,6 @@ final readonly class Invitations
         }
 
         $this->mailer->sendInvitation($user, $this->tokens->issue($user, UserTokens::INVITATION, new \DateInterval(UserMailer::INVITATION_LIFETIME)), $by);
+        $this->dispatcher->dispatch(new UserInvited($user, $by));
     }
 }

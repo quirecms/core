@@ -39,6 +39,9 @@ final class Routes implements ExtenderInterface
     /** The admin interface */
     public const string ADMIN = 'admin';
 
+    /** The request attribute (a route default) naming the group of the page's route, e.g. {@see ADMIN} */
+    public const string GROUP_ATTRIBUTE = '_quire_group';
+
     private const string NAME_PATTERN = '/^[a-zA-Z0-9_.]+$/';
 
     /**

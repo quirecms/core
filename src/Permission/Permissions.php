@@ -221,7 +221,35 @@ final class Permissions implements ResetInterface
      */
     public function changes(): array
     {
-        $value = $this->settings->get(self::SETTING);
+        return $this->changesFrom($this->settings->get(self::SETTING));
+    }
+
+    /**
+     * The roles of each ability, had the setting {@see self::SETTING} this value; e.g. to compare two
+     * values of it.
+     *
+     * @return array<string, list<string>> Ability => roles
+     *
+     * @internal
+     */
+    public function grantsFrom(mixed $value): array
+    {
+        $changes = $this->changesFrom($value);
+        $grants = [];
+
+        foreach ($this->config['abilities'] as $name => $ability) {
+            $roles = array_diff([...$ability['roles'], ...$changes['grant'][$name] ?? []], $changes['revoke'][$name] ?? []);
+            $grants[$name] = array_values(array_unique($roles));
+        }
+
+        return $grants;
+    }
+
+    /**
+     * @return array{grant: array<string, list<string>>, revoke: array<string, list<string>>}
+     */
+    private function changesFrom(mixed $value): array
+    {
         $changes = ['grant' => [], 'revoke' => []];
 
         foreach (['grant', 'revoke'] as $kind) {
@@ -244,15 +272,7 @@ final class Permissions implements ResetInterface
             return $this->grants;
         }
 
-        $changes = $this->changes();
-        $grants = [];
-
-        foreach ($this->config['abilities'] as $name => $ability) {
-            $roles = array_diff([...$ability['roles'], ...$changes['grant'][$name] ?? []], $changes['revoke'][$name] ?? []);
-            $grants[$name] = array_values(array_unique($roles));
-        }
-
-        return $this->grants = $grants;
+        return $this->grants = $this->grantsFrom($this->settings->get(self::SETTING));
     }
 
     /**

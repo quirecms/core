@@ -28,7 +28,7 @@ final class ExtensionRouteLoader extends Loader
     public const string QUIRE_ROUTE = '_quire';
 
     /** Route default naming the route's group, e.g. "admin" (see {@see Routes}) */
-    public const string GROUP = '_quire_group';
+    public const string GROUP = Routes::GROUP_ATTRIBUTE;
 
     /** @internal */
     public const string ADMIN_PREFIX_PARAMETER = 'quire.routing.admin_prefix';

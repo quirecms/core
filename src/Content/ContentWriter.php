@@ -41,6 +41,7 @@ use Quire\Content\Internal\Row;
 use Quire\Content\Internal\Slugs;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Revision\Internal\Values;
+use Quire\Content\Revision\PendingRevision;
 use Quire\Content\Revision\PendingRevisionRepository;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Content\Revision\Review;
@@ -248,7 +249,7 @@ final readonly class ContentWriter
                 ->title($merged->title)
                 ->body($merged->body, $merged->bodyFormat)
                 ->excerpt($merged->excerpt)
-                ->fields($merged->fields), $approval?->reviewerId);
+                ->fields($merged->fields), $approval?->reviewerId, $pending);
 
             $this->connection->executeStatement('DELETE FROM quire.content_pending_revision WHERE id = ?', [$pending->id]);
             $events->append(new PendingRevisionPublished($pending, $after, $actorId));
@@ -533,7 +534,7 @@ final readonly class ContentWriter
      * @param \ArrayObject<int, object> $events
      * @param string|null               $approvedBy Who approved the changes, for the revision
      */
-    private function applyUpdate(\ArrayObject $events, UpdateContent $command, ?string $approvedBy = null): Content
+    private function applyUpdate(\ArrayObject $events, UpdateContent $command, ?string $approvedBy = null, ?PendingRevision $published = null): Content
     {
         $current = $this->lockEditable($command->id, $command->expectedVersion);
         $this->dispatchCancellable(new ContentUpdating($current, $command));
@@ -607,7 +608,7 @@ final readonly class ContentWriter
         }
 
         $this->assertReachable($after);
-        $events->append(new ContentUpdated($current, $after));
+        $events->append(new ContentUpdated($current, $after, $published));
 
         return $after;
     }

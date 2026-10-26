@@ -25,7 +25,7 @@ final class ManifestParser
     /** An exact version, so that every site downloads the same file: "8.0.23", "1.0.0-beta.2" */
     private const string VERSION_PATTERN = '/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/';
 
-    private const array KNOWN_THEME_KEYS = ['parent'];
+    private const array KNOWN_THEME_KEYS = ['parent', 'screenshot'];
 
     /**
      * @param array<mixed> $package           One entry of Composer's installed.json
@@ -62,7 +62,7 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, \sprintf('"%s" is listed in both "extra.quire.requires" and "extra.quire.optional". Keep it in only one of them.', $overlap[0]));
         }
 
-        $parent = $this->themeParent($name, $type, $manifest, $id);
+        [$parent, $screenshot] = $this->theme($name, $type, $manifest, $id);
 
         return new ExtensionManifest(
             id: $id,
@@ -79,6 +79,7 @@ final class ManifestParser
             optional: $optional,
             parent: $parent,
             importmap: $this->importmap($name, $manifest),
+            screenshot: $screenshot,
         );
     }
 
@@ -149,14 +150,16 @@ final class ManifestParser
     }
 
     /**
-     * Reads "extra.quire.theme", which only themes have: {"parent": "quire-theme-default"}.
+     * Reads "extra.quire.theme", which only themes have: {"parent": "quire-theme-default", "screenshot": "screenshot.png"}.
      *
      * @param array<string, mixed> $manifest
+     *
+     * @return array{0: ?string, 1: ?string} The parent's ID, and the screenshot's path in the package
      */
-    private function themeParent(string $name, ExtensionType $type, array $manifest, string $ownId): ?string
+    private function theme(string $name, ExtensionType $type, array $manifest, string $ownId): array
     {
         if (!\array_key_exists('theme', $manifest)) {
-            return null;
+            return [null, null];
         }
 
         if (ExtensionType::Theme !== $type) {
@@ -185,7 +188,13 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, '"extra.quire.theme.parent" is the theme itself.');
         }
 
-        return $parent;
+        $screenshot = $theme['screenshot'] ?? null;
+
+        if (null !== $screenshot && (!\is_string($screenshot) || 1 !== preg_match('~^(?!/)(?!.*\.\./)[\w./-]+\.(png|jpe?g|webp)$~i', $screenshot))) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image in the package, e.g. "screenshot.png"; got %s.', json_encode($screenshot)));
+        }
+
+        return [$parent, $screenshot];
     }
 
     /**

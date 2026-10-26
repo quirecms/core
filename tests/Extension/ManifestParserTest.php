@@ -82,6 +82,11 @@ final class ManifestParserTest extends TestCase
         self::assertSame(ExtensionType::Theme, $manifest?->type);
         self::assertSame('quire-theme-default', $manifest->parent);
         self::assertNull($this->parse($this->package('acme/reviews'))?->parent);
+
+        $pictured = $this->parse($this->package('acme/reviews', ['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['screenshot' => 'docs/screenshot.png']]]]));
+        self::assertSame('docs/screenshot.png', $pictured?->screenshot);
+        self::assertStringEndsWith(\DIRECTORY_SEPARATOR.'docs/screenshot.png', (string) $pictured->screenshotPath());
+        self::assertNull($manifest->screenshotPath());
     }
 
     public function testReadsTheNpmPackagesItsScriptsImport(): void
@@ -118,7 +123,9 @@ final class ManifestParserTest extends TestCase
         yield 'both required and optional' => [['extra' => ['quire' => ['requires' => ['quire-tags'], 'optional' => ['quire-tags']]]], '"quire-tags" is listed in both'];
         yield 'theme section in an extension' => [['extra' => ['quire' => ['theme' => ['parent' => 'acme-base']]]], '"extra.quire.theme" is only for packages of type "quire-theme"'];
         yield 'theme section is a list' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['acme-base']]]], '"extra.quire.theme" must be a JSON object'];
-        yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent.'];
+        yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent, screenshot.'];
+        yield 'screenshot outside the package' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['screenshot' => '../shot.png']]]], '"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image in the package'];
+        yield 'screenshot that is no picture' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['screenshot' => 'shot.svg']]]], '"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image'];
         yield 'parent is a package name' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme/base']]]], '"extra.quire.theme.parent" must be the ID of a theme'];
         yield 'importmap is a list' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo']]]], '"extra.quire.importmap" must be a JSON object of packages and their versions'];
         yield 'importmap names a URL' => [['extra' => ['quire' => ['importmap' => ['https://cdn.example.com/turbo.js' => '8.0.23']]]], 'which is not the name of an npm package'];

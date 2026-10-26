@@ -99,11 +99,44 @@ final readonly class ThemeLinter
             $errors[] = \sprintf('The theme doesn\'t render the standard slots %s, so extensions can\'t add their parts there. Add {{ quire_slot(\'…\') }} where they belong; see the list in docs/themes.md.', implode(', ', $missing));
         }
 
+        $warnings = $seo ? [] : ['No template calls quire_seo(), so pages have no description, canonical URL or social tags. Add {{ quire_seo() }} to the <head> of the layout.'];
+
+        // Cards are also shown alone, as previews in the admin, where there's no page request.
+        foreach ($templates as $name => $file) {
+            if (1 === preg_match('~^content/(?:[^/]+/)?_card\.html\.twig$~', $name) && 1 === preg_match('/\bapp\.(request|session|user|current_route)/', (string) file_get_contents($file))) {
+                $errors[] = \sprintf('%s uses the request (app.…), but cards are also shown alone, as previews. Use only item, type, site and theme.', $this->relative($file, $chain));
+            }
+        }
+
+        [$screenshotErrors, $screenshotWarnings] = $this->screenshot($chain[0]);
+
         return [
             'templates' => \count($templates),
-            'errors' => $errors,
-            'warnings' => $seo ? [] : ['No template calls quire_seo(), so pages have no description, canonical URL or social tags. Add {{ quire_seo() }} to the <head> of the layout.'],
+            'errors' => [...$errors, ...$screenshotErrors],
+            'warnings' => [...$warnings, ...$screenshotWarnings],
         ];
+    }
+
+    /**
+     * The theme's own screenshot, which the admin shows when choosing a theme.
+     *
+     * @return array{0: list<string>, 1: list<string>} Errors and warnings
+     */
+    private function screenshot(ExtensionManifest $theme): array
+    {
+        $file = $theme->screenshotPath();
+
+        if (null === $file) {
+            return [[], ['The theme has no screenshot, so people choosing a theme can\'t see it. Add a 1200 × 900 picture of a page, and name it in composer.json as "extra.quire.theme.screenshot".']];
+        }
+
+        $size = is_file($file) ? @getimagesize($file) : false;
+
+        if (false === $size) {
+            return [[\sprintf('The screenshot "%s" is missing, or isn\'t an image.', $theme->screenshot)], []];
+        }
+
+        return [[], [1200, 900] === [$size[0], $size[1]] ? [] : [\sprintf('The screenshot is %d × %d; 1200 × 900 shows best.', $size[0], $size[1])]];
     }
 
     /**

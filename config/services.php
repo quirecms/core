@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Doctrine\Migrations\DependencyFactory;
 use Doctrine\Migrations\Tools\Console\Command as MigrationCommand;
 use Quire\Audit\AuditLog;
+use Quire\Backup\BackupLog;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
@@ -15,6 +16,7 @@ use Quire\Routing\ContentRouteLoader;
 use Quire\Routing\ExtensionRouteLoader;
 use Quire\Storage\ObjectStore;
 use Quire\Storage\StorageDisks;
+use Quire\Theme\ContentPreviews;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler;
 
@@ -79,7 +81,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/Query/Internal/{NoMatch,QueryFields,QueryServicesPass}.php',
             '../src/Content/Permalink/{PermalinkPattern,Redirect,Resolution}.php',
             '../src/Content/Permalink/Internal/PermalinkSettings.php',
-            '../src/Backup/BackupContents.php',
+            '../src/Backup/{BackupContents,BackupRun}.php',
             '../src/User/{User,Role,CreateUser,UpdateUser}.php',
             '../src/User/Exception/',
             '../src/Permission/Internal/{ContentAbilities,PermissionsPass}.php',
@@ -108,6 +110,10 @@ return static function (ContainerConfigurator $container): void {
     $services->set(AuditLog::class)->public();
     // For admin interfaces and APIs; nothing in core edits pending revisions.
     $services->set(PendingRevisionWriter::class)->public();
+    // For admin interfaces' previews of how items will appear.
+    $services->set(ContentPreviews::class)->public();
+    // For telling people when the site was last backed up.
+    $services->set(BackupLog::class)->public();
 
     // Sessions in PostgreSQL, for applications that choose them (framework.session.handler_id).
     $services->set(SessionHandlerFactory::SERVICE, PdoSessionHandler::class)

@@ -1,0 +1,11 @@
+{#
+    An item in a list: its title, date and excerpt. Lists show each item with it, and the admin's editor
+    shows it alone, as a preview of where the item will appear, so it uses no request: only item, type,
+    site and theme. Override it for all types with templates/content/_card.html.twig, or for one with
+    templates/content/<type>/_card.html.twig.
+#}
+<article>
+    <h2><a href="{{ quire_url(item) }}">{{ item.title }}</a></h2>
+    {% if item.publishedAt %}<p><time datetime="{{ item.publishedAt|date('c') }}">{{ item.publishedAt|date('j F Y') }}</time></p>{% endif %}
+    <p>{{ quire_excerpt(item) }}</p>
+</article>

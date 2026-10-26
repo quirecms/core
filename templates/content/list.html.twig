@@ -4,7 +4,8 @@
 
     Variables: type (the content type), page (a ContentPage: iterate it for the items; page.page,
     page.pageCount), is_home (whether it's the homepage), previous_url, next_url (null when there's no
-    such page), canonical_url, site, theme.
+    such page), canonical_url, site, theme. Each item is shown with its card: content/_card.html.twig,
+    or content/<type>/_card.html.twig.
 #}
 {% extends 'layout.html.twig' %}
 
@@ -14,11 +15,7 @@
     {% if not is_home %}<h1>{{ type.pluralLabel }}</h1>{% endif %}
 
     {% for item in page %}
-        <article>
-            <h2><a href="{{ quire_url(item) }}">{{ item.title }}</a></h2>
-            {% if item.publishedAt %}<p><time datetime="{{ item.publishedAt|date('c') }}">{{ item.publishedAt|date('j F Y') }}</time></p>{% endif %}
-            <p>{{ quire_excerpt(item) }}</p>
-        </article>
+        {{ include(['content/' ~ type.id ~ '/_card.html.twig', 'content/_card.html.twig'], {item: item, type: type}) }}
     {% else %}
         <p>No {{ type.pluralLabel|lower }} yet.</p>
     {% endfor %}

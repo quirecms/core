@@ -7,19 +7,28 @@ namespace Quire\Theme\Seo;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Quire\Content\Content;
 use Quire\Content\ContentRenderer;
+use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Settings\Settings;
 use Quire\Theme\Event\SeoTagsBuilding;
 use Quire\Theme\Twig\SiteView;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
- * Builds and prints the SEO tags of a page from its template's variables.
+ * Builds and prints the SEO tags of a page from its template's variables; and builds an item's without a
+ * page, e.g. for the admin's preview of how it looks in search results and when shared.
  *
- * @internal
+ * Pages without an image of their own share the site's (the setting "site.share_image").
+ *
+ * @api
  */
 final readonly class SeoRenderer
 {
+    /** Setting: the image shared with pages that have none of their own, a URL or a path on the site */
+    public const string SHARE_IMAGE_SETTING = 'site.share_image';
+
     private const int DESCRIPTION_LENGTH = 160;
 
     public function __construct(
@@ -27,7 +36,22 @@ final readonly class SeoRenderer
         private ContentRenderer $renderer,
         private ContentTypeRegistry $types,
         private EventDispatcherInterface $dispatcher,
+        private Permalinks $permalinks,
+        private Settings $settings,
     ) {
+    }
+
+    /**
+     * The tags of an item's page, as its page would print them; listeners of {@see SeoTagsBuilding} get
+     * them too, with the item as the only variable of the context.
+     */
+    public function tagsFor(Content $content): SeoTags
+    {
+        $context = ['content' => $content, 'canonical_url' => $this->permalinks->url($content, UrlGeneratorInterface::ABSOLUTE_URL)];
+        $tags = $this->build($context, $content);
+        $this->dispatcher->dispatch(new SeoTagsBuilding($tags, $content, $context));
+
+        return $tags;
     }
 
     /**
@@ -48,7 +72,7 @@ final readonly class SeoRenderer
     private function build(array $context, ?Content $content): SeoTags
     {
         $canonical = \is_string($context['canonical_url'] ?? null) ? $context['canonical_url'] : null;
-        $tags = new SeoTags(title: $this->site->title(), siteName: $this->site->title(), locale: $this->site->locale(), canonicalUrl: $canonical);
+        $tags = new SeoTags(title: $this->site->title(), siteName: $this->site->title(), locale: $this->site->locale(), canonicalUrl: $canonical, imageUrl: $this->shareImage());
         $siteDescription = '' === $this->site->description() ? null : $this->site->description();
 
         if (!$content instanceof Content) {
@@ -94,6 +118,20 @@ final readonly class SeoRenderer
         }
 
         return $tags;
+    }
+
+    /**
+     * The site's share image, as an absolute URL: a path is on the site.
+     */
+    private function shareImage(): ?string
+    {
+        $image = $this->settings->get(self::SHARE_IMAGE_SETTING);
+
+        return match (true) {
+            !\is_string($image) || '' === $image => null,
+            str_starts_with($image, '/') && !str_starts_with($image, '//') => rtrim($this->site->url(), '/').$image,
+            default => $image,
+        };
     }
 
     private function html(SeoTags $tags): string

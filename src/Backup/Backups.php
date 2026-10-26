@@ -55,6 +55,7 @@ final readonly class Backups
         #[Autowire(service: ContentRenderer::CACHE_POOL)]
         private CacheItemPoolInterface $renderCache,
         private StorageDisks $disks,
+        private BackupLog $log,
     ) {
     }
 
@@ -90,11 +91,14 @@ final readonly class Backups
         } catch (\Throwable $e) {
             fclose($handle);
             @unlink($partial);
+            $this->log->record(new BackupRun(new \DateTimeImmutable(), false, target: $file, problem: $e->getMessage()));
 
             throw $e;
         }
 
         rename($partial, $file);
+        $size = filesize($file);
+        $this->log->record(new BackupRun(new \DateTimeImmutable(), true, false === $size ? null : $size, $file));
 
         return $report;
     }
@@ -109,8 +113,22 @@ final readonly class Backups
     public function stream(\Closure $output, BackupFiles $files = BackupFiles::Local, ?string $filesDirectory = null): BackupReport
     {
         $this->assertSchemaExists();
+        $bytes = 0;
 
-        return $this->write($output, $files, $filesDirectory);
+        try {
+            $report = $this->write(static function (string $data) use ($output, &$bytes): void {
+                $bytes += \strlen($data);
+                $output($data);
+            }, $files, $filesDirectory);
+        } catch (\Throwable $e) {
+            $this->log->record(new BackupRun(new \DateTimeImmutable(), false, problem: $e->getMessage()));
+
+            throw $e;
+        }
+
+        $this->log->record(new BackupRun(new \DateTimeImmutable(), true, $bytes));
+
+        return $report;
     }
 
     /**

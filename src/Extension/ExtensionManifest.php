@@ -20,6 +20,7 @@ final readonly class ExtensionManifest
      * @param string|null           $parent      For themes: ID of the theme this one inherits from
      * @param array<string, string> $importmap   JavaScript (or CSS) packages its scripts import, with their versions,
      *                                           e.g. ["@hotwired/turbo" => "8.0.23"]
+     * @param string|null           $screenshot  For themes: the path of a picture of the site with the theme, in the package
      */
     public function __construct(
         public string $id,
@@ -35,6 +36,15 @@ final readonly class ExtensionManifest
         public array $optional = [],
         public ?string $parent = null,
         public array $importmap = [],
+        public ?string $screenshot = null,
     ) {
+    }
+
+    /**
+     * For themes: where the screenshot is, as an absolute path; null when it has none.
+     */
+    public function screenshotPath(): ?string
+    {
+        return null === $this->screenshot ? null : $this->path.\DIRECTORY_SEPARATOR.$this->screenshot;
     }
 }

@@ -28,6 +28,7 @@ use Quire\Storage\Job\CollectGarbageHandler;
 use Quire\Theme\Action\UseTheme;
 use Quire\Theme\Internal\AdminAssetsSlot;
 use Quire\Theme\Internal\AssetsSlot;
+use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
 use Quire\User\Action as UserAction;
@@ -55,6 +56,7 @@ return [
     new Extend\Settings()
         ->define('site.title', 'string', 'Quire', label: 'Site title', help: 'Shown in the browser tab and in the site header.', group: 'site', exposed: true)
         ->define('site.description', 'string', '', label: 'Site description', help: 'A short description of the site, used by search engines and when the site is shared.', group: 'site', widget: 'textarea', exposed: true)
+        ->define(SeoRenderer::SHARE_IMAGE_SETTING, 'string', null, label: 'Share image', help: 'The image shown when a page without one of its own is shared, e.g. on social networks: a URL, or a path on the site such as "/images/share.png". 1200 × 630 pixels works everywhere.', group: 'site', nullable: true)
         ->define('site.locale', 'string', 'en', label: 'Language', help: 'The language of the site and of new content, as a language tag such as "en", "de" or "pt-BR".', group: 'site', exposed: true)
         ->define('site.timezone', 'enum', 'UTC', label: 'Time zone', help: 'Where the site is, e.g. "Europe/Berlin": editors enter and see dates and times in it.', group: 'site', choices: DateTimeZone::listIdentifiers(), exposed: true)
         ->define(ContentWriter::APPROVAL_SETTING, 'bool', false, label: 'Approve changes', help: 'Whether changes to published content must be approved by a reviewer before they go live. Applies to changes saved as pending revisions, e.g. in the admin.', group: 'content')

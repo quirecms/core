@@ -32,6 +32,24 @@ final readonly class AssetsRenderer
     }
 
     /**
+     * The group's stylesheets only, e.g. for a preview that runs no scripts.
+     *
+     * @param string $group "site" or "admin"
+     */
+    public function stylesheets(string $group): string
+    {
+        $html = '';
+
+        foreach ($this->assets as $asset) {
+            if ($group === $asset['group'] && 'stylesheet' === $asset['type']) {
+                $html .= \sprintf('<link rel="stylesheet" href="%s">'."\n", htmlspecialchars($this->themeAssets->url($asset['path'])));
+            }
+        }
+
+        return $html;
+    }
+
+    /**
      * @param string $group "site" or "admin"
      */
     public function render(string $group): string

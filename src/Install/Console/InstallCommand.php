@@ -14,6 +14,7 @@ use Quire\User\Console\CreateUserCommand;
 use Quire\User\Console\Passwords;
 use Quire\User\CreateUser;
 use Quire\User\Exception\InvalidUserException;
+use Quire\User\Invitations;
 use Quire\User\Role;
 use Quire\User\UserRepository;
 use Quire\User\UserWriter;
@@ -23,6 +24,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
 use Symfony\Component\Process\Process;
 
 #[AsCommand(
@@ -37,6 +39,11 @@ use Symfony\Component\Process\Process;
         Without a terminal, pass the admin's email; a strong password is generated and shown once:
 
           <info>%command.full_name% --no-interaction --admin-email=ada@example.com --title="Ada's notes"</info>
+
+        Or email the admin a link to choose their own password (it needs a mailer, MAILER_DSN), so no
+        password is ever shown or passed around:
+
+          <info>%command.full_name% --no-interaction --admin-email=ada@example.com --invite</info>
 
         Once the site has an admin, it changes nothing: create more users with "quire:user:create".
         HELP,
@@ -58,6 +65,7 @@ final readonly class InstallCommand
         private ExtensionManager $manager,
         private UserWriter $writer,
         private Settings $settings,
+        private Invitations $invitations,
         #[Autowire(param: 'kernel.project_dir')]
         private string $projectDir,
         #[Autowire(param: 'kernel.environment')]
@@ -80,8 +88,17 @@ final readonly class InstallCommand
         ?string $adminEmail = null,
         #[Option(description: 'The first admin\'s name; derived from the email by default')]
         ?string $adminName = null,
+        #[Option(description: 'Email the admin a link to choose their password, instead of setting one')]
+        bool $invite = false,
     ): int {
         $io->title('Installing Quire');
+
+        // Before anything changes: an invitation needs a mailer.
+        if ($invite && null !== $reason = $this->invitations->unavailableReason()) {
+            $io->error($reason);
+
+            return Command::FAILURE;
+        }
 
         // In a new process: the database may not have Quire's tables yet, which this one was built without.
         if (0 !== ($this->run)([PhpBinary::path(), $this->projectDir.'/bin/console', 'quire:migrations:migrate', '--no-interaction', '--allow-no-migration', '--env='.$this->environment], $io->write(...))) {
@@ -110,7 +127,7 @@ final readonly class InstallCommand
         }
 
         $adminName ??= $interactive ? self::text($io->ask('Your name', CreateUserCommand::nameFromEmail($adminEmail))) : CreateUserCommand::nameFromEmail($adminEmail);
-        $asked = Passwords::askOrReport($io, $interactive);
+        $asked = $invite ? [null, false] : Passwords::askOrReport($io, $interactive);
 
         if (null === $asked) {
             return Command::FAILURE;
@@ -138,6 +155,17 @@ final readonly class InstallCommand
 
         $adminInterface = $this->enableAdminInterface($io);
         $io->success(\sprintf('Quire is installed. %s (%s) is the admin.', $admin->displayName, $admin->email).($adminInterface ? \sprintf(' Manage the site at %s.', $this->adminPrefix) : ''));
+
+        if ($invite) {
+            try {
+                $this->invitations->invite($admin);
+                $io->writeln(\sprintf('Invited %s by email to choose a password; the link works once, for seven days.', $admin->email));
+            } catch (InvalidUserException|TransportExceptionInterface $e) {
+                $io->error(\sprintf('The invitation couldn\'t be sent: %s Send it again with "bin/console quire:user:invite %s".', $e->getMessage(), $admin->email));
+
+                return Command::FAILURE;
+            }
+        }
 
         if ($generated) {
             $io->warning(\sprintf('The admin\'s password is: %s', $password));

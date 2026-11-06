@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\User;
 
 use Quire\Settings\Settings;
+use Quire\User\Event\PasswordChangeAsked;
 use Quire\User\Event\UserInvited;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Mail\UserMailer;
@@ -71,5 +72,25 @@ final readonly class Invitations
 
         $this->mailer->sendInvitation($user, $this->tokens->issue($user, UserTokens::INVITATION, new \DateInterval(UserMailer::INVITATION_LIFETIME)), $by);
         $this->dispatcher->dispatch(new UserInvited($user, $by));
+    }
+
+    /**
+     * Emails a user who has a password a link to choose a new one, as someone who manages them asked:
+     * nobody sets another person's password, so nobody else knows it (D-42). Theirs keeps working until
+     * they choose another.
+     *
+     * @throws InvalidUserException        when password sign-in is off, or the user has no email
+     * @throws TransportExceptionInterface
+     */
+    public function askForNewPassword(User $user, ?User $by = null): void
+    {
+        $reason = $this->unavailableReason() ?? (null === $user->email ? 'The user has no email to send the link to.' : null);
+
+        if (null !== $reason) {
+            throw InvalidUserException::single('email', $reason);
+        }
+
+        $this->mailer->sendPasswordChange($user, $this->tokens->issue($user, UserTokens::PASSWORD_CHANGE, new \DateInterval(UserMailer::PASSWORD_CHANGE_LIFETIME)), $by);
+        $this->dispatcher->dispatch(new PasswordChangeAsked($user, $by));
     }
 }

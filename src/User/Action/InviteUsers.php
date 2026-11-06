@@ -42,7 +42,18 @@ final readonly class InviteUsers implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::USERS);
+        foreach ($arguments->strings('users') as $reference) {
+            $existing = $this->users->findByReference($reference);
+            $refusal = $existing instanceof \Quire\User\User ? $this->access->mayManage($existing) : null;
+
+            if (null !== $refusal) {
+                return $this->access->denied(Access::USERS) ?? $refusal;
+            }
+        }
+
+        return $this->access->denied(Access::USERS)
+            ?? $this->access->mayGiveRoles($arguments->strings('roles'))
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): null

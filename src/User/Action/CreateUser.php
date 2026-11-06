@@ -42,7 +42,10 @@ final readonly class CreateUser implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::USERS);
+        return $this->access->denied(Access::USERS)
+            ?? (null !== $arguments->optionalString('password') ? 'Passwords aren\'t set for others here: invite them instead, and they choose their own.' : null)
+            ?? $this->access->mayGiveRoles($arguments->strings('roles'))
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): User

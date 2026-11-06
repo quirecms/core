@@ -35,7 +35,10 @@ final readonly class DeleteRole implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::PERMISSIONS);
+        // Its holders lose what it gives: only a role one could give oneself
+        return $this->access->denied(Access::PERMISSIONS)
+            ?? $this->access->mayGiveRoles([$arguments->string('role')])
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): null

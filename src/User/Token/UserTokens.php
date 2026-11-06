@@ -26,6 +26,9 @@ final readonly class UserTokens
     /** A new user, invited by an admin, chooses their password */
     public const string INVITATION = 'invitation';
 
+    /** A user chooses a new password, as someone who manages them asked: nobody sets it for them (D-42) */
+    public const string PASSWORD_CHANGE = 'password_change';
+
     public function __construct(
         private Connection $connection,
         private UserRepository $users,

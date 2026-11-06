@@ -42,7 +42,9 @@ final readonly class SetSetting implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::SETTINGS);
+        $key = $arguments->string('setting');
+
+        return $this->access->denied(Access::SETTINGS) ?? $this->access->maySet($key, $arguments->bool('default') && $this->schema->has($key) ? $this->schema->get($key)->default : $arguments->value('value'));
     }
 
     public function run(Arguments $arguments): null

@@ -6,6 +6,7 @@ namespace Quire\Settings;
 
 use Doctrine\DBAL\Connection;
 use Quire\Settings\Exception\InvalidSettingValueException;
+use Symfony\Component\Security\Core\User\UserInterface;
 use Symfony\Component\Yaml\Exception\ParseException;
 use Symfony\Component\Yaml\Yaml;
 
@@ -26,6 +27,7 @@ final readonly class SettingsTransfer
         private SettingsSchema $schema,
         private Settings $settings,
         private Connection $connection,
+        private SettingAccess $access,
     ) {
     }
 
@@ -108,8 +110,10 @@ final readonly class SettingsTransfer
      *
      * @param array<string, mixed> $values
      * @param bool                 $skipUnknown Leave out keys no enabled extension declares, instead of refusing them
+     * @param UserInterface|null   $by          Who imports them, in the admin: what they may not change is refused, and so is
+     *                                          the import (see {@see SettingAccess}). Null on the command line.
      */
-    public function plan(array $values, bool $skipUnknown = false): SettingsImport
+    public function plan(array $values, bool $skipUnknown = false, ?UserInterface $by = null): SettingsImport
     {
         [$changes, $errors, $skipped] = [[], [], []];
 
@@ -122,6 +126,10 @@ final readonly class SettingsTransfer
 
             $definition = $this->schema->get($key);
             $error = 'environment' === $this->settings->source($key) ? \sprintf('it\'s set by the environment variable %s.', $definition->environmentVariable()) : $definition->validate($value);
+
+            if (null === $error && $by instanceof UserInterface && $this->settings->get($key) !== $value) {
+                $error = $this->access->refusal($by, $key, $value);
+            }
 
             if (null !== $error) {
                 $errors[] = \sprintf('%s: %s', $key, $error);

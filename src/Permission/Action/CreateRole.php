@@ -37,7 +37,9 @@ final readonly class CreateRole implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::PERMISSIONS);
+        $from = $arguments->optionalString('from');
+
+        return $this->access->denied(Access::PERMISSIONS) ?? (null === $from ? null : $this->access->mayGiveRoles([$from]));
     }
 
     public function run(Arguments $arguments): null

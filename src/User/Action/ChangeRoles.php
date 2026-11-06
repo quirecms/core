@@ -41,7 +41,13 @@ final readonly class ChangeRoles implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::USERS);
+        $target = $this->users->findByReference($arguments->string('user'));
+
+        // Taking a role away is giving it back's other side: only roles one could give
+        return $this->access->denied(Access::USERS)
+            ?? ($target instanceof User ? $this->access->mayManage($target) : null)
+            ?? $this->access->mayGiveRoles([...$arguments->strings('add'), ...$arguments->strings('remove')])
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): User

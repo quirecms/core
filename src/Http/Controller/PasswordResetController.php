@@ -43,6 +43,10 @@ final readonly class PasswordResetController
 
     public const string WELCOME_ROUTE = 'quire_welcome';
 
+    public const string NEW_PASSWORD_ROUTE = 'quire_new_password';
+
+    private const string SESSION_CHANGE = 'quire.password_change_token';
+
     private const string SESSION_TOKEN = 'quire.password_reset_token';
 
     private const string SESSION_INVITATION = 'quire.invitation_token';
@@ -125,6 +129,20 @@ final readonly class PasswordResetController
         return $this->choosePassword($request, $token, UserTokens::INVITATION, self::WELCOME_ROUTE, self::SESSION_INVITATION, 'Welcome! Sign in with your new password.');
     }
 
+    /**
+     * The link someone who manages the user sent (see {@see UserMailer::sendPasswordChange()}): they
+     * choose a new password, so nobody else knows it. It works whether or not users may reset their
+     * passwords themselves, while password sign-in is on.
+     */
+    public function newPassword(Request $request, ?string $token = null): Response
+    {
+        if (!$this->settings->getBool(SignInListener::PASSWORD_LOGIN_SETTING)) {
+            throw new NotFoundHttpException('Signing in with a password is turned off.');
+        }
+
+        return $this->choosePassword($request, $token, UserTokens::PASSWORD_CHANGE, self::NEW_PASSWORD_ROUTE, self::SESSION_CHANGE, 'Your password is changed. You can sign in with it now.');
+    }
+
     private function choosePassword(Request $request, ?string $token, string $purpose, string $route, string $sessionKey, string $done): Response
     {
         $session = $request->getSession();
@@ -141,7 +159,7 @@ final readonly class PasswordResetController
 
         if (!\is_string($token) || !$user instanceof User) {
             // An expired invitation can't be asked for again: the admin sends another.
-            return $this->render('security/link_expired.html.twig', ['retry_route' => UserTokens::INVITATION === $purpose ? null : self::FORGOT_ROUTE], Response::HTTP_GONE);
+            return $this->render('security/link_expired.html.twig', ['retry_route' => UserTokens::PASSWORD_RESET === $purpose ? self::FORGOT_ROUTE : null], Response::HTTP_GONE);
         }
 
         if (!$request->isMethod('POST')) {

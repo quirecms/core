@@ -35,7 +35,7 @@ final readonly class DisableExtensions implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::EXTENSIONS);
+        return $this->access->confirmed(Access::EXTENSIONS);
     }
 
     public function run(Arguments $arguments): null

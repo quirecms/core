@@ -1,0 +1,8 @@
+{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}
+
+{% if changed_by %}{{ '{admin} changed the email address of your account on {site} to {email}. Emails about your account, such as password links, now go there.'|trans({ admin: changed_by.displayName, site: site.title, email: new_email }, 'quire') }}{% else %}{{ 'The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there.'|trans({ site: site.title, email: new_email }, 'quire') }}{% endif %}
+
+
+{{ 'If you didn\'t expect this, contact the people who run the site at once.'|trans({}, 'quire') }}
+
+{{ site.title|raw }}

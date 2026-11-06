@@ -26,7 +26,7 @@ final class Settings implements ExtenderInterface
 {
     private const string KEY_PATTERN = '/^[a-z0-9]+(?:[-_][a-z0-9]+)*(?:\.[a-z0-9]+(?:[-_][a-z0-9]+)*)+$/';
 
-    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed: bool, phrase: ?string, value_labels: array<string, string>}> */
+    /** @var list<array{key: string, type: SettingType|string, default: mixed, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed: bool, phrase: ?string, value_labels: array<string, string>, ability: ?string}> */
     private array $definitions = [];
 
     /**
@@ -37,6 +37,7 @@ final class Settings implements ExtenderInterface
      * @param bool                  $exposed     Let templates read it with quire_setting(), e.g. a footer text
      * @param string|null           $phrase      The setting in a sentence of the settings document, with {value}, e.g. "Quantities are shown in {value} units."
      * @param array<string, string> $valueLabels How values read in that sentence: by choice for "enum", "on" and "off" for "bool", e.g. ["on" => "need a reviewer's approval", "off" => "go live when published"]
+     * @param string|null           $ability     An ability changing it takes, besides managing settings: for a setting another part of the admin owns, so managing settings isn't a way around it, e.g. "acme-shop.prices.manage"
      */
     public function define(
         string $key,
@@ -52,6 +53,7 @@ final class Settings implements ExtenderInterface
         bool $exposed = false,
         ?string $phrase = null,
         array $valueLabels = [],
+        ?string $ability = null,
     ): self {
         $this->definitions[] = [
             'key' => $key,
@@ -67,6 +69,7 @@ final class Settings implements ExtenderInterface
             'exposed' => $exposed,
             'phrase' => $phrase,
             'value_labels' => $valueLabels,
+            'ability' => $ability,
         ];
 
         return $this;
@@ -149,6 +152,7 @@ final class Settings implements ExtenderInterface
                 exposed: $definition['exposed'] || $context->theme,
                 phrase: $definition['phrase'],
                 valueLabels: $definition['value_labels'],
+                ability: $definition['ability'],
             );
 
             $error = $setting->validate($definition['default']);

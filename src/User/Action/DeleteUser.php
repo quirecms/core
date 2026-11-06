@@ -40,7 +40,11 @@ final readonly class DeleteUser implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::USERS);
+        $target = $this->users->findByReference($arguments->string('user'));
+
+        return $this->access->denied(Access::USERS)
+            ?? ($target instanceof User ? $this->access->mayManage($target) : null)
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): ?object

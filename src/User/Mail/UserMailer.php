@@ -37,6 +37,8 @@ final readonly class UserMailer
 
     public const string INVITATION_LIFETIME = 'P7D';
 
+    public const string PASSWORD_CHANGE_LIFETIME = 'P1D';
+
     public function __construct(
         private Settings $settings,
         private RouterInterface $router,
@@ -63,6 +65,32 @@ final readonly class UserMailer
         $this->send($user, 'invitation', 'You\'re invited to {site}', [
             'url' => $this->link('quire_welcome', ['token' => $token]),
             'invited_by' => $invitedBy,
+        ]);
+    }
+
+    /**
+     * For a user someone who manages them asked to choose a new password: a link, so nobody else knows
+     * it (D-42). Their password keeps working until they choose another.
+     */
+    public function sendPasswordChange(User $user, string $token, ?User $askedBy = null): void
+    {
+        $this->send($user, 'password_change', 'Choose a new password for {site}', [
+            'url' => $this->link('quire_new_password', ['token' => $token]),
+            'asked_by' => $askedBy,
+        ]);
+    }
+
+    /**
+     * To a user's old address, when someone else changed it: the owner learns of it, even when the new
+     * address is someone else's.
+     *
+     * @param User $before The user with their old address
+     */
+    public function sendEmailChanged(User $before, string $newEmail, ?User $changedBy = null): void
+    {
+        $this->send($before, 'email_changed', 'Your email address on {site} was changed', [
+            'new_email' => $newEmail,
+            'changed_by' => $changedBy,
         ]);
     }
 

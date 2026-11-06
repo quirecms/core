@@ -18,6 +18,8 @@ final readonly class SettingDefinition
      * @param bool                  $exposed     Readable by templates with quire_setting()
      * @param string|null           $phrase      The setting in a sentence, with {value}, e.g. "This site is called {value}."
      * @param array<string, string> $valueLabels How values read in the sentence: by choice for "enum", "on" and "off" for "bool"
+     * @param string|null           $ability     The ability changing it takes besides managing settings, for a setting another
+     *                                           part of the admin owns, e.g. the active theme ("quire.themes.manage")
      */
     public function __construct(
         public string $key,
@@ -34,6 +36,7 @@ final readonly class SettingDefinition
         public bool $exposed = false,
         public ?string $phrase = null,
         public array $valueLabels = [],
+        public ?string $ability = null,
     ) {
     }
 
@@ -94,6 +97,7 @@ final readonly class SettingDefinition
             'exposed' => $this->exposed,
             'phrase' => $this->phrase,
             'value_labels' => $this->valueLabels,
+            'ability' => $this->ability,
         ];
     }
 
@@ -104,7 +108,7 @@ final readonly class SettingDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool, phrase?: ?string, value_labels?: array<string, string>} $definition */
+        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool, phrase?: ?string, value_labels?: array<string, string>, ability?: ?string} $definition */
         $definition = $data;
 
         return new self(
@@ -122,6 +126,7 @@ final readonly class SettingDefinition
             exposed: $definition['exposed'] ?? false,
             phrase: $definition['phrase'] ?? null,
             valueLabels: $definition['value_labels'] ?? [],
+            ability: $definition['ability'] ?? null,
         );
     }
 }

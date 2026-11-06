@@ -35,6 +35,7 @@ use Quire\Settings\Event\SettingChanged;
 use Quire\Settings\SettingDefinition;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Themes;
+use Quire\User\Event\PasswordChangeAsked;
 use Quire\User\Event\UserCreated;
 use Quire\User\Event\UserDeleted;
 use Quire\User\Event\UserInvited;
@@ -298,6 +299,12 @@ final readonly class AuditRecorder
     public function onUserInvited(UserInvited $event): void
     {
         $this->user('user.invited', $event->user, [], $this->command('user.invite', ['users' => [$event->user->username]]), $event->by?->id);
+    }
+
+    #[AsEventListener]
+    public function onPasswordChangeAsked(PasswordChangeAsked $event): void
+    {
+        $this->user('user.password_change_asked', $event->user, [], actorId: $event->by?->id);
     }
 
     #[AsEventListener]

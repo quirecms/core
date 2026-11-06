@@ -36,7 +36,9 @@ final readonly class RevokeAbilities implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::PERMISSIONS);
+        return $this->access->denied(Access::PERMISSIONS)
+            ?? $this->access->mayGrant($arguments->strings('abilities'))
+            ?? $this->access->unconfirmed();
     }
 
     public function run(Arguments $arguments): null

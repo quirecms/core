@@ -35,7 +35,7 @@ final readonly class UseTheme implements ActionInterface
 
     public function denied(Arguments $arguments): ?string
     {
-        return $this->access->denied(Access::THEMES);
+        return $this->access->confirmed(Access::THEMES);
     }
 
     public function run(Arguments $arguments): null

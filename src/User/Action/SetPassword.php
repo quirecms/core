@@ -38,9 +38,11 @@ final readonly class SetPassword implements ActionInterface
         ], command: 'quire:user:password');
     }
 
-    public function denied(Arguments $arguments): ?string
+    public function denied(Arguments $arguments): string
     {
-        return $this->access->denied(Access::USERS);
+        // Nobody sets another person's password in the admin, so nobody knows it: they get a link to
+        // choose one (D-42). The command line still can.
+        return $this->access->denied(Access::USERS) ?? 'Passwords aren\'t set for others here: send them a link to choose a new one, from their page in Users.';
     }
 
     public function run(Arguments $arguments): User

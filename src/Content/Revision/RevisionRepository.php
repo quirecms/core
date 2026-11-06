@@ -38,6 +38,25 @@ final readonly class RevisionRepository
         return array_map($this->hydrate(...), $rows);
     }
 
+    /**
+     * The item's text and fields as they were at a version of it: its revision of that version, or the
+     * latest before it (a change of status raises the version, not the text). Null when that revision
+     * is gone (pruned, see "quire.content.revisions_keep") or the item's type keeps none.
+     */
+    public function atVersion(string $contentId, int $version): ?Revision
+    {
+        if (!Row::isUuid($contentId)) {
+            return null;
+        }
+
+        $row = $this->connection->fetchAssociative(
+            \sprintf('SELECT %s FROM quire.content_revision WHERE content_id = ? AND content_version <= ? ORDER BY content_version DESC LIMIT 1', self::COLUMNS),
+            [$contentId, $version],
+        );
+
+        return false === $row ? null : $this->hydrate($row);
+    }
+
     public function find(string $id): ?Revision
     {
         if (!Row::isUuid($id)) {

@@ -115,7 +115,7 @@ final readonly class ContentRepository
     /**
      * Loads the item and locks its row until the current transaction ends.
      *
-     * @internal Used by {@see ContentWriter}
+     * @internal Used by {@see ContentWriter} and {@see Revision\PendingRevisionWriter}
      *
      * @throws ContentNotFoundException
      */

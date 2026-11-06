@@ -54,17 +54,33 @@ final readonly class PendingRevisionWriter
      * Starts changes to an item, from its current text and fields, or from those of one of its revisions
      * (to restore it after review).
      *
+     * The changes are merged into the item when they're published, from the version they're based on:
+     * by default the current one. An editor opened at an older version passes that one, so what was
+     * published since is kept rather than taken back (the editor's text doesn't have it).
+     *
      * @param string|null $authorId     Who writes the changes
      * @param string|null $fromRevision ID of a revision of the item to start from
+     * @param int|null    $baseVersion  The item's version the author saw (default: the current one)
+     * @param bool        $onlyOne      Refuse when the author has changes to the item already, e.g. saved
+     *                                  in another tab (the default): one set of changes per author, as an
+     *                                  admin's editor shows them. False allows several, for a workflow that wants them
      *
      * @throws ContentNotFoundException
-     * @throws InvalidContentException  when the item is in the trash, or the revision or author doesn't exist
+     * @throws ContentConflictException         when the item at $baseVersion isn't known any more (its revision was pruned, or its type keeps none)
+     * @throws PendingRevisionConflictException when the author has changes to the item already (expected version 0: none), unless $onlyOne is false
+     * @throws InvalidContentException          when the item is in the trash, or the revision or author doesn't exist
      */
-    public function create(string $contentId, ?string $authorId = null, ?string $message = null, ?string $fromRevision = null): PendingRevision
+    public function create(string $contentId, ?string $authorId = null, ?string $message = null, ?string $fromRevision = null, ?int $baseVersion = null, bool $onlyOne = true): PendingRevision
     {
-        return $this->write(function () use ($contentId, $authorId, $message, $fromRevision): array {
-            $content = $this->editable($contentId);
-            $proposed = Snapshot::of($content);
+        return $this->write(function () use ($contentId, $authorId, $message, $fromRevision, $baseVersion, $onlyOne): array {
+            $content = $onlyOne ? $this->lockEditable($contentId) : $this->editable($contentId);
+
+            if ($onlyOne && null !== $authorId && [] !== $own = $this->pending->forContent($content->id, $authorId)) {
+                throw new PendingRevisionConflictException($own[0]->id, 0, $own[0]->version);
+            }
+
+            [$base, $baseVersion] = $this->base($content, $baseVersion ?? $content->version);
+            $proposed = $base;
 
             if (null !== $fromRevision) {
                 $revision = $this->revisions->find($fromRevision);
@@ -84,8 +100,8 @@ final readonly class PendingRevisionWriter
                  RETURNING id',
                 [
                     'content' => $content->id,
-                    'version' => $content->version,
-                    'base' => $this->json(Snapshot::of($content)->toArray()),
+                    'version' => $baseVersion,
+                    'base' => $this->json($base->toArray()),
                     'title' => $proposed->title,
                     'excerpt' => $proposed->excerpt,
                     'body' => $proposed->body,
@@ -172,6 +188,35 @@ final readonly class PendingRevisionWriter
 
             return [$pending, new PendingRevisionSaved($pending, created: false)];
         });
+    }
+
+    /**
+     * Replaces the changes' text and fields with those of one of the item's revisions: an old version
+     * restored by an author who has changes to the item already, so they keep one set. The changes stay
+     * based on the version they were.
+     *
+     * @throws ContentNotFoundException
+     * @throws PendingRevisionConflictException when it was saved since the expected version
+     * @throws InvalidContentException          when the revision isn't the item's, or the item is in the trash
+     */
+    public function restoreRevision(string $id, int $expectedVersion, string $revisionId, ?string $message = null): PendingRevision
+    {
+        $pending = $this->pending->get($id);
+        $revision = $this->revisions->find($revisionId);
+
+        if (!$revision instanceof Revision || $revision->contentId !== $pending->contentId) {
+            throw InvalidContentException::single('revision', \sprintf('The item has no revision "%s".', $revisionId));
+        }
+
+        $content = $this->editable($pending->contentId);
+        $type = $this->types->get($content->type);
+
+        return $this->update(new UpdatePendingRevision($id, $expectedVersion)
+            ->title($revision->title)
+            ->body($revision->body, $revision->bodyFormat)
+            ->excerpt($revision->excerpt)
+            ->fields(Fields::normalize($type, $this->relations->fieldsToRestore($type, $content->fields, $revision->fields)))
+            ->message($message));
     }
 
     /**
@@ -330,10 +375,40 @@ final readonly class PendingRevisionWriter
         return $current;
     }
 
+    /**
+     * The item's text and fields at a version, to merge changes from.
+     *
+     * @return array{Snapshot, int}
+     *
+     * @throws ContentConflictException
+     */
+    private function base(Content $content, int $version): array
+    {
+        if ($version === $content->version) {
+            return [Snapshot::of($content), $version];
+        }
+
+        $revision = $version < $content->version ? $this->revisions->atVersion($content->id, $version) : null;
+
+        if (!$revision instanceof Revision) {
+            throw new ContentConflictException($content->id, $version, $content->version);
+        }
+
+        return [Snapshot::of($revision), $version];
+    }
+
+    private function lockEditable(string $contentId): Content
+    {
+        return $this->ensureEditable($this->content->lock($contentId));
+    }
+
     private function editable(string $contentId): Content
     {
-        $content = $this->content->get($contentId);
+        return $this->ensureEditable($this->content->get($contentId));
+    }
 
+    private function ensureEditable(Content $content): Content
+    {
         if ($content->isTrashed()) {
             throw InvalidContentException::single('deleted_at', 'The item is in the trash. Restore it before changing it.');
         }

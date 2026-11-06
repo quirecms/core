@@ -47,7 +47,7 @@ final readonly class ResolveComment implements ActionInterface
         $comment = $this->comments->get($arguments->string('comment'));
         $actor = $this->access->actorId();
 
-        return $this->access->isOwn($pending) || (null !== $actor && $comment->authorId === $actor) || $this->access->may($this->repository->get($pending->contentId)->type, 'review')
+        return $this->access->isOwn($pending) || (null !== $actor && $comment->authorId === $actor) || $this->access->mayReview($this->repository->get($pending->contentId))
             ? null
             : 'Threads are resolved by who started them, the changes\' author or a reviewer.';
     }

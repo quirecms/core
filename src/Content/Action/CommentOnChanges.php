@@ -50,7 +50,7 @@ final readonly class CommentOnChanges implements ActionInterface
         $pending = $this->pending->get($arguments->string('pending_revision'));
         $item = $this->repository->get($pending->contentId);
 
-        return $this->access->isOwn($pending) || $this->access->may($item->type, 'review') || $this->access->mayEdit($item)
+        return $this->access->isOwn($pending) || $this->access->mayReview($item) || $this->access->mayEdit($item)
             ? null
             : 'Comments on changes are for their author, reviewers and those who may edit the item.';
     }

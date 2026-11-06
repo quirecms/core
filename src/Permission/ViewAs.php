@@ -33,7 +33,7 @@ final readonly class ViewAs
         private Security $security,
         private CurrentUser $users,
         private UserRepository $repository,
-        private Permissions $permissions,
+        private Delegation $delegation,
         private AuditLog $audit,
     ) {
     }
@@ -49,7 +49,7 @@ final readonly class ViewAs
             !$viewer instanceof User || !$this->security->isGranted(self::ABILITY) => 'Seeing the site as someone else takes the ability "'.self::ABILITY.'".',
             $viewer->id === $target->id => 'That\'s you.',
             !$target->isActive() => 'Suspended users can\'t sign in, so there\'s nothing to see as them.',
-            [] !== $this->beyond($viewer, $target) => \sprintf('They may do what you may not (%s), so you can\'t see as them.', implode(', ', \array_slice($this->beyond($viewer, $target), 0, 3))),
+            [] !== ($beyond = $this->beyond($viewer, $target)) => \sprintf('They may do what you may not (%s), so you can\'t see as them.', $this->delegation->labels($beyond)),
             default => null,
         };
     }
@@ -114,15 +114,13 @@ final readonly class ViewAs
     }
 
     /**
-     * The abilities the target's roles give and the viewer's don't.
+     * The abilities the target holds and the viewer doesn't, rules included (AUTHZ-05: roles alone missed
+     * what a rule grants the target).
      *
      * @return list<string>
      */
     private function beyond(User $viewer, User $target): array
     {
-        return array_values(array_filter(
-            array_keys($this->permissions->abilities()),
-            fn (string $ability): bool => $this->permissions->allows($target->roles, $ability) && !$this->permissions->allows($viewer->roles, $ability),
-        ));
+        return $this->delegation->beyond($viewer, $target);
     }
 }

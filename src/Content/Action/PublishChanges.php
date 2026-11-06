@@ -42,9 +42,9 @@ final readonly class PublishChanges implements ActionInterface
     public function denied(Arguments $arguments): ?string
     {
         $pending = $this->pendingRevision($arguments);
-        $type = $this->repository->get($pending->contentId)->type;
+        $item = $this->repository->get($pending->contentId);
 
-        return $this->access->may($type, 'publish') ? null : 'Publishing takes the right to publish; ask someone who has it.';
+        return $this->access->mayPublish($item) ? null : 'Publishing takes the right to publish; ask someone who has it.';
     }
 
     public function run(Arguments $arguments): Content

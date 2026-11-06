@@ -45,10 +45,10 @@ final readonly class ReviewChanges implements ActionInterface
     public function denied(Arguments $arguments): ?string
     {
         $pending = $this->pendingRevision($arguments);
-        $type = $this->repository->get($pending->contentId)->type;
+        $item = $this->repository->get($pending->contentId);
 
         return match (true) {
-            !$this->access->may($type, 'review') => 'Reviewing takes the right to review; ask someone who has it.',
+            !$this->access->mayReview($item) => 'Reviewing takes the right to review; ask someone who has it.',
             Verdict::Approve->value === $arguments->string('verdict') && $this->access->isOwn($pending) => 'Someone else approves your changes.',
             default => null,
         };

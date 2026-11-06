@@ -67,8 +67,17 @@ final class ViewAsListener implements ResetInterface
 
         $target = $this->users->find($ids['target']);
 
-        if (!$target instanceof \Quire\User\User || !$target->isActive()) {
+        // Asked again on every request, as the viewer (M-01): a target given more since, or a viewer who
+        // lost the ability, ends it, rather than showing what the viewer may not see
+        $refusal = $target instanceof \Quire\User\User ? $this->viewAs->refusal($target) : null;
+
+        if (!$target instanceof \Quire\User\User || null !== $refusal) {
             $this->viewAs->stop();
+            $session = $event->getRequest()->getSession();
+
+            if (null !== $refusal && $session instanceof \Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface) {
+                $session->getFlashBag()->add('warning', $this->translator->trans('You no longer see the site as {name}: {reason}', ['name' => $target->displayName, 'reason' => $refusal], 'quire'));
+            }
 
             return;
         }

@@ -39,7 +39,7 @@ final readonly class PurgeContent implements ActionInterface
     {
         $item = $this->repository->get($arguments->string('content'));
 
-        return $this->access->may($item->type, 'delete') ? null : 'You may not delete items of this type.';
+        return $this->access->mayDelete($item) ? null : 'You may not delete items of this type.';
     }
 
     public function run(Arguments $arguments): Content

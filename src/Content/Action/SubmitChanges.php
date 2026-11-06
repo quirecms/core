@@ -41,9 +41,10 @@ final readonly class SubmitChanges implements ActionInterface
     public function denied(Arguments $arguments): ?string
     {
         $pending = $this->pendingRevision($arguments);
-        $type = $this->repository->get($pending->contentId)->type;
+        $item = $this->repository->get($pending->contentId);
 
-        return $this->access->isOwn($pending) || $this->access->may($type, 'edit_any') ? null : 'Only their author, or someone who may edit any item, asks for a review of changes.';
+        // Asking for a review moves the item towards publishing: their own changes, to an item they may still change
+        return ($this->access->isOwn($pending) && $this->access->mayEdit($item)) || $this->access->may($item->type, 'edit_any', $item) ? null : 'Only their author, or someone who may edit any item, asks for a review of changes.';
     }
 
     public function run(Arguments $arguments): PendingRevision

@@ -41,9 +41,10 @@ final readonly class DiscardChanges implements ActionInterface
     public function denied(Arguments $arguments): ?string
     {
         $pending = $this->pendingRevision($arguments);
-        $type = $this->repository->get($pending->contentId)->type;
+        $item = $this->repository->get($pending->contentId);
 
-        return $this->access->isOwn($pending) || $this->access->may($type, 'publish') ? null : 'Only their author, or someone who may publish, discards changes.';
+        // Discarding their own changes leaves the item as it is
+        return $this->access->isOwn($pending) || $this->access->mayPublish($item) ? null : 'Only their author, or someone who may publish, discards changes.';
     }
 
     public function run(Arguments $arguments): PendingRevision

@@ -76,6 +76,10 @@ final readonly class AboutCommand
             array_keys($report['health']['checks']),
             $report['health']['checks'],
         ));
+        foreach ($report['warnings'] as $warning) {
+            $io->warning($warning);
+        }
+
         'ok' === $report['health']['status'] ? $io->success('Healthy.') : $io->error('Not healthy: see the checks above.');
 
         return Command::SUCCESS;

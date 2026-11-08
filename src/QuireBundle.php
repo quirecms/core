@@ -347,7 +347,7 @@ final class QuireBundle extends AbstractBundle
             $declared[$disk['name']] = $disk;
         }
 
-        $disks = [];
+        $disks = $dormant = [];
         $services = [];
 
         foreach (array_keys($declared + $storage['disks']) as $name) {
@@ -358,8 +358,17 @@ final class QuireBundle extends AbstractBundle
                 throw new InvalidConfigurationException(\sprintf('"quire.storage.disks.%s": disk names have lowercase letters, digits, "-" and "_", and start with a letter.', $name));
             }
 
+            // An extension's disk the site placed, while the extension is disabled: kept where it is,
+            // for backups and restores to reach, and not served. A disk no installed extension declares
+            // either is reported by quire:storage:disks.
             if (null === $declaration && null === $configured['public']) {
-                throw new InvalidConfigurationException(\sprintf('"quire.storage.disks.%s.public" is needed: no extension declares the disk, so say whether its files are served to everyone.', $name));
+                $dormant[$name] = $configured;
+
+                if ('service' === $configured['adapter'] && \is_string($configured['service'])) {
+                    $services[$name] = new Reference($configured['service']);
+                }
+
+                continue;
             }
 
             if (null !== $declaration && null !== $configured['public'] && $configured['public'] !== $declaration['public']) {
@@ -381,8 +390,10 @@ final class QuireBundle extends AbstractBundle
         }
 
         ksort($disks);
-        $this->assertSeparateDisks($disks, $builder);
+        ksort($dormant);
+        $this->assertSeparateDisks($disks + array_filter($dormant, static fn (array $disk): bool => 'local' !== $disk['adapter'] || null !== $disk['path']), $builder);
         $builder->setParameter(StorageDisks::PARAMETER, $disks);
+        $builder->setParameter(StorageDisks::DORMANT_PARAMETER, $dormant);
         $builder->setParameter(StorageDisks::ROOT_PARAMETER, $storage['root']);
         $builder->setDefinition(StorageDisks::SERVICES_LOCATOR, new Definition(ServiceLocator::class, [$services]))->addTag('container.service_locator');
     }

@@ -32,11 +32,19 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
         like on the disks, so each backup copies only the files that are new; keep the directory with the
         backups. Every file is checked against its checksum on the way.
 
+        A backup that has no good copy of a stored file (missing from its disk, damaged, or on a disk the
+        site doesn't have) is incomplete: it's written all the same, and the command exits with <comment>3</comment>, not 0.
+        It exits with 1 when there's no backup. <comment>--allow-incomplete</comment> exits with 0 for one run, for an owner
+        who accepts that the files it lists are gone.
+
         Restore it with <info>quire:restore</info>. It holds all of the site's data: keep it as safe as the database.
         HELP,
 )]
 final readonly class BackupCommand
 {
+    /** The exit code of a backup that was written but is incomplete; 1 is no backup (see ServerContract) */
+    public const int INCOMPLETE = 3;
+
     public function __construct(
         private Backups $backups,
         #[Autowire(param: 'kernel.project_dir')]
@@ -52,6 +60,8 @@ final readonly class BackupCommand
         string $files = 'local',
         #[Option(description: 'Copy the files into this directory instead of the backup, each only once')]
         ?string $filesDir = null,
+        #[Option(description: 'Exit with 0 when stored files are missing, damaged or on unknown disks: you accept they\'re gone')]
+        bool $allowIncomplete = false,
     ): int {
         $errors = $io->getErrorStyle();
         $selection = BackupFiles::tryFrom($files);
@@ -66,25 +76,43 @@ final readonly class BackupCommand
             if ('-' === $file) {
                 $report = $this->backups->stream(static function (string $data): void {
                     fwrite(\STDOUT, $data);
-                }, $selection, $filesDir);
+                }, $selection, $filesDir, $allowIncomplete);
                 // Standard output is the backup, so messages go to standard error.
                 $this->warn($errors, $report);
 
-                return Command::SUCCESS;
+                return $this->exitCode($errors, $report, $allowIncomplete);
             }
 
             $file ??= $this->defaultFile();
-            $report = $this->backups->create($file, $selection, $filesDir);
+            $report = $this->backups->create($file, $selection, $filesDir, $allowIncomplete);
         } catch (BackupException $e) {
             $errors->error($e->getMessage());
 
             return Command::FAILURE;
         }
 
-        $io->success(\sprintf('Backed up to %s (%s): the database, and %s.', $file, $this->size((int) filesize($file)), $this->files($report, $filesDir)));
+        $what = \sprintf('%s (%s): the database, and %s.', $file, $this->size((int) filesize($file)), $this->files($report, $filesDir));
+        $report->complete() ? $io->success('Backed up to '.$what) : $io->writeln('Backed up to '.$what);
         $this->warn($io, $report);
 
-        return Command::SUCCESS;
+        return $this->exitCode($io, $report, $allowIncomplete);
+    }
+
+    private function exitCode(SymfonyStyle $io, BackupReport $report, bool $allowIncomplete): int
+    {
+        if ($report->complete()) {
+            return Command::SUCCESS;
+        }
+
+        if ($allowIncomplete) {
+            $io->note(\sprintf('The backup is incomplete: %d stored file(s) aren\'t in it. --allow-incomplete accepts that.', \count($report->absent())));
+
+            return Command::SUCCESS;
+        }
+
+        $io->error(\sprintf('The backup is incomplete: %d stored file(s) aren\'t in it. It\'s written all the same, as the best copy there is. Fix what\'s listed above and back up again, or pass --allow-incomplete to accept that they\'re gone.', \count($report->absent())));
+
+        return self::INCOMPLETE;
     }
 
     private function files(BackupReport $report, ?string $filesDir): string
@@ -100,6 +128,11 @@ final readonly class BackupCommand
 
     private function warn(SymfonyStyle $io, BackupReport $report): void
     {
+        foreach ($report->unknownDisks as $disk) {
+            $files = array_values(array_filter($report->onUnknownDisks, static fn (string $name): bool => str_starts_with($name, $disk.':')));
+            $io->warning([\sprintf('%d stored file(s) are on the disk "%s", which neither the site nor any installed extension has, so where they are isn\'t known. Install the extension that declares it, or configure it in "quire.storage.disks".', \count($files), $disk), ...\array_slice($files, 0, 20), ...(\count($files) > 20 ? ['…'] : [])]);
+        }
+
         foreach (['missing' => $report->missing, 'damaged (their content doesn\'t match their checksum)' => $report->corrupt] as $what => $names) {
             if ([] !== $names) {
                 $io->warning([\sprintf('%d stored file(s) were %s, so the backup has no good copy of them:', \count($names), $what), ...\array_slice($names, 0, 20), ...(\count($names) > 20 ? ['…'] : [])]);

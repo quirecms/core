@@ -19,6 +19,10 @@ use Quire\Storage\StorageDisks;
  * soon as it has such a key, with nothing to register. Both kinds of garbage must be older than the
  * grace period, which covers uploads whose transaction is still open.
  *
+ * Only the disks in use are collected. Objects on others, of a disabled extension or one removed with
+ * Composer, are kept, rows and files: the extension finds them as it left them when it's back, and
+ * backups still copy them.
+ *
  * @internal
  */
 final readonly class GarbageCollector
@@ -64,9 +68,15 @@ final readonly class GarbageCollector
     private function unreferencedObjects(\DateTimeImmutable $before, bool $dryRun, \Closure $log): int
     {
         $unreferenced = $this->unreferencedCondition();
+        $disks = $this->disks->names();
+
+        if ([] === $disks) {
+            return 0;
+        }
+
         $rows = $this->connection->fetchAllAssociative(
-            'SELECT o.id, o.disk, o.key FROM quire.storage_object o WHERE o.stored_at < ? AND '.$unreferenced.' ORDER BY o.stored_at',
-            [$before->format(\DATE_ATOM)],
+            'SELECT o.id, o.disk, o.key FROM quire.storage_object o WHERE o.stored_at < ? AND o.disk = ANY(?) AND '.$unreferenced.' ORDER BY o.stored_at',
+            [$before->format(\DATE_ATOM), '{'.implode(',', array_map(static fn (string $name): string => '"'.$name.'"', $disks)).'}'],
         );
         $deleted = 0;
 
@@ -92,7 +102,7 @@ final readonly class GarbageCollector
                     [$id, $before->format(\DATE_ATOM)],
                 );
 
-                if (1 === $gone && $this->disks->has($disk)) {
+                if (1 === $gone) {
                     $this->disks->get($disk)->files->delete($key);
                 }
             } catch (DriverException $e) {

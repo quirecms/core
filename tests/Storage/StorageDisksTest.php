@@ -65,6 +65,28 @@ final class StorageDisksTest extends TestCase
         $disks->get('photos');
     }
 
+    public function testADisabledExtensionsPlacedDiskIsntInUseButIsReachedWhereItIs(): void
+    {
+        $s3 = ['adapter' => 's3', 'public' => null, 'bucket' => 'photos', 'region' => 'eu-central-1', 'prefix' => 'reviews', 'path_style' => false, 'endpoint' => null, 'url' => null, 'path' => null, 'service' => null];
+        $disks = new StorageDisks([], new DiskFactory(new UrlGenerator(new RouteCollection(), new RequestContext()), new UriSigner('test')), new ServiceLocator([]), '/srv/storage', ['acme-reviews' => $s3]);
+
+        // Nothing is served from it, and nothing stores on it: Quire's routes and ObjectStore find disks with has() and get().
+        self::assertSame([[], false, ['acme-reviews']], [$disks->names(), $disks->has('acme-reviews'), $disks->dormant()]);
+
+        try {
+            $disks->get('acme-reviews');
+            self::fail('A dormant disk was in use.');
+        } catch (UnknownDiskException) {
+        }
+
+        $reached = $disks->withDeclarations([['name' => 'acme-reviews', 'public' => true, 'label' => 'Photos', 'owner' => 'acme-reviews'], ['name' => 'acme-files', 'public' => false, 'label' => null, 'owner' => 'acme-files']]);
+
+        self::assertSame('s3: photos/reviews', $reached->get('acme-reviews')->location, 'Where the site placed it, for backups and restores.');
+        self::assertSame([true, 'acme-reviews'], [$reached->get('acme-reviews')->public, $reached->get('acme-reviews')->owner]);
+        self::assertSame('local: /srv/storage/private/acme-files', $reached->get('acme-files')->location, 'One the site didn\'t place is where it is without configuration.');
+        self::assertSame([], $reached->dormant());
+    }
+
     /**
      * @param array<string, mixed> $more
      *

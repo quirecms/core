@@ -28,7 +28,10 @@ final readonly class BackupContents
      *                                                             files directory, nowhere; null for a dump
      * @param array<string, int>                $objects           How many stored files the database lists, by disk
      * @param int                               $filesInArchive    Copies of stored files in the archive
-     * @param list<string>                      $missingWhenMade   "disk:key" of files that were already missing, or corrupt, when the backup was made
+     * @param list<string>                      $missingWhenMade   "disk:key" of files that were already missing, or corrupt, or on a disk
+     *                                                             the site didn't have, when the backup was made
+     * @param bool|null                         $complete          Whether it has a good copy of every file it was to copy; null for a dump,
+     *                                                             which has none
      */
     public function __construct(
         public ?\DateTimeImmutable $createdAt,
@@ -42,6 +45,7 @@ final readonly class BackupContents
         public array $objects = [],
         public int $filesInArchive = 0,
         public array $missingWhenMade = [],
+        public ?bool $complete = null,
     ) {
     }
 }

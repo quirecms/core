@@ -51,11 +51,37 @@ final class StorageTest extends ExtenderTestCase
         self::assertSame(['local', false, '/srv/exports', 'site'], [$disks['exports']['adapter'], $disks['exports']['public'], $disks['exports']['path'], $disks['exports']['owner']]);
     }
 
+    public function testADiskTheSitePlacedStaysPlacedWhileItsExtensionIsDisabled(): void
+    {
+        $s3 = ['adapter' => 's3', 'bucket' => 'photos', 'prefix' => 'reviews'];
+
+        // Disabled: nothing declares the disk, which used to fail the build.
+        [$disks, $dormant] = $this->disksAndDormant(['acme-reviews' => $s3, 'exports' => ['public' => false, 'path' => '/srv/exports']]);
+
+        self::assertSame(['exports'], array_keys($disks), 'Not in use: not served, nothing stored on it.');
+        self::assertSame(['acme-reviews'], array_keys($dormant));
+        self::assertSame(['s3', 'photos', 'reviews', null], [$dormant['acme-reviews']['adapter'], $dormant['acme-reviews']['bucket'], $dormant['acme-reviews']['prefix'], $dormant['acme-reviews']['public']]);
+
+        // Its place is still its own.
+        $this->assertConfigFails(['acme-reviews' => $s3, 'site-photos' => ['public' => true, ...$s3]], [], 'The storage disks "site-photos" and "acme-reviews" are in the same place');
+    }
+
+    public function testADisabledExtensionsDiskTheSiteSetPublicForIsServedAsItWasWhileEnabled(): void
+    {
+        // "public" set as the extension declares it (anything else is refused while it's enabled): the
+        // site's disk now, served exactly as before, so disabling the extension serves nothing new.
+        $declared = [['name' => 'acme-files', 'public' => false, 'label' => null, 'owner' => 'acme-files']];
+        $enabled = $this->disks(['acme-files' => ['public' => false, 'path' => '/srv/files']], $declared);
+        $disabled = $this->disks(['acme-files' => ['public' => false, 'path' => '/srv/files']]);
+
+        self::assertSame([false, '/srv/files'], [$enabled['acme-files']['public'], $enabled['acme-files']['path']]);
+        self::assertSame([false, '/srv/files', 'site'], [$disabled['acme-files']['public'], $disabled['acme-files']['path'], $disabled['acme-files']['owner']], 'Private still: only signed links, which only code gives out.');
+    }
+
     public function testRejectsContradictionsAndSharedPlaces(): void
     {
         $declared = [['name' => 'acme-reviews', 'public' => true, 'label' => null, 'owner' => 'acme-reviews']];
 
-        $this->assertConfigFails(['exports' => []], [], '"quire.storage.disks.exports.public" is needed');
         $this->assertConfigFails(['acme-reviews' => ['public' => false]], $declared, 'contradicts "acme-reviews", which declares the disk public');
         $this->assertConfigFails(['photos' => ['public' => true, 'adapter' => 's3']], [], 'S3 disks need a "bucket"');
         $this->assertConfigFails(['photos' => ['public' => true, 'adapter' => 'service']], [], 'need the "service" ID');
@@ -76,6 +102,18 @@ final class StorageTest extends ExtenderTestCase
      */
     private function disks(array $configured, array $declared = []): array
     {
+        /** @var array<string, array<string, mixed>> $disks */
+        $disks = $this->built($configured, $declared)->getParameter(StorageDisks::PARAMETER);
+
+        return $disks;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>>                                    $configured
+     * @param list<array{name: string, public: bool, label: ?string, owner: string}> $declared
+     */
+    private function built(array $configured, array $declared): ContainerBuilder
+    {
         $builder = new ContainerBuilder();
         $builder->setParameter('kernel.project_dir', '/srv/site');
         $builder->setParameter('kernel.environment', 'test');
@@ -86,10 +124,24 @@ final class StorageTest extends ExtenderTestCase
         \assert($extension instanceof \Symfony\Component\DependencyInjection\Extension\ExtensionInterface);
         $extension->load([['storage' => ['disks' => $configured]]], $builder);
 
+        return $builder;
+    }
+
+    /**
+     * @param array<string, array<string, mixed>>                                    $configured
+     * @param list<array{name: string, public: bool, label: ?string, owner: string}> $declared
+     *
+     * @return array{array<string, array<string, mixed>>, array<string, array<string, mixed>>} The disks in use, and the dormant ones
+     */
+    private function disksAndDormant(array $configured, array $declared = []): array
+    {
+        $builder = $this->built($configured, $declared);
         /** @var array<string, array<string, mixed>> $disks */
         $disks = $builder->getParameter(StorageDisks::PARAMETER);
+        /** @var array<string, array<string, mixed>> $dormant */
+        $dormant = $builder->getParameter(StorageDisks::DORMANT_PARAMETER);
 
-        return $disks;
+        return [$disks, $dormant];
     }
 
     /**

@@ -10,13 +10,11 @@ use Quire\Backup\BackupContents;
 use Quire\Database\DatabaseSchema;
 use Quire\Database\MigrationOrder;
 use Quire\Extend\ExtenderException;
-use Quire\Extend\Storage;
-use Quire\Extension\Boot\ExtensionBooter;
+use Quire\Extension\Boot\OfflineBoot;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\ExtensionStateStoreInterface;
+use Quire\Storage\Internal\InstalledDisks;
 use Quire\Storage\StorageDisks;
-use Symfony\Component\DependencyInjection\Attribute\Autowire;
-use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 /**
  * Decides whether a backup can be restored here, before anything is changed.
@@ -36,11 +34,8 @@ final readonly class RestoreChecks
         private Connection $connection,
         private InstalledExtensions $installed,
         private ExtensionStateStoreInterface $state,
-        private StorageDisks $disks,
-        #[Autowire(param: 'kernel.project_dir')]
-        private string $projectDir,
-        #[Autowire(param: 'kernel.environment')]
-        private string $environment,
+        private InstalledDisks $disks,
+        private OfflineBoot $boot,
     ) {
     }
 
@@ -61,7 +56,7 @@ final readonly class RestoreChecks
         }
 
         try {
-            $container = $this->boot(array_values(array_filter($enabled, $this->installed->has(...))));
+            $container = $this->boot->boot(array_values(array_filter($enabled, $this->installed->has(...))));
         } catch (ExtenderException $e) {
             return [...$problems, \sprintf('The extensions the backup has enabled can\'t be loaded: %s', $e->getMessage())];
         }
@@ -85,16 +80,17 @@ final readonly class RestoreChecks
             }
         }
 
-        return [...$problems, ...$this->fileProblems($backup, $container, $filesDirectory), ...$this->databaseProblems()];
+        return [...$problems, ...$this->fileProblems($backup, $filesDirectory), ...$this->databaseProblems()];
     }
 
     /**
-     * The disks the site has once the backup is restored: its own, and those of the extensions the backup
-     * enables, where they are without configuration.
+     * The disks the site has files on once the backup is restored: its own, and those of every installed
+     * extension, enabled by the backup or not (a disabled one keeps its files), where the site placed them
+     * or where they are without configuration.
      */
-    public function disksAfterRestore(BackupContents $backup): StorageDisks
+    public function disksAfterRestore(): StorageDisks
     {
-        return $this->disks->withDeclarations($this->declaredDisks($this->boot(array_values(array_filter($this->enabled($backup), $this->installed->has(...))))));
+        return $this->disks->all();
     }
 
     /**
@@ -135,10 +131,10 @@ final readonly class RestoreChecks
     /**
      * @return list<string>
      */
-    private function fileProblems(BackupContents $backup, ContainerBuilder $container, ?string $filesDirectory): array
+    private function fileProblems(BackupContents $backup, ?string $filesDirectory): array
     {
         $problems = [];
-        $disks = $this->disks->withDeclarations($this->declaredDisks($container));
+        $disks = $this->disks->all();
 
         foreach (array_keys($backup->objects) as $disk) {
             if (!$disks->has($disk)) {
@@ -155,40 +151,6 @@ final readonly class RestoreChecks
         }
 
         return $problems;
-    }
-
-    /**
-     * @return list<array{name: string, public: bool, label: ?string, owner: string}>
-     */
-    private function declaredDisks(ContainerBuilder $container): array
-    {
-        /** @var list<array{name: string, public: bool, label: ?string, owner: string}> $declared */
-        $declared = $container->getParameterBag()->all()[Storage::PARAMETER] ?? [];
-
-        return $declared;
-    }
-
-    /**
-     * The extenders of the given extensions, run in a container of their own, as they would when the
-     * application is built after the restore: what migrations and disks the code has then.
-     *
-     * @param list<string> $enabledIds
-     */
-    private function boot(array $enabledIds): ContainerBuilder
-    {
-        $container = new ContainerBuilder();
-        $container->setParameter('kernel.project_dir', $this->projectDir);
-        $container->setParameter('kernel.environment', $this->environment);
-        $container->setParameter('kernel.debug', false);
-
-        new ExtensionBooter($this->installed)->boot(
-            $container,
-            $enabledIds,
-            $this->projectDir.\DIRECTORY_SEPARATOR.'extend.php',
-            ExtensionBooter::coreExtendFile(),
-        );
-
-        return $container;
     }
 
     /**

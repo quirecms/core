@@ -11,6 +11,7 @@ use Quire\Content\Revision\PendingRevisionComments;
 use Quire\Content\Revision\PendingRevisionWriter;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
+use Quire\Extension\Boot\OfflineBoot;
 use Quire\Extension\ExtensionContributions;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
@@ -104,6 +105,9 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(InstalledExtensions::class)
         ->arg('$installedJsonPath', param('quire.composer.installed_json'));
+
+    // The rest of Boot/ runs while the container is built; this one runs extenders afterwards.
+    $services->set(OfflineBoot::class);
 
     $services->set(ExtensionRouteLoader::class)
         ->tag('routing.loader');

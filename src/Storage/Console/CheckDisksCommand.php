@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Storage\Console;
 
+use Quire\Storage\Internal\InstalledDisks;
 use Quire\Storage\StorageDisks;
 use Symfony\Component\Console\Attribute\Argument;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -19,13 +20,16 @@ use Symfony\Component\Console\Style\SymfonyStyle;
           <info>%command.full_name%</info>
           <info>%command.full_name% acme-gallery</info>
 
-        Use it after configuring a disk, e.g. on S3, and in deployment checks.
+        Use it after configuring a disk, e.g. on S3, and in deployment checks. Checking every disk, it
+        also fails for a disk "quire.storage.disks" places that no installed extension declares and that
+        has no "public": a typo, or a disk renamed, which is never used.
         HELP,
 )]
 final readonly class CheckDisksCommand
 {
     public function __construct(
         private StorageDisks $disks,
+        private InstalledDisks $installed,
     ) {
     }
 
@@ -56,6 +60,13 @@ final readonly class CheckDisksCommand
             } catch (\Throwable $e) {
                 $failed = true;
                 $io->writeln(\sprintf('<error>✘</error> %s: %s', $name, $e->getMessage()));
+            }
+        }
+
+        if ([] === $names) {
+            foreach ($this->installed->placedButUndeclared() as $name) {
+                $failed = true;
+                $io->writeln(\sprintf('<error>✘</error> %s: "quire.storage.disks.%1$s" places a disk that no installed extension declares, so it isn\'t used. Set its "public" to make it a disk of the site\'s own, or remove it.', $name));
             }
         }
 

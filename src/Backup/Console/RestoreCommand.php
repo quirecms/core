@@ -138,8 +138,13 @@ final readonly class RestoreCommand
             ['Stored files' => $this->storedFiles($backup)],
         );
 
-        if ([] !== $backup->missingWhenMade) {
-            $io->warning(\sprintf('%d stored file(s) were missing or damaged when the backup was made, so it has no good copy of them.', \count($backup->missingWhenMade)));
+        // Before anything is restored: what a restore of it won't bring back.
+        if (false === $backup->complete || [] !== $backup->missingWhenMade) {
+            $io->warning([
+                \sprintf('The backup is incomplete: %d stored file(s) were missing, damaged or on a disk the site didn\'t have when it was made, so it has no good copy of them. A restore brings back everything else.', \count($backup->missingWhenMade)),
+                ...\array_slice($backup->missingWhenMade, 0, 20),
+                ...(\count($backup->missingWhenMade) > 20 ? ['…'] : []),
+            ]);
         }
     }
 

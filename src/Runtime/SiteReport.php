@@ -12,6 +12,7 @@ use Quire\Extension\ExtensionManifest;
 use Quire\Extension\InstalledExtensions;
 use Quire\Health\HealthCheckInterface;
 use Quire\Settings\Settings;
+use Quire\Storage\Internal\InstalledDisks;
 use Quire\Theme\Themes;
 use Quire\User\Role;
 use Quire\User\UserRepository;
@@ -37,6 +38,7 @@ use Symfony\Component\HttpKernel\Kernel;
  *     theme: ?string,
  *     migrations: array{executed: ?int, pending: ?int},
  *     health: array{status: string, checks: array<string, array{status: string, message?: string}>},
+ *     warnings: list<string>,
  * }
  */
 final readonly class SiteReport
@@ -58,6 +60,7 @@ final readonly class SiteReport
         private string $environment,
         #[Autowire(param: 'router.request_context.base_url')]
         private string $siteUri,
+        private InstalledDisks $disks,
     ) {
     }
 
@@ -101,6 +104,12 @@ final readonly class SiteReport
                 'pending' => $this->attempt(fn (): int => \count($this->migrations->getMigrationStatusCalculator()->getNewMigrations())),
             ],
             'health' => $this->health(),
+            // For people managing the site: what works, but likely not as they meant it. Not in the
+            // public health report, which runs no extension's code and names no configuration.
+            'warnings' => array_map(
+                static fn (string $disk): string => \sprintf('"quire.storage.disks.%s" places a disk that no installed extension declares, so it isn\'t used. Set its "public" to make it a disk of the site\'s own, or remove it.', $disk),
+                $this->disks->placedButUndeclared(),
+            ),
         ];
     }
 

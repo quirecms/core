@@ -18,6 +18,7 @@ use Quire\Database\MigrationStorage;
 use Quire\Extension\Rebuild\AppRebuilderInterface;
 use Quire\Storage\Disk;
 use Quire\Storage\Internal\GarbageCollector;
+use Quire\Storage\Internal\InstalledDisks;
 use Quire\Storage\StorageDisks;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 
@@ -33,7 +34,12 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  * - `files/<disk>/<key>`: copies of the stored files (by default those on local disks), each checked
  *   against its checksum. Or, with a files directory, none: they're in that directory, shared by
  *   backups, so each one copies only the files that are new.
- * - `manifest.json`: what was copied, and what was missing.
+ * - `manifest.json`: what was copied, whether the backup is complete, and each file it has no good copy
+ *   of, with why ("unknown_disk", "missing", "damaged").
+ *
+ * A backup reaches the files of disabled extensions too: they keep their data. One that has no good copy
+ * of a file it was to copy is incomplete: it's written all the same, as the best copy there is, and
+ * recorded in the backup log as failed unless it was allowed.
  *
  * pg_dump archives made by quire:backup before it included files are still restored.
  *
@@ -54,21 +60,23 @@ final readonly class Backups
         private AppRebuilderInterface $rebuilder,
         #[Autowire(service: ContentRenderer::CACHE_POOL)]
         private CacheItemPoolInterface $renderCache,
-        private StorageDisks $disks,
+        private InstalledDisks $disks,
         private BackupLog $log,
     ) {
     }
 
     /**
-     * Writes a backup to the file. The file appears only once the backup is complete, and only its owner
-     * can read it.
+     * Writes a backup to the file. The file appears only once the backup is written, and only its owner
+     * can read it. One that isn't complete (see {@see BackupReport::complete()}) is written too.
      *
-     * @param string|null $filesDirectory Copy the files there instead of into the backup: a directory
-     *                                    shared by backups, where each copies only the files that are new
+     * @param string|null $filesDirectory  Copy the files there instead of into the backup: a directory
+     *                                     shared by backups, where each copies only the files that are new
+     * @param bool        $allowIncomplete Record an incomplete backup as one that worked: for this run, by
+     *                                     someone who accepts that the files it lists are gone
      *
      * @throws BackupException
      */
-    public function create(string $file, BackupFiles $files = BackupFiles::Local, ?string $filesDirectory = null): BackupReport
+    public function create(string $file, BackupFiles $files = BackupFiles::Local, ?string $filesDirectory = null, bool $allowIncomplete = false): BackupReport
     {
         $this->assertSchemaExists();
 
@@ -98,7 +106,7 @@ final readonly class Backups
 
         rename($partial, $file);
         $size = filesize($file);
-        $this->log->record(new BackupRun(new \DateTimeImmutable(), true, false === $size ? null : $size, $file));
+        $this->log->record($this->run($report, $allowIncomplete, false === $size ? null : $size, $file));
 
         return $report;
     }
@@ -110,7 +118,7 @@ final readonly class Backups
      *
      * @throws BackupException
      */
-    public function stream(\Closure $output, BackupFiles $files = BackupFiles::Local, ?string $filesDirectory = null): BackupReport
+    public function stream(\Closure $output, BackupFiles $files = BackupFiles::Local, ?string $filesDirectory = null, bool $allowIncomplete = false): BackupReport
     {
         $this->assertSchemaExists();
         $bytes = 0;
@@ -126,7 +134,7 @@ final readonly class Backups
             throw $e;
         }
 
-        $this->log->record(new BackupRun(new \DateTimeImmutable(), true, $bytes));
+        $this->log->record($this->run($report, $allowIncomplete, $bytes));
 
         return $report;
     }
@@ -156,7 +164,7 @@ final readonly class Backups
         }
 
         $files = $manifest['files'] ?? null;
-        $missing = array_merge((array) ($manifest['missing'] ?? []), (array) ($manifest['corrupt'] ?? []));
+        $missing = array_merge((array) ($manifest['on_unknown_disks'] ?? []), (array) ($manifest['missing'] ?? []), (array) ($manifest['corrupt'] ?? []));
 
         return new BackupContents(
             createdAt: $contents->createdAt,
@@ -170,6 +178,8 @@ final readonly class Backups
             objects: $contents->objects,
             filesInArchive: \count(array_filter(array_keys($entries), static fn (string $name): bool => str_starts_with($name, self::FILES_PREFIX))),
             missingWhenMade: array_values(array_filter($missing, \is_string(...))),
+            // Archives made before "complete" was written: complete when nothing was missing.
+            complete: \is_bool($manifest['complete'] ?? null) ? $manifest['complete'] : [] === $missing,
         );
     }
 
@@ -214,7 +224,7 @@ final readonly class Backups
             throw new BackupException(implode("\n", $problems));
         }
 
-        $disks = $this->checks->disksAfterRestore($backup);
+        $disks = $this->checks->disksAfterRestore();
         $isArchive = BackupContents::ARCHIVE === $backup->format;
         $entries = $isArchive ? $this->openArchive($file)[0] : [];
         $dump = $isArchive ? $this->extractDump($file, $entries) : $file;
@@ -241,6 +251,27 @@ final readonly class Backups
     }
 
     /**
+     * The log entry of a backup that was written: failed when it's incomplete, unless that's allowed.
+     */
+    private function run(BackupReport $report, bool $allowIncomplete, ?int $bytes, ?string $target = null): BackupRun
+    {
+        if ($report->complete()) {
+            return new BackupRun(new \DateTimeImmutable(), true, $bytes, $target);
+        }
+
+        $absent = $report->absent();
+        $problem = \sprintf(
+            'Incomplete%s: %d stored file(s) aren\'t in it (%s%s).',
+            $allowIncomplete ? ', which was allowed' : '',
+            \count($absent),
+            implode(', ', \array_slice($absent, 0, 5)),
+            \count($absent) > 5 ? ', …' : '',
+        );
+
+        return new BackupRun(new \DateTimeImmutable(), $allowIncomplete, $bytes, $target, $problem);
+    }
+
+    /**
      * @param \Closure(string): void $output
      */
     private function write(\Closure $output, BackupFiles $files, ?string $filesDirectory): BackupReport
@@ -254,6 +285,8 @@ final readonly class Backups
         }
 
         $dump = $this->temporaryFile('quire-backup-');
+        // The disks of disabled extensions too: they keep their files.
+        $disks = $this->disks->all();
 
         // Shared with other backups, exclusive for the garbage collector: no file the dump lists can be
         // collected before it's copied.
@@ -270,7 +303,7 @@ final readonly class Backups
                 fclose($handle);
             }
 
-            $report = $this->copyFiles($objects, $files, $tar, $filesDirectory);
+            $report = $this->copyFiles($disks, $objects, $files, $tar, $filesDirectory);
             $tar->addString(self::MANIFEST_ENTRY, json_encode([
                 'format' => 'quire-backup',
                 'version' => 1,
@@ -283,6 +316,14 @@ final readonly class Backups
                 'not_copied' => $report->notCopied,
                 'missing' => $report->missing,
                 'corrupt' => $report->corrupt,
+                'unknown_disks' => $report->unknownDisks,
+                'on_unknown_disks' => $report->onUnknownDisks,
+                'complete' => $report->complete(),
+                'absent' => [
+                    ...array_map(static fn (string $file): array => ['file' => $file, 'reason' => 'unknown_disk'], $report->onUnknownDisks),
+                    ...array_map(static fn (string $file): array => ['file' => $file, 'reason' => 'missing'], $report->missing),
+                    ...array_map(static fn (string $file): array => ['file' => $file, 'reason' => 'damaged'], $report->corrupt),
+                ],
             ], \JSON_THROW_ON_ERROR | \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES));
             $tar->finish();
 
@@ -326,17 +367,19 @@ final readonly class Backups
     /**
      * @param list<array{disk: string, key: string, size: int, sha256: string}> $objects
      */
-    private function copyFiles(array $objects, BackupFiles $selection, TarWriter $tar, ?string $filesDirectory): BackupReport
+    private function copyFiles(StorageDisks $disks, array $objects, BackupFiles $selection, TarWriter $tar, ?string $filesDirectory): BackupReport
     {
         $copied = $reused = $notCopied = 0;
-        $missing = $corrupt = [];
+        $missing = $corrupt = $unknownDisks = $onUnknownDisks = [];
 
         foreach ($objects as $object) {
             $name = $object['disk'].':'.$object['key'];
-            $disk = $this->disks->has($object['disk']) ? $this->disks->get($object['disk']) : null;
+            $disk = $disks->has($object['disk']) ? $disks->get($object['disk']) : null;
 
+            // Whatever the selection: where the files are, and so whether they'd be copied, can't be known.
             if (!$disk instanceof Disk) {
-                $missing[] = $name;
+                $unknownDisks[$object['disk']] = true;
+                $onUnknownDisks[] = $name;
 
                 continue;
             }
@@ -397,7 +440,7 @@ final readonly class Backups
             ++$copied;
         }
 
-        return new BackupReport(\count($objects), $copied, $reused, $notCopied, $missing, $corrupt);
+        return new BackupReport(\count($objects), $copied, $reused, $notCopied, $missing, $corrupt, array_map(strval(...), array_keys($unknownDisks)), $onUnknownDisks);
     }
 
     /**

@@ -104,12 +104,7 @@ final readonly class SiteReport
                 'pending' => $this->attempt(fn (): int => \count($this->migrations->getMigrationStatusCalculator()->getNewMigrations())),
             ],
             'health' => $this->health(),
-            // For people managing the site: what works, but likely not as they meant it. Not in the
-            // public health report, which runs no extension's code and names no configuration.
-            'warnings' => array_map(
-                static fn (string $disk): string => \sprintf('"quire.storage.disks.%s" places a disk that no installed extension declares, so it isn\'t used. Set its "public" to make it a disk of the site\'s own, or remove it.', $disk),
-                $this->disks->placedButUndeclared(),
-            ),
+            'warnings' => $this->warnings(),
         ];
     }
 
@@ -128,6 +123,25 @@ final readonly class SiteReport
         }
 
         return ['status' => $healthy ? 'ok' : 'fail', 'checks' => $checks];
+    }
+
+    /**
+     * For people managing the site: what works, but likely not as they meant it. Not in the public
+     * health report, which runs no extension's code and names no configuration. Advisory, so it never
+     * fails the report a server relies on.
+     *
+     * @return list<string>
+     */
+    private function warnings(): array
+    {
+        try {
+            return array_map(
+                static fn (string $disk): string => \sprintf('"quire.storage.disks.%s" places a disk that no installed extension declares, so it isn\'t used. Set its "public" to make it a disk of the site\'s own, or remove it.', $disk),
+                $this->disks->placedButUndeclared(),
+            );
+        } catch (\Throwable $e) {
+            return [\sprintf('The storage disks couldn\'t be checked (%s): run "bin/console quire:storage:list" to see them.', $e::class)];
+        }
     }
 
     /**

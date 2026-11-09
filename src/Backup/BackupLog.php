@@ -16,7 +16,10 @@ use Quire\Content\Internal\Row;
  */
 final readonly class BackupLog
 {
-    /** Runs kept: the log answers "when", it isn't an archive */
+    /**
+     * Runs kept: the log answers "when", it isn't an archive. The newest are the last recorded: clocks
+     * step back (NTP corrections, virtual machines), so a later run can have an earlier time.
+     */
     private const int KEEP = 100;
 
     public function __construct(
@@ -33,11 +36,11 @@ final readonly class BackupLog
             'target' => $run->target,
             'problem' => $run->problem,
         ]);
-        $this->connection->executeStatement('DELETE FROM quire.backup_run WHERE id NOT IN (SELECT id FROM quire.backup_run ORDER BY finished_at DESC, id DESC LIMIT ?)', [self::KEEP]);
+        $this->connection->executeStatement('DELETE FROM quire.backup_run WHERE id NOT IN (SELECT id FROM quire.backup_run ORDER BY id DESC LIMIT ?)', [self::KEEP]);
     }
 
     /**
-     * The latest backup, whether it worked or not.
+     * The latest backup, whether it worked or not: the last one recorded, whatever its time says.
      */
     public function last(): ?BackupRun
     {
@@ -51,7 +54,7 @@ final readonly class BackupLog
 
     private function find(string $where): ?BackupRun
     {
-        $columns = $this->connection->fetchAssociative(\sprintf('SELECT finished_at, ok, bytes, target, problem FROM quire.backup_run %s ORDER BY finished_at DESC, id DESC LIMIT 1', $where));
+        $columns = $this->connection->fetchAssociative(\sprintf('SELECT finished_at, ok, bytes, target, problem FROM quire.backup_run %s ORDER BY id DESC LIMIT 1', $where));
 
         if (false === $columns) {
             return null;

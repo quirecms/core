@@ -26,6 +26,7 @@ use Symfony\Component\HttpFoundation\Session\FlashBagAwareSessionInterface;
 use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Mailer\Exception\TransportExceptionInterface;
+use Symfony\Component\PasswordHasher\Hasher\PasswordHasherFactoryInterface;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -33,8 +34,9 @@ use Symfony\Contracts\EventDispatcher\EventDispatcherInterface;
 use Twig\Environment;
 
 /**
- * Creating an account, and confirming its email. Off unless the settings "quire.auth.registration" and
- * "quire.auth.email_verification" turn them on.
+ * Creating an account, and confirming its email. Registration is open only while both settings
+ * "quire.auth.registration" and "quire.auth.email_verification" are on (D-44): without confirmation, a new
+ * address was signed in at once and a taken one couldn't be, so the page told who has an account.
  *
  * @internal
  */
@@ -60,13 +62,23 @@ final readonly class RegistrationController
         private EventDispatcherInterface $dispatcher,
         private UrlGeneratorInterface $urls,
         private LoggerInterface $logger,
+        private PasswordHasherFactoryInterface $hashers,
     ) {
+    }
+
+    /**
+     * Whether visitors can register: only with email confirmation, so the answer is the same for every
+     * address (the login page's link follows it too).
+     */
+    public static function isOpen(Settings $settings): bool
+    {
+        return $settings->getBool(AccountSettings::REGISTRATION) && $settings->getBool(AccountSettings::EMAIL_VERIFICATION);
     }
 
     public function register(Request $request): Response
     {
-        if (!$this->settings->getBool(AccountSettings::REGISTRATION)) {
-            throw new NotFoundHttpException('Registration is turned off.');
+        if (!self::isOpen($this->settings)) {
+            throw new NotFoundHttpException('Registration is turned off, or emails aren\'t confirmed.');
         }
 
         if ($this->security->getUser() instanceof User) {
@@ -86,8 +98,6 @@ final readonly class RegistrationController
             return $this->render('security/register.html.twig', ['values' => $values, 'errors' => ['form' => $refusal]], Response::HTTP_UNPROCESSABLE_ENTITY);
         }
 
-        $verification = $this->settings->getBool(AccountSettings::EMAIL_VERIFICATION);
-
         // Bots fill in every field, people don't see this one: tell them it worked.
         if ('' !== $request->request->getString('website')) {
             return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
@@ -99,9 +109,11 @@ final readonly class RegistrationController
 
         $existing = $this->users->findByEmail($values['email']);
 
-        // With confirmation, the page doesn't tell whether the email has an account: its owner gets an
-        // email about it instead.
-        if ($existing instanceof User && $verification) {
+        // The page doesn't tell whether the email has an account: its owner gets an email about it
+        // instead. The password is hashed all the same, as creating the account does, so the answer takes
+        // as long (the hash is most of the work).
+        if ($existing instanceof User) {
+            $this->hashers->getPasswordHasher(User::class)->hash($request->request->getString('password'));
             $this->attempt(fn () => $this->mailer->sendAccountExists($existing));
 
             return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
@@ -131,21 +143,9 @@ final readonly class RegistrationController
         }
 
         $this->dispatcher->dispatch(new UserRegistered($user, $request));
+        $this->sendVerification($user);
 
-        if ($verification) {
-            $this->sendVerification($user);
-
-            return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
-        }
-
-        try {
-            $this->security->login($user, 'form_login');
-        } catch (\LogicException) {
-            // A firewall without Quire's form login: they sign in on the sign-in page.
-            return new RedirectResponse($this->urls->generate(LoginController::LOGIN_ROUTE));
-        }
-
-        return new RedirectResponse($this->urls->generate(Permalinks::HOME_ROUTE));
+        return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
     }
 
     /**

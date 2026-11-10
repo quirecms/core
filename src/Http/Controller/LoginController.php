@@ -48,7 +48,7 @@ final readonly class LoginController
             'last_username' => $this->authentication->getLastUsername(),
             'password_login' => $passwordLogin,
             'target_path' => $this->onSitePath($request->query->getString('next')),
-            'registration' => $this->settings->getBool(AccountSettings::REGISTRATION),
+            'registration' => RegistrationController::isOpen($this->settings),
             'password_reset' => $passwordLogin && $this->settings->getBool(AccountSettings::PASSWORD_RESET),
             'email_verification' => $this->settings->getBool(AccountSettings::EMAIL_VERIFICATION),
         ])));

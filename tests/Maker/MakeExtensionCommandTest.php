@@ -49,6 +49,7 @@ final class MakeExtensionCommandTest extends TestCase
         self::assertSame([
             'composer config repositories.extensions {"type":"path","url":"extensions/*"}',
             'composer require acme/reviews:*@dev --no-interaction --no-scripts',
+            'composer require --dev quire/testing --no-interaction --no-scripts',
             'bin/console quire:extension:enable acme-reviews --no-interaction --env=test',
         ], $this->commands);
         self::assertStringContainsString('Reviews is ready. Open /reviews on your site', preg_replace('/\s+/', ' ', $tester->getDisplay()) ?? '');
@@ -112,7 +113,7 @@ final class MakeExtensionCommandTest extends TestCase
         $tester = $this->tester(new PinnedExtensionStateStore([]));
 
         self::assertSame(Command::SUCCESS, $tester->execute(['package' => 'acme/reviews']));
-        self::assertCount(2, $this->commands);
+        self::assertCount(3, $this->commands, 'Installed, with the test kit.');
         self::assertStringContainsString('Installed, but not enabled', $tester->getDisplay());
     }
 
@@ -120,7 +121,7 @@ final class MakeExtensionCommandTest extends TestCase
     {
         $manager = new ExtensionManager(new InstalledExtensions($this->composer->installedJsonPath()), $state, new EventDispatcher());
 
-        return new CommandTester(new Command(null, new MakeExtensionCommand($manager, $this->projectDir, 'test', $this->recordCommand(...))));
+        return new CommandTester(new Command(null, new MakeExtensionCommand($manager, $this->projectDir, 'test', $this->recordCommand(...), installedJson: $this->composer->installedJsonPath())));
     }
 
     /**

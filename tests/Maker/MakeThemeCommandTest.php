@@ -50,6 +50,7 @@ final class MakeThemeCommandTest extends TestCase
         self::assertSame([
             'composer config repositories.themes {"type":"path","url":"themes/*"}',
             'composer require acme/dark:*@dev --no-interaction --no-scripts',
+            'composer require --dev quire/testing --no-interaction --no-scripts',
             'bin/console quire:theme:use acme-dark --env=test',
         ], $this->commands);
         self::assertStringContainsString('The site uses Dark now.', (string) preg_replace('/\s+/', ' ', $tester->getDisplay()));
@@ -74,12 +75,20 @@ final class MakeThemeCommandTest extends TestCase
         self::assertDirectoryDoesNotExist($this->projectDir.'/themes/dark');
     }
 
+    public function testASiteWithTheTestKitKeepsIt(): void
+    {
+        $this->composer->addPackage('quire/testing', 'library');
+
+        self::assertSame(Command::SUCCESS, $this->tester()->execute(['package' => 'acme/dark']));
+        self::assertNotContains('composer require --dev quire/testing --no-interaction --no-scripts', $this->commands);
+    }
+
     public function testAPinnedThemeStays(): void
     {
         $tester = $this->tester(pinned: true);
 
         self::assertSame(Command::SUCCESS, $tester->execute(['package' => 'acme/dark']));
-        self::assertCount(2, $this->commands, 'Installed, but not used.');
+        self::assertCount(3, $this->commands, 'Installed (with the test kit), but not used.');
         self::assertStringContainsString('Installed, but the site still uses its theme', $tester->getDisplay());
     }
 
@@ -101,7 +110,7 @@ final class MakeThemeCommandTest extends TestCase
         $settings = new Settings(new SettingsSchema([]), DriverManager::getConnection(['driver' => 'pdo_pgsql']), new EventDispatcher());
         $themes = new Themes($installed, $extensions, $settings, configured: null, chain: [], problem: null, pinned: $pinned);
 
-        return new CommandTester(new Command(null, new MakeThemeCommand($themes, $this->projectDir, 'test', $this->recordCommand(...))));
+        return new CommandTester(new Command(null, new MakeThemeCommand($themes, $this->projectDir, 'test', $this->recordCommand(...), installedJson: $this->composer->installedJsonPath())));
     }
 
     /**

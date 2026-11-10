@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Maker\Console;
 
+use Quire\Maker\Internal\ProjectPackages;
 use Quire\Maker\ThemeSkeleton;
 use Quire\Runtime\PhpBinary;
 use Quire\Theme\Themes;
@@ -54,6 +55,8 @@ final readonly class MakeThemeCommand
         private string $environment,
         ?\Closure $run = null,
         private ?EventDispatcherInterface $dispatcher = null,
+        #[Autowire(param: 'quire.composer.installed_json')]
+        private string $installedJson = '',
     ) {
         $this->run = $run ?? $this->runProcess(...);
     }
@@ -128,6 +131,8 @@ final readonly class MakeThemeCommand
             // Without the project's scripts: their cache:clear would delete the build this command runs on,
             // and the next step rebuilds the application anyway.
             ['composer', 'require', $skeleton->package.':*@dev', '--no-interaction', '--no-scripts'],
+            // Its tests run on Quire's test kit, which sites from the skeleton don't have
+            ...(ProjectPackages::has($this->installedJson, 'quire/testing') ? [] : [['composer', 'require', '--dev', 'quire/testing', '--no-interaction', '--no-scripts']]),
         ] as $command) {
             if (0 !== ($this->run)($command, $io->write(...))) {
                 $io->error(\sprintf('"%s" failed; see the output above. The theme\'s files were kept, so you can retry.', implode(' ', $command)));

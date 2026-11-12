@@ -12,6 +12,7 @@ use Quire\Extend\ContentChecks;
 use Quire\Extend\ExtenderContext;
 use Quire\Extend\ExtenderException;
 use Quire\Extend\ExtenderInterface;
+use Quire\Extend\Head;
 use Quire\Extend\Permissions;
 use Quire\Extend\Routes;
 use Quire\Extend\Views;
@@ -79,6 +80,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Auth::PARAMETER, []);
         $container->setParameter(ContentChecks::PARAMETER, []);
         $container->setParameter(Actions::PARAMETER, []);
+        $container->setParameter(Head::PARAMETER, []);
 
         if (null !== $coreExtendFile) {
             $container->addResource(new FileResource($coreExtendFile));

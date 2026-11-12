@@ -47,6 +47,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Extend/',
             '../src/Extension/Boot/',
             '../src/Health/HealthStatus.php',
+            // A page's head tags, made per page.
+            '../src/Head/Head.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',

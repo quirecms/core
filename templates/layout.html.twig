@@ -2,7 +2,7 @@
     The page around every page Quire renders. Themes replace it with their own layout.html.twig.
 
     Variables: site (site.title, site.locale, site.url, site.description, site.direction), theme, and
-    canonical_url when the page has one (quire_seo() prints it with the other SEO tags).
+    canonical_url when the page has one (quire_head() prints it with the other head tags).
     Blocks: title, head, content
     Slots: head, body_start, header.nav, sidebar, footer, body_end (every theme renders them; see
     Quire\Theme\Slots::STANDARD)
@@ -13,7 +13,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ site.title }}{% endblock %}</title>
-    {{ quire_seo() }}
+    {{ quire_head() }}
     {% block head %}{% endblock %}
     {{ quire_slot('head') }}
 </head>

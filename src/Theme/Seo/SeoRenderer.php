@@ -11,6 +11,7 @@ use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
+use Quire\Head\Head;
 use Quire\Settings\Settings;
 use Quire\Theme\Event\SeoTagsBuilding;
 use Quire\Theme\Twig\SiteView;
@@ -55,15 +56,31 @@ final readonly class SeoRenderer
     }
 
     /**
+     * The SEO tags alone, as HTML.
+     *
+     * @deprecated since 0.3, the tags are part of quire_head(); use {@see self::contribute()} with a {@see Head}
+     *
      * @param array<string, mixed> $context
      */
     public function render(array $context): string
     {
+        $head = new Head();
+        $this->contribute($head, $context);
+
+        return $head->toHtml();
+    }
+
+    /**
+     * Adds a page's SEO tags to its head, after listeners of {@see SeoTagsBuilding} have changed them.
+     *
+     * @param array<string, mixed> $context The variables of the template that prints the head
+     */
+    public function contribute(Head $head, array $context): void
+    {
         $content = ($context['content'] ?? null) instanceof Content ? $context['content'] : null;
         $tags = $this->build($context, $content);
         $this->dispatcher->dispatch(new SeoTagsBuilding($tags, $content, $context));
-
-        return $this->html($tags);
+        $this->write($tags, $head);
     }
 
     /**
@@ -134,42 +151,29 @@ final readonly class SeoRenderer
         };
     }
 
-    private function html(SeoTags $tags): string
+    private function write(SeoTags $tags, Head $head): void
     {
-        $lines = [];
-        $meta = static function (string $attribute, string $name, ?string $value) use (&$lines): void {
-            if (null !== $value && '' !== $value) {
-                $lines[] = \sprintf('<meta %s="%s" content="%s">', $attribute, $name, htmlspecialchars($value));
-            }
-        };
-
-        $meta('name', 'description', $tags->description);
-
-        if (null !== $tags->canonicalUrl) {
-            $lines[] = \sprintf('<link rel="canonical" href="%s">', htmlspecialchars($tags->canonicalUrl));
-        }
+        $head->meta('description', $tags->description);
+        $head->link('canonical', $tags->canonicalUrl);
 
         foreach ($tags->meta as $name => $value) {
-            $meta('name', $name, $value);
+            $head->meta($name, $value);
         }
 
-        $meta('property', 'og:type', $tags->type);
-        $meta('property', 'og:title', $tags->title);
-        $meta('property', 'og:description', $tags->description);
-        $meta('property', 'og:url', $tags->canonicalUrl);
-        $meta('property', 'og:site_name', $tags->siteName);
+        $head->property('og:type', $tags->type);
+        $head->property('og:title', $tags->title);
+        $head->property('og:description', $tags->description);
+        $head->property('og:url', $tags->canonicalUrl);
+        $head->property('og:site_name', $tags->siteName);
         // Open Graph writes locales as "en_US".
-        $meta('property', 'og:locale', str_replace('-', '_', $tags->locale));
-        $meta('property', 'og:image', $tags->imageUrl);
-        $meta('property', 'article:published_time', $tags->publishedAt?->format(\DATE_ATOM));
-        $meta('property', 'article:modified_time', $tags->modifiedAt?->format(\DATE_ATOM));
-        $meta('name', 'twitter:card', null === $tags->imageUrl ? 'summary' : 'summary_large_image');
+        $head->property('og:locale', str_replace('-', '_', $tags->locale));
+        $head->property('og:image', $tags->imageUrl);
+        $head->property('article:published_time', $tags->publishedAt?->format(\DATE_ATOM));
+        $head->property('article:modified_time', $tags->modifiedAt?->format(\DATE_ATOM));
+        $head->meta('twitter:card', null === $tags->imageUrl ? 'summary' : 'summary_large_image');
 
-        foreach ($tags->jsonLd as $data) {
-            // Escaped so the data can't close the script element.
-            $lines[] = '<script type="application/ld+json">'.json_encode($data, \JSON_HEX_TAG | \JSON_HEX_AMP | \JSON_UNESCAPED_SLASHES | \JSON_UNESCAPED_UNICODE | \JSON_THROW_ON_ERROR).'</script>';
+        foreach ($tags->jsonLd as $index => $data) {
+            $head->jsonLd('seo.'.$index, $data);
         }
-
-        return implode("\n", $lines)."\n";
     }
 }

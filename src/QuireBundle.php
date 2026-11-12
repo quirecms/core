@@ -15,6 +15,7 @@ use Quire\Content\Query\Internal\QueryServicesPass;
 use Quire\Extend\Actions;
 use Quire\Extend\ContentChecks;
 use Quire\Extend\ExtenderContext;
+use Quire\Extend\Head;
 use Quire\Extend\Permissions;
 use Quire\Extend\Storage;
 use Quire\Extension\Boot\CompileTimeState;
@@ -29,6 +30,7 @@ use Quire\Formatter\Formatter;
 use Quire\Formatter\HtmlProcessorInterface;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
+use Quire\Head\HeadContributorInterface;
 use Quire\Jobs\Job;
 use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\PermissionsPass;
@@ -293,6 +295,8 @@ final class QuireBundle extends AbstractBundle
         // Content checks too: core's own classes are registered again by services.php.
         $builder->registerForAutoconfiguration(ContentCheckInterface::class)->addTag(ContentChecks::TAG);
         $builder->registerForAutoconfiguration(ActionInterface::class)->addTag(Actions::TAG);
+        // Head contributors too, for the same reason; only those Extend\Head registered run.
+        $builder->registerForAutoconfiguration(HeadContributorInterface::class)->addTag(Head::TAG);
 
         foreach ([FormatInterface::class, ShortcodeInterface::class, SourceProcessorInterface::class, HtmlProcessorInterface::class, CommonMarkExtensionInterface::class] as $interface) {
             $builder->registerForAutoconfiguration($interface)->addTag(Formatter::SERVICE_TAG);

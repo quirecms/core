@@ -5,10 +5,10 @@ declare(strict_types=1);
 namespace Quire\Theme\Twig;
 
 use Quire\Extension\Boot\ExtensionBooter;
+use Quire\Head\Internal\HeadRenderer;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Exception\AssetNotFoundException;
-use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Slots;
 use Quire\Theme\ThemeAssets;
 use Quire\Theme\ThemePreview;
@@ -28,7 +28,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     public function __construct(
         private Slots $slots,
         private ThemeAssets $assets,
-        private SeoRenderer $seo,
+        private HeadRenderer $head,
         private Settings $settings,
         private SettingsSchema $schema,
         #[Autowire(param: ExtensionBooter::BOOT_ORDER_PARAMETER)]
@@ -88,14 +88,15 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     }
 
     /**
-     * `{{ quire_seo() }}` in a layout's <head>: the description, canonical URL, Open Graph and Twitter
-     * tags and structured data of the page, from the template's variables.
+     * `{{ quire_head() }}` in a layout's <head>: the page's meta tags, links and structured data, from
+     * the head contributors (see Extend\Head), each once: the description, canonical URL, Open Graph
+     * and Twitter tags, and what extensions add.
      *
      * @param array<string, mixed> $context
      */
-    public function seo(array $context): string
+    public function head(array $context): string
     {
-        return $this->seo->render($context);
+        return $this->head->render($context);
     }
 
     /**

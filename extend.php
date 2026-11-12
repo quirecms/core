@@ -29,6 +29,7 @@ use Quire\Storage\Job\CollectGarbageHandler;
 use Quire\Theme\Action\UseTheme;
 use Quire\Theme\Internal\AdminAssetsSlot;
 use Quire\Theme\Internal\AssetsSlot;
+use Quire\Theme\Seo\SeoHeadContributor;
 use Quire\Theme\Seo\SeoRenderer;
 use Quire\Theme\Themes;
 use Quire\User\AccountSettings;
@@ -47,6 +48,10 @@ return [
     new Extend\Views()
         ->slot('head', AssetsSlot::class, priority: 1000)
         ->slot('admin.head', AdminAssetsSlot::class, priority: 1000),
+
+    // The page's SEO tags, in quire_head(); a contributor with the default priority comes after them.
+    new Extend\Head()
+        ->contributor(SeoHeadContributor::class, priority: SeoHeadContributor::PRIORITY),
 
     // Checks before publishing (see docs/content.md): warnings until a site makes them errors.
     new Extend\ContentChecks()

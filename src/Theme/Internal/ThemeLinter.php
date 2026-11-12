@@ -48,7 +48,8 @@ final readonly class ThemeLinter
 
         $errors = [];
         $slots = [];
-        $seo = false;
+        $head = false;
+        $warnings = [];
         $templates = $this->templates($chain);
         // Every template the site may render, then those they extend, include or embed, e.g. a parent
         // theme's version through "@<theme-id>/…".
@@ -75,13 +76,20 @@ final readonly class ThemeLinter
             }
 
             foreach ($this->calls($module) as [$function, $argument, $line]) {
-                if ('quire_seo' === $function) {
-                    $seo = true;
+                if ('quire_head' === $function) {
+                    $head = true;
+                } elseif ('quire_seo' === $function) {
+                    $head = true;
+                    $warnings[] = \sprintf('%s line %d: quire_seo() is now called quire_head(). The old name works until Quire 1.0.', $this->relative($file, $chain), $line);
                 } elseif ('quire_slot' === $function && null !== $argument) {
                     $slots[$argument] = true;
                 } elseif ('quire_asset' === $function && null !== $argument && !$this->assetExists($argument, $chain)) {
                     $errors[] = \sprintf('%s line %d: quire_asset(\'%s\') links to a file that doesn\'t exist.', $this->relative($file, $chain), $line, $argument);
                 }
+            }
+
+            foreach ($this->handWrittenHeadTags((string) file_get_contents($file)) as [$tag, $line]) {
+                $warnings[] = \sprintf('%s line %d: prints %s itself, and quire_head() prints it too, so pages would have it twice. Remove it, and set the value with a head contributor (Extend\Head) instead.', $this->relative($file, $chain), $line, $tag);
             }
 
             foreach ($this->referencedTemplates($module) as $referenced) {
@@ -99,7 +107,9 @@ final readonly class ThemeLinter
             $errors[] = \sprintf('The theme doesn\'t render the standard slots %s, so extensions can\'t add their parts there. Add {{ quire_slot(\'…\') }} where they belong; see the list in docs/themes.md.', implode(', ', $missing));
         }
 
-        $warnings = $seo ? [] : ['No template calls quire_seo(), so pages have no description, canonical URL or social tags. Add {{ quire_seo() }} to the <head> of the layout.'];
+        if (!$head) {
+            $warnings[] = 'No template calls quire_head(), so pages have no description, canonical URL, social tags or the tags extensions add. Add {{ quire_head() }} to the <head> of the layout.';
+        }
 
         // Cards are also shown alone, as previews in the admin, where there's no page request.
         foreach ($templates as $name => $file) {
@@ -274,5 +284,27 @@ final readonly class ThemeLinter
         }
 
         return 'Quire: '.basename(\dirname($file)).'/'.basename($file);
+    }
+
+    /**
+     * Head tags a template writes by hand that quire_head() also prints, with their lines.
+     *
+     * @return list<array{string, int}>
+     */
+    private function handWrittenHeadTags(string $source): array
+    {
+        $found = [];
+
+        foreach (explode("\n", $source) as $index => $text) {
+            if (1 === preg_match('/<meta\b[^>]*\b(name|property)\s*=\s*["\'](description|robots|og:[\w:]+|article:[\w:]+|twitter:[\w:]+)["\']/i', $text, $match)) {
+                $found[] = [\sprintf('<meta %s="%s">', strtolower($match[1]), $match[2]), $index + 1];
+            }
+
+            if (1 === preg_match('/<link\b[^>]*\brel\s*=\s*["\']canonical["\']/i', $text)) {
+                $found[] = ['<link rel="canonical">', $index + 1];
+            }
+        }
+
+        return $found;
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Twig;
 
+use Twig\DeprecatedCallableInfo;
 use Twig\Extension\AbstractExtension;
 use Twig\Extension\GlobalsInterface;
 use Twig\TwigFilter;
@@ -37,7 +38,9 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_setting', [ThemeRuntime::class, 'setting']),
             new TwigFunction('quire_extension_enabled', [ThemeRuntime::class, 'extensionEnabled']),
             new TwigFunction('quire_asset', [ThemeRuntime::class, 'asset']),
-            new TwigFunction('quire_seo', [ThemeRuntime::class, 'seo'], ['needs_context' => true, 'is_safe' => ['html']]),
+            new TwigFunction('quire_head', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html']]),
+            // The name before 0.3, when the head held only the SEO tags.
+            new TwigFunction('quire_seo', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html'], 'deprecation_info' => new DeprecatedCallableInfo('quire/core', '0.3', 'quire_head')]),
         ];
     }
 

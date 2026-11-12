@@ -12,7 +12,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}{{ site.title }}{% endblock %}</title>
-    {{ quire_seo() }}
+    {{ quire_head() }}
     {{ quire_slot('head') }}
 </head>
 <body>

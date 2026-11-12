@@ -46,11 +46,30 @@ final readonly class ContentPreviews
      */
     public function cardDocument(Content $item): string
     {
+        return $this->document($this->card($item), $item->locale);
+    }
+
+    /**
+     * Any HTML in a page of its own, with the theme's stylesheets (and any others given) and no
+     * scripts: for an iframe with sandbox="" and srcdoc, e.g. how an extension's part of the site looks.
+     *
+     * @param string       $html        Output as it is: escape what comes from users
+     * @param list<string> $stylesheets More stylesheets' URLs, after the theme's
+     */
+    public function document(string $html, string $locale, array $stylesheets = []): string
+    {
+        $links = '';
+
+        foreach ($stylesheets as $url) {
+            $links .= \sprintf('<link rel="stylesheet" href="%s">'."\n", htmlspecialchars($url));
+        }
+
         return \sprintf(
-            "<!doctype html>\n<html lang=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"robots\" content=\"noindex\">\n%s<style>body { margin: 0; padding: 1rem; }</style>\n</head>\n<body class=\"quire-preview\">\n%s\n</body>\n</html>\n",
-            htmlspecialchars($item->locale),
+            "<!doctype html>\n<html lang=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"robots\" content=\"noindex\">\n%s%s<style>body { margin: 0; padding: 1rem; }</style>\n</head>\n<body class=\"quire-preview\">\n%s\n</body>\n</html>\n",
+            htmlspecialchars($locale),
             $this->assets->stylesheets('site'),
-            $this->card($item),
+            $links,
+            $html,
         );
     }
 

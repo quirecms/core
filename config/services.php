@@ -9,6 +9,9 @@ use Quire\Audit\AuditUndo;
 use Quire\Backup\BackupLog;
 use Quire\Content\Revision\PendingRevisionComments;
 use Quire\Content\Revision\PendingRevisionWriter;
+use Quire\Csp\Csp;
+use Quire\Csp\Internal\NoThirdPartySources;
+use Quire\Csp\ThirdPartySourcesInterface;
 use Quire\Database\MigrationsFactory;
 use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\Boot\OfflineBoot;
@@ -49,6 +52,8 @@ return static function (ContainerConfigurator $container): void {
             '../src/Health/HealthStatus.php',
             // A page's head tags, made per page.
             '../src/Head/Head.php',
+            // Values, not services.
+            '../src/Csp/{Policy,PolicyKind}.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',
@@ -119,6 +124,11 @@ return static function (ContainerConfigurator $container): void {
 
     $services->set(SchemaAssetFilter::class)
         ->tag(SchemaAssetFilter::TAG);
+
+    // Other sites' hosts in the policy: none, until quire/privacy replaces this (see Csp\Internal\CspSourcesPass).
+    $services->alias(ThirdPartySourcesInterface::class, NoThirdPartySources::class);
+    // For extensions and themes that print inline code with a nonce, and for tests.
+    $services->set(Csp::class)->public();
 
     // Storage is for extensions; nothing in core uses it yet, and unused private services are removed.
     $services->set(StorageDisks::class)->public();

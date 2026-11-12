@@ -92,6 +92,10 @@ final readonly class ThemeLinter
                 $warnings[] = \sprintf('%s line %d: prints %s itself, and quire_head() prints it too, so pages would have it twice. Remove it, and set the value with a head contributor (Extend\Head) instead.', $this->relative($file, $chain), $line, $tag);
             }
 
+            foreach ($this->inlineCode((string) file_get_contents($file)) as [$what, $line]) {
+                $warnings[] = \sprintf('%s line %d: %s, which the site\'s Content-Security-Policy blocks. %s See "Content-Security-Policy" in docs/themes.md.', $this->relative($file, $chain), $line, $what, str_contains($what, 'script') || str_contains($what, 'handler') || str_contains($what, 'javascript:') ? 'Move the code to a script in the theme\'s assets (Extend\Assets).' : 'Move the styles to the theme\'s stylesheet, with a class.');
+            }
+
             foreach ($this->referencedTemplates($module) as $referenced) {
                 $referencedFile = $this->resolve($referenced, $chain, $templates);
 
@@ -284,6 +288,36 @@ final readonly class ThemeLinter
         }
 
         return 'Quire: '.basename(\dirname($file)).'/'.basename($file);
+    }
+
+    /**
+     * Code in a template that the Content-Security-Policy blocks on the site's pages, with its lines:
+     * inline scripts, event handler attributes, "javascript:" links, style elements and attributes.
+     * Structured data and the importmap (which Quire allows by its hash) aren't code.
+     *
+     * @return list<array{string, int}>
+     */
+    private function inlineCode(string $source): array
+    {
+        $found = [];
+
+        foreach (explode("\n", $source) as $index => $text) {
+            $checks = [
+                'an inline <script>' => preg_match_all('/<script\b(?![^>]*\ssrc\s*=)(?![^>]*\stype\s*=\s*["\']?(?:application\/ld\+json|importmap)\b)[^>]*>/i', $text),
+                'an event handler attribute (on…=)' => preg_match_all('/<[a-z][^>]*\son[a-z]+\s*=/i', $text),
+                'a javascript: link' => preg_match_all('/\b(?:href|src|action|formaction)\s*=\s*["\']?\s*javascript:/i', $text),
+                'a <style> element' => preg_match_all('/<style\b(?![^>]*\snonce\s*=)[^>]*>/i', $text),
+                'a style attribute' => preg_match_all('/<[a-z][^>]*\sstyle\s*=/i', $text),
+            ];
+
+            foreach ($checks as $what => $count) {
+                if (\is_int($count) && $count > 0) {
+                    $found[] = [$what, $index + 1];
+                }
+            }
+        }
+
+        return $found;
     }
 
     /**

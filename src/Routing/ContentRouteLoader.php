@@ -5,7 +5,10 @@ declare(strict_types=1);
 namespace Quire\Routing;
 
 use Quire\Content\Permalink\Permalinks;
+use Quire\Csp\Csp;
+use Quire\Csp\PolicyKind;
 use Quire\Http\Controller\ContentController;
+use Quire\Http\Controller\EmptyModuleController;
 use Quire\Http\Controller\LoginController;
 use Quire\Http\Controller\PasswordResetController;
 use Quire\Http\Controller\RegistrationController;
@@ -78,14 +81,21 @@ final class ContentRouteLoader extends Loader
         // with a letter.
         $collection->add(StorageController::SIGNED_ROUTE, new Route(
             path: $this->prefix.'/storage/_signed/{disk}/{key}',
-            defaults: ['_controller' => StorageController::class.'::signed', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            defaults: ['_controller' => StorageController::class.'::signed', ExtensionRouteLoader::QUIRE_ROUTE => true, Csp::ATTRIBUTE => PolicyKind::StoredFile->value],
             requirements: ['disk' => '[a-z][a-z0-9_-]*', 'key' => StorageController::KEY_PATTERN],
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY + 1);
         $collection->add(StorageController::FILE_ROUTE, new Route(
             path: $this->prefix.'/storage/{disk}/{key}',
-            defaults: ['_controller' => StorageController::class.'::file', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            defaults: ['_controller' => StorageController::class.'::file', ExtensionRouteLoader::QUIRE_ROUTE => true, Csp::ATTRIBUTE => PolicyKind::StoredFile->value],
             requirements: ['disk' => '[a-z][a-z0-9_-]*', 'key' => StorageController::KEY_PATTERN],
+            methods: ['GET', 'HEAD'],
+        ), self::PRIORITY + 1);
+
+        // An empty module for the importmap of the site's pages (see Theme\Internal\AssetsRenderer).
+        $collection->add(EmptyModuleController::ROUTE, new Route(
+            path: $this->prefix.'/_quire/empty.js',
+            defaults: ['_controller' => EmptyModuleController::class, ExtensionRouteLoader::QUIRE_ROUTE => true],
             methods: ['GET', 'HEAD'],
         ), self::PRIORITY + 1);
 
@@ -130,13 +140,13 @@ final class ContentRouteLoader extends Loader
     {
         $collection->add(LoginController::LOGIN_ROUTE, new Route(
             path: $this->prefix.'/login',
-            defaults: ['_controller' => LoginController::class.'::login', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            defaults: ['_controller' => LoginController::class.'::login', ExtensionRouteLoader::QUIRE_ROUTE => true, Csp::ATTRIBUTE => PolicyKind::Private->value],
             methods: ['GET', 'HEAD', 'POST'],
         ), self::PRIORITY + 1);
 
         $collection->add(LoginController::LOGOUT_ROUTE, new Route(
             path: $this->prefix.'/logout',
-            defaults: ['_controller' => LoginController::class.'::logout', ExtensionRouteLoader::QUIRE_ROUTE => true],
+            defaults: ['_controller' => LoginController::class.'::logout', ExtensionRouteLoader::QUIRE_ROUTE => true, Csp::ATTRIBUTE => PolicyKind::Private->value],
             methods: ['GET', 'POST'],
         ), self::PRIORITY + 1);
 
@@ -154,7 +164,7 @@ final class ContentRouteLoader extends Loader
         foreach ($accounts as $name => [$path, $controller, $methods, $requirements]) {
             $collection->add($name, new Route(
                 path: $this->prefix.$path,
-                defaults: ['_controller' => $controller, ExtensionRouteLoader::QUIRE_ROUTE => true, ...(\in_array($name, [PasswordResetController::RESET_ROUTE, PasswordResetController::WELCOME_ROUTE, PasswordResetController::NEW_PASSWORD_ROUTE], true) ? ['token' => null] : [])],
+                defaults: ['_controller' => $controller, ExtensionRouteLoader::QUIRE_ROUTE => true, Csp::ATTRIBUTE => PolicyKind::Private->value, ...(\in_array($name, [PasswordResetController::RESET_ROUTE, PasswordResetController::WELCOME_ROUTE, PasswordResetController::NEW_PASSWORD_ROUTE], true) ? ['token' => null] : [])],
                 requirements: $requirements,
                 methods: $methods,
             ), self::PRIORITY + 1);

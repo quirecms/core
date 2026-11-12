@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Quire\Permission\Internal;
 
+use Quire\Csp\Csp;
 use Quire\Http\Controller\ViewAsController;
+use Quire\Http\PageBar;
 use Quire\Permission\ViewAs;
 use Quire\User\UserRepository;
 use Symfony\Bundle\SecurityBundle\Security\FirewallMap;
@@ -46,6 +48,7 @@ final class ViewAsListener implements ResetInterface
         private readonly CsrfTokenManagerInterface $csrf,
         private readonly UrlGeneratorInterface $urls,
         private readonly TranslatorInterface $translator,
+        private readonly Csp $csp,
     ) {
     }
 
@@ -128,17 +131,15 @@ final class ViewAsListener implements ResetInterface
 
         $position = $match[0][1] + \strlen($match[0][0]);
 
-        $bar = \sprintf(
-            '<div class="quire-view-as" role="region" aria-label="%1$s" style="position:relative;z-index:2147483000;display:flex;flex-wrap:wrap;gap:.5rem 1rem;align-items:center;justify-content:center;padding:.6rem 1rem;background:#1d1a24;color:#fff;font:600 15px/1.4 system-ui,sans-serif">'
-            .'<span>%2$s</span>'
-            .'<form method="post" action="%3$s" style="margin:0"><input type="hidden" name="_token" value="%4$s"><input type="hidden" name="back" value="%5$s">'
-            .'<button type="submit" style="min-height:2.25rem;padding:.3rem 1rem;border:0;border-radius:999px;background:#f0b04a;color:#1d1a24;font:inherit;cursor:pointer">%6$s</button></form></div>',
-            htmlspecialchars($this->translator->trans('Seeing as someone else', [], 'quire')),
-            htmlspecialchars($this->translator->trans('You’re seeing this as {name}: nothing can be changed.', ['name' => $name], 'quire')),
-            htmlspecialchars($this->urls->generate(ViewAsController::STOP_ROUTE)),
-            htmlspecialchars($this->csrf->getToken(ViewAsController::CSRF_TOKEN)->getValue()),
-            htmlspecialchars($request->getRequestUri()),
-            htmlspecialchars($this->translator->trans('Stop seeing as {name}', ['name' => $name], 'quire')),
+        $bar = PageBar::html(
+            'quire-view-as',
+            $this->translator->trans('Seeing as someone else', [], 'quire'),
+            $this->translator->trans('You’re seeing this as {name}: nothing can be changed.', ['name' => $name], 'quire'),
+            $this->urls->generate(ViewAsController::STOP_ROUTE),
+            $this->csrf->getToken(ViewAsController::CSRF_TOKEN)->getValue(),
+            $request->getRequestUri(),
+            $this->translator->trans('Stop seeing as {name}', ['name' => $name], 'quire'),
+            $this->csp->nonce($request),
         );
         $response->setContent(substr($content, 0, $position).$bar.substr($content, $position));
     }

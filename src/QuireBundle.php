@@ -12,6 +12,10 @@ use Quire\Content\ContentRenderer;
 use Quire\Content\Internal\RelationFieldsPass;
 use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Query\Internal\QueryServicesPass;
+use Quire\Csp\Csp;
+use Quire\Csp\Internal\CspSourcesPass;
+use Quire\Csp\Internal\FirstPartySourcesInterface;
+use Quire\Csp\Policy;
 use Quire\Extend\Actions;
 use Quire\Extend\ContentChecks;
 use Quire\Extend\ExtenderContext;
@@ -51,6 +55,7 @@ use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
+use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\ConfigurationExtensionInterface;
@@ -74,6 +79,8 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new AssetsPass());
         $container->addCompilerPass(new PermissionsPass());
         $container->addCompilerPass(new RelationFieldsPass());
+        // Once decoration has run: a decorator replaces the class that's bound (condition C-C).
+        $container->addCompilerPass(new CspSourcesPass(), PassConfig::TYPE_BEFORE_REMOVING);
     }
 
     public function configure(DefinitionConfigurator $definition): void
@@ -183,6 +190,50 @@ final class QuireBundle extends AbstractBundle
                         ->end()
                     ->end()
                 ->end()
+                ->arrayNode('csp')
+                    ->info('The Content-Security-Policy of the site\'s pages, which Quire sends (and nothing else should). See docs/security.md.')
+                    ->addDefaultsIfNotSet()
+                    ->children()
+                        ->enumNode('mode')
+                            ->info('"enforce", or "report-only" to try a policy out: browsers then report what they would block (to "report_uri"), and block nothing.')
+                            ->values(['enforce', 'report-only'])
+                            ->defaultValue('enforce')
+                        ->end()
+                        ->scalarNode('report_uri')
+                            ->info('Where browsers report what the policy blocked, e.g. a reporting service\'s address.')
+                            ->defaultNull()
+                        ->end()
+                        ->arrayNode('sources')
+                            ->info('What the site\'s pages may load besides their own, by directive, e.g. {img-src: ["https://images.example.com"], frame-src: ["https://www.youtube-nocookie.com"]}. Services visitors are asked about belong in quire/privacy instead.')
+                            ->normalizeKeys(false)
+                            ->useAttributeAsKey('directive')
+                            ->arrayPrototype()
+                                ->scalarPrototype()->end()
+                            ->end()
+                            ->validate()
+                                ->always(static function (array $sources): array {
+                                    foreach ($sources as $directive => $list) {
+                                        try {
+                                            if ('report-uri' === $directive || 'report-to' === $directive) {
+                                                throw new \InvalidArgumentException('Use "quire.csp.report_uri".');
+                                            }
+
+                                            Policy::assertDirective((string) $directive);
+
+                                            foreach (\is_array($list) ? $list : [] as $source) {
+                                                Policy::assertSource((string) $directive, \is_scalar($source) ? (string) $source : '');
+                                            }
+                                        } catch (\InvalidArgumentException $e) {
+                                            throw new InvalidConfigurationException(\sprintf('"quire.csp.sources.%s": %s', $directive, $e->getMessage()), $e->getCode(), previous: $e);
+                                        }
+                                    }
+
+                                    return $sources;
+                                })
+                            ->end()
+                        ->end()
+                    ->end()
+                ->end()
                 ->arrayNode('extensions')
                     ->addDefaultsIfNotSet()
                     ->children()
@@ -288,6 +339,12 @@ final class QuireBundle extends AbstractBundle
         $storage = $config['storage'];
         $this->storageDisks($storage, $builder);
 
+        /** @var array{mode: string, report_uri: ?string, sources: array<string, list<string>>} $csp */
+        $csp = $config['csp'];
+        $builder->setParameter(Csp::REPORT_ONLY_PARAMETER, 'report-only' === $csp['mode']);
+        $builder->setParameter(Csp::REPORT_URI_PARAMETER, $csp['report_uri']);
+        $builder->setParameter(Csp::SOURCES_PARAMETER, $csp['sources']);
+
         $container->import('../config/services.php');
 
         // The formatter finds its services by this tag, however they were registered.
@@ -297,6 +354,8 @@ final class QuireBundle extends AbstractBundle
         $builder->registerForAutoconfiguration(ActionInterface::class)->addTag(Actions::TAG);
         // Head contributors too, for the same reason; only those Extend\Head registered run.
         $builder->registerForAutoconfiguration(HeadContributorInterface::class)->addTag(Head::TAG);
+        // Sources from core's own parts only (see Csp\Internal\CspSourcesPass).
+        $builder->registerForAutoconfiguration(FirstPartySourcesInterface::class)->addTag(FirstPartySourcesInterface::TAG);
 
         foreach ([FormatInterface::class, ShortcodeInterface::class, SourceProcessorInterface::class, HtmlProcessorInterface::class, CommonMarkExtensionInterface::class] as $interface) {
             $builder->registerForAutoconfiguration($interface)->addTag(Formatter::SERVICE_TAG);

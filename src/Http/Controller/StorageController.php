@@ -94,9 +94,9 @@ final readonly class StorageController
             'Content-Length' => (string) $size,
             'Cache-Control' => $cacheControl,
             // Uploaded files are someone's content, not the site's: never sniffed into another type, and
-            // never able to run scripts with the site's origin, even when they're HTML or SVG.
+            // never able to run scripts with the site's origin, even when they're HTML or SVG (the
+            // route's Content-Security-Policy, "stored-file": see Quire\Csp\Csp::STORED_FILE).
             'X-Content-Type-Options' => 'nosniff',
-            'Content-Security-Policy' => "default-src 'none'; img-src 'self' data:; style-src 'unsafe-inline'; media-src 'self'; sandbox",
         ]);
     }
 }

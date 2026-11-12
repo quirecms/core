@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Internal;
 
+use Quire\Csp\Csp;
 use Quire\Extend\Assets;
+use Quire\Http\Controller\EmptyModuleController;
 use Quire\Theme\ThemeAssets;
 use Quire\Theme\ThemePreview;
 use Quire\Theme\Themes;
 use Symfony\Component\AssetMapper\ImportMap\ImportMapRenderer;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
+use Symfony\Component\HttpFoundation\RequestStack;
+use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
  * Renders the stylesheets and scripts registered with Extend\Assets for a group of pages: links to the
@@ -19,6 +23,8 @@ use Symfony\Component\DependencyInjection\Attribute\Autowire;
  */
 final readonly class AssetsRenderer
 {
+    private const string DATA_MODULE = 'data:application/javascript,';
+
     /**
      * @param list<array{type: string, path: string, group: string, owner: string}> $assets
      * @param list<array{id: string, path: string}>                                 $themes
@@ -34,6 +40,9 @@ final readonly class AssetsRenderer
         #[Autowire(param: Themes::CHAIN_PARAMETER)]
         private array $themes,
         private ThemePreview $preview,
+        private Csp $csp,
+        private RequestStack $requests,
+        private UrlGeneratorInterface $urls,
     ) {
     }
 
@@ -100,6 +109,75 @@ final readonly class AssetsRenderer
             $html .= \sprintf('<link rel="stylesheet" href="%s">'."\n", htmlspecialchars($url));
         }
 
-        return [] === $entrypoints ? $html : $html.$this->importMap->render(array_values(array_unique($entrypoints)))."\n";
+        if ([] === $entrypoints) {
+            return $html;
+        }
+
+        $importMap = $this->importMap->render(array_values(array_unique($entrypoints)));
+
+        if ('site' === $group) {
+            $importMap = $this->withoutDataModules($importMap);
+        }
+
+        $request = $this->requests->getMainRequest();
+
+        // The importmap, its loader for older browsers and the entry points are inline scripts: allowed
+        // by their hashes, which are the same for every visitor.
+        if ($request instanceof \Symfony\Component\HttpFoundation\Request && false !== preg_match_all('#<script\b(?![^>]*\ssrc=)[^>]*>(.*?)</script>#s', $importMap, $scripts)) {
+            foreach ($scripts[1] as $script) {
+                $this->csp->allowScript($request, $script);
+            }
+        }
+
+        return $html.$importMap."\n";
+    }
+
+    /**
+     * AssetMapper writes the stylesheets that scripts import as "data:" modules in the importmap, which
+     * the site's Content-Security-Policy refuses (allowing "data:" scripts would let injected ones run),
+     * and a refused import stops the whole script. So on the site's pages, a stylesheet that's linked
+     * already imports an empty module of the site's, and one a script would add is linked here instead.
+     * Other "data:" modules (JSON files) stay as they are, and are refused.
+     */
+    private function withoutDataModules(string $html): string
+    {
+        if (1 !== preg_match('#(<script type="importmap"[^>]*>\s*)(.*?)(\s*</script>)#s', $html, $match, \PREG_OFFSET_CAPTURE)) {
+            return $html;
+        }
+
+        $map = json_decode($match[2][0], true);
+
+        if (!\is_array($map) || !\is_array($map['imports'] ?? null)) {
+            return $html;
+        }
+
+        $empty = $this->urls->generate(EmptyModuleController::ROUTE);
+        $links = '';
+        $changed = false;
+
+        foreach ($map['imports'] as $name => $url) {
+            if (!\is_string($url) || !str_starts_with($url, self::DATA_MODULE)) {
+                continue;
+            }
+
+            $code = substr($url, \strlen(self::DATA_MODULE));
+
+            if ('' === $code) {
+                $map['imports'][$name] = $empty;
+                $changed = true;
+            } elseif (1 === preg_match('#^document\.head\.appendChild\(Object\.assign\(document\.createElement\(`link`\),\{rel:`stylesheet`,href:`([^`\\\\$]+)`\}\)\)$#', $code, $stylesheet)) {
+                $map['imports'][$name] = $empty;
+                $links .= \sprintf("\n".'<link rel="stylesheet" href="%s">', htmlspecialchars($stylesheet[1]));
+                $changed = true;
+            }
+        }
+
+        if (!$changed) {
+            return $html;
+        }
+
+        $json = json_encode($map, \JSON_THROW_ON_ERROR | \JSON_PRETTY_PRINT | \JSON_UNESCAPED_SLASHES | \JSON_HEX_TAG);
+
+        return substr($html, 0, $match[0][1]).$links.$match[1][0].$json.$match[3][0].substr($html, $match[0][1] + \strlen($match[0][0]));
     }
 }

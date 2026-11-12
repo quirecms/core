@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Extend;
 
+use Quire\Extension\Boot\ExtensionPasses;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -58,10 +59,19 @@ final class Services implements ExtenderInterface
     }
 
     /**
-     * Adds a compiler pass, for advanced container manipulation.
+     * Adds a compiler pass, for advanced container manipulation. It runs after Quire's own passes of
+     * its type, and its priority orders it among extensions' passes only.
+     *
+     * @param string $type PassConfig::TYPE_BEFORE_OPTIMIZATION, TYPE_OPTIMIZE or TYPE_BEFORE_REMOVING
      */
     public function compilerPass(CompilerPassInterface $pass, string $type = PassConfig::TYPE_BEFORE_OPTIMIZATION, int $priority = 0): self
     {
+        // Quire checks what the container became before Symfony removes services (e.g. that only
+        // quire/privacy adds other sites' hosts): an extension's pass runs before that, never after.
+        if (!\in_array($type, ExtensionPasses::TYPES, true)) {
+            throw new \InvalidArgumentException(\sprintf('An extension\'s compiler pass runs at "%s", not "%s": Quire checks the container after those.', implode('", "', ExtensionPasses::TYPES), $type));
+        }
+
         $this->passes[] = ['pass' => $pass, 'type' => $type, 'priority' => $priority];
 
         return $this;
@@ -107,8 +117,10 @@ final class Services implements ExtenderInterface
             $loader->load(basename($file));
         }
 
+        // Kept for QuireBundle's runners: the container is compiling already, so a pass added to it
+        // now would never run.
         foreach ($this->passes as $pass) {
-            $container->addCompilerPass($pass['pass'], $pass['type'], $pass['priority']);
+            ExtensionPasses::add($container, $pass['pass'], $pass['type'], $pass['priority']);
         }
     }
 }

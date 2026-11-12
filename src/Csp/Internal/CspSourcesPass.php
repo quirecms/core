@@ -10,6 +10,7 @@ use Quire\Csp\ThirdPartySourcesInterface;
 use Symfony\Component\DependencyInjection\Argument\ArgumentInterface;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 
@@ -59,21 +60,54 @@ final readonly class CspSourcesPass implements CompilerPassInterface
             return;
         }
 
-        // What the policy is actually built from, whatever ids the services have by now.
-        foreach ($this->references($container->getDefinition(Csp::class)->getArguments()) as $reference) {
-            $id = (string) $reference;
+        $csp = $container->getDefinition(Csp::class);
+        $this->assertBuiltBy($container, $csp, Csp::class);
 
-            if (!$container->has($id)) {
+        // What the policy is actually built from, whatever ids the services have by now: services by
+        // reference and inline ones alike (an extension's inline_service()), with what makes them.
+        foreach ($this->definitions($container, $csp->getArguments()) as $definition) {
+            $this->assertSource($container, $this->classOf($container, $definition));
+            $this->assertBuiltBy($container, $definition, null);
+        }
+    }
+
+    private function assertSource(ContainerBuilder $container, string $class): void
+    {
+        if (NoThirdPartySources::class === $class || $this->isFrom($container, $class, $this->core()) || $this->isPrivacy($container, $class)) {
+            return;
+        }
+
+        $this->assertThirdParty($container, $class);
+    }
+
+    /**
+     * A factory or configurator decides what object a service is, whatever its class says: theirs must
+     * be core's or quire/privacy's too. The policy itself is core's Csp, made by nothing else.
+     */
+    private function assertBuiltBy(ContainerBuilder $container, Definition $definition, ?string $only): void
+    {
+        if (null !== $only && $only !== $this->classOf($container, $definition)) {
+            throw new InvalidArgumentException(\sprintf('The Content-Security-Policy service is "%s", not Quire\'s "%s". Change the policy with "quire.csp" or through quire/privacy. See docs/security.md.', $this->classOf($container, $definition), $only));
+        }
+
+        foreach (['factory' => $definition->getFactory(), 'configurator' => $definition->getConfigurator()] as $what => $callable) {
+            if (null === $callable) {
                 continue;
             }
 
-            $class = $this->class($container, $id);
+            $class = match (true) {
+                \is_string($callable) => str_contains($callable, '::') ? explode('::', $callable)[0] : $callable,
+                $callable[0] instanceof Reference => $container->has((string) $callable[0]) ? $this->class($container, (string) $callable[0]) : (string) $callable[0],
+                $callable[0] instanceof Definition => $this->classOf($container, $callable[0]),
+                \is_string($callable[0]) => $callable[0],
+                default => '',
+            };
 
-            if (NoThirdPartySources::class === $class || $this->isFrom($container, $class, $this->core()) || $this->isPrivacy($container, $class)) {
-                continue;
+            if (null !== $only) {
+                throw new InvalidArgumentException(\sprintf('The Content-Security-Policy service has a %s ("%s"): Quire\'s is made by nothing else. See docs/security.md.', $what, $class));
             }
 
-            $this->assertThirdParty($container, $class);
+            $this->assertSource($container, $class);
         }
     }
 
@@ -115,23 +149,35 @@ final readonly class CspSourcesPass implements CompilerPassInterface
     }
 
     /**
-     * The services among a definition's arguments, also inside lists and iterators.
+     * The services among a definition's arguments, also inside lists and iterators: those referenced
+     * (as they're defined by now) and those defined inline.
      *
      * @param array<mixed> $arguments
      *
-     * @return iterable<Reference>
+     * @return iterable<Definition>
      */
-    private function references(array $arguments): iterable
+    private function definitions(ContainerBuilder $container, array $arguments): iterable
     {
         foreach ($arguments as $argument) {
             if ($argument instanceof Reference) {
+                if ($container->has((string) $argument)) {
+                    yield $container->findDefinition((string) $argument);
+                }
+            } elseif ($argument instanceof Definition) {
                 yield $argument;
             } elseif ($argument instanceof ArgumentInterface) {
-                yield from $this->references($argument->getValues());
+                yield from $this->definitions($container, $argument->getValues());
             } elseif (\is_array($argument)) {
-                yield from $this->references($argument);
+                yield from $this->definitions($container, $argument);
             }
         }
+    }
+
+    private function classOf(ContainerBuilder $container, Definition $definition): string
+    {
+        $class = $container->getParameterBag()->resolveValue($definition->getClass());
+
+        return \is_string($class) ? $class : '';
     }
 
     private function class(ContainerBuilder $container, string $id): string

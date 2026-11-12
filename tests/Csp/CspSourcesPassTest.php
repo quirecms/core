@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Tests\Csp;
 
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\DoesNotPerformAssertions;
 use PHPUnit\Framework\TestCase;
 use Quire\Csp\Csp;
@@ -11,15 +12,18 @@ use Quire\Csp\Internal\CspSourcesPass;
 use Quire\Csp\Internal\FirstPartySourcesInterface;
 use Quire\Csp\Internal\NoThirdPartySources;
 use Quire\Csp\ThirdPartySourcesInterface;
-use Quire\Privacy\Internal\ServiceSources;
+use Quire\Extension\Boot\ExtensionPasses;
+use Quire\Privacy\Fixture\FixtureSources;
 use Quire\QuireBundle;
 use Quire\Storage\Internal\DiskSources;
 use Quire\Storage\StorageDisks;
 use Quire\Tests\Csp\Fixtures\OutsideDecorator;
 use Quire\Tests\Csp\Fixtures\OutsideFirstPartyDecorator;
 use Quire\Tests\Csp\Fixtures\OutsideSources;
+use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 
@@ -34,7 +38,7 @@ final class CspSourcesPassTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         // quire/privacy isn't installed here: its stand-in, where the pass is told the package is.
-        require_once self::PRIVACY.'/src/ServiceSources.php';
+        require_once self::PRIVACY.'/src/FixtureSources.php';
     }
 
     public function testTheBundleChecksOnceDecorationHasRun(): void
@@ -57,8 +61,8 @@ final class CspSourcesPassTest extends TestCase
     public function testQuirePrivacyMayFillTheSlot(): void
     {
         $container = $this->container();
-        $container->register(ServiceSources::class, ServiceSources::class);
-        $container->setAlias(ThirdPartySourcesInterface::class, ServiceSources::class);
+        $container->register(FixtureSources::class, FixtureSources::class);
+        $container->setAlias(ThirdPartySourcesInterface::class, FixtureSources::class);
 
         $this->compile($container);
     }
@@ -67,7 +71,7 @@ final class CspSourcesPassTest extends TestCase
     public function testQuirePrivacyMayDecorateTheSlot(): void
     {
         $container = $this->container();
-        $container->register(ServiceSources::class, ServiceSources::class)
+        $container->register(FixtureSources::class, FixtureSources::class)
             ->setDecoratedService(ThirdPartySourcesInterface::class)
             ->setArguments([new Reference('.inner')]);
 
@@ -115,11 +119,11 @@ final class CspSourcesPassTest extends TestCase
     public function testNorWithQuirePrivacysNamespaceFromElsewhere(): void
     {
         $container = $this->container();
-        $container->register(ServiceSources::class, ServiceSources::class);
-        $container->setAlias(ThirdPartySourcesInterface::class, ServiceSources::class);
+        $container->register(FixtureSources::class, FixtureSources::class);
+        $container->setAlias(ThirdPartySourcesInterface::class, FixtureSources::class);
 
         $this->expectException(InvalidArgumentException::class);
-        $this->expectExceptionMessageIsOrContains('"Quire\Privacy\Internal\ServiceSources" adds other sites\' hosts');
+        $this->expectExceptionMessageIsOrContains('"Quire\Privacy\Fixture\FixtureSources" adds other sites\' hosts');
 
         $this->compile($container, privacy: null);
     }
@@ -143,6 +147,84 @@ final class CspSourcesPassTest extends TestCase
 
         $this->expectException(InvalidArgumentException::class);
         $this->expectExceptionMessageIsOrContains('"Quire\Tests\Csp\Fixtures\OutsideSources" adds other sites\' hosts');
+
+        $this->compile($container);
+    }
+
+    public function testNorWithAnInlineService(): void
+    {
+        $container = $this->container();
+        $container->getDefinition(Csp::class)->setArgument('$thirdParty', new Definition(OutsideDecorator::class, [new Reference(NoThirdPartySources::class)]));
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('"Quire\Tests\Csp\Fixtures\OutsideDecorator" adds other sites\' hosts');
+
+        $this->compile($container);
+    }
+
+    public function testNorWithAnInlineServiceAmongCoresOwn(): void
+    {
+        $container = $this->container();
+        $container->getDefinition(Csp::class)->setArgument('$firstParty', [new Reference(DiskSources::class), new Definition(OutsideSources::class)]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('"Quire\Tests\Csp\Fixtures\OutsideSources" adds other sites\' hosts');
+
+        $this->compile($container);
+    }
+
+    public function testNorWithAFactoryOfItsOwn(): void
+    {
+        $container = $this->container();
+        $container->getDefinition(NoThirdPartySources::class)->setFactory([OutsideDecorator::class, 'make']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('"Quire\Tests\Csp\Fixtures\OutsideDecorator" adds other sites\' hosts');
+
+        $this->compile($container);
+    }
+
+    public function testNorByReplacingThePolicyItself(): void
+    {
+        $container = $this->container();
+        $container->getDefinition(Csp::class)->setClass(OutsideSources::class);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('The Content-Security-Policy service is "Quire\Tests\Csp\Fixtures\OutsideSources"');
+
+        $this->compile($container);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function extensionPassTypes(): iterable
+    {
+        foreach (ExtensionPasses::TYPES as $type) {
+            yield $type => [$type];
+        }
+    }
+
+    /**
+     * An extension's pass runs before the check, whatever its type, so what it does is checked.
+     */
+    #[DataProvider('extensionPassTypes')]
+    public function testNorFromAnExtensionsPass(string $type): void
+    {
+        $container = $this->container();
+        ExtensionPasses::add($container, new class implements CompilerPassInterface {
+            public function process(ContainerBuilder $container): void
+            {
+                $container->getDefinition(Csp::class)->setArgument(0, new Definition(OutsideDecorator::class, [new Reference(NoThirdPartySources::class)]));
+            }
+        }, $type, 0);
+
+        foreach (ExtensionPasses::runners() as $runnerType => $runner) {
+            $container->addCompilerPass($runner, $runnerType, PassConfig::TYPE_BEFORE_REMOVING === $runnerType ? 100 : -100);
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('OutsideDecorator');
 
         $this->compile($container);
     }

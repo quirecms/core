@@ -24,6 +24,7 @@ use Quire\Extend\Permissions;
 use Quire\Extend\Storage;
 use Quire\Extension\Boot\CompileTimeState;
 use Quire\Extension\Boot\ExtensionBooter;
+use Quire\Extension\Boot\ExtensionPasses;
 use Quire\Extension\Boot\ExtensionStateResource;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\DatabaseExtensionStateStore;
@@ -81,6 +82,12 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new RelationFieldsPass());
         // Once decoration has run: a decorator replaces the class that's bound (condition C-C).
         $container->addCompilerPass(new CspSourcesPass(), PassConfig::TYPE_BEFORE_REMOVING);
+
+        // Extensions' own passes (Extend\Services::compilerPass()): after Quire's of each type, and
+        // before the C-C check, which must see what they did.
+        foreach (ExtensionPasses::runners() as $type => $runner) {
+            $container->addCompilerPass($runner, $type, PassConfig::TYPE_BEFORE_REMOVING === $type ? 100 : -100);
+        }
     }
 
     public function configure(DefinitionConfigurator $definition): void

@@ -21,11 +21,14 @@ final readonly class ThemeChecks
     }
 
     /**
+     * @param bool $inUse Whether it's the theme in use: only then do checks that run the theme's code
+     *                    run, so nothing of an installed theme that isn't used runs
+     *
      * @return array{errors: list<string>, warnings: list<string>}
      */
-    public function run(string $id): array
+    public function run(string $id, bool $inUse): array
     {
-        $result = $this->linter->lint($id);
+        $result = $this->linter->lint($id, render: $inUse);
 
         return ['errors' => $result['errors'], 'warnings' => $result['warnings']];
     }

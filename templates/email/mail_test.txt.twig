@@ -1,0 +1,5 @@
+{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}
+
+{{ 'This is the test e-mail you asked for: the site can send e-mails.'|trans({}, 'quire') }}
+
+{{ site.title|raw }}: {{ home_url|raw }}

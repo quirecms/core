@@ -39,6 +39,59 @@ final class CspTest extends TestCase
         self::assertSame(["'self'", 'data:', 'https://images.example.com'], $csp->policy(PolicyKind::Private)->sources('img-src'), 'The site\'s own choices still apply.');
     }
 
+    /**
+     * What the admin shows is what browsers get: the sources each policy adds to Quire's own, directive
+     * by directive, on public pages and on pages with password forms.
+     */
+    public function testTheListIsWhatTheHeaderAdds(): void
+    {
+        $firstParty = new class implements FirstPartySourcesInterface {
+            public function sources(): array
+            {
+                return ['img-src' => ['https://files.example']];
+            }
+        };
+        $csp = new Csp($this->thirdParty(['script-src' => ['https://www.googletagmanager.com/gtag/']]), [$firstParty], siteSources: ['img-src' => ['https://images.example.com'], 'frame-ancestors' => ['https://partner.example']]);
+
+        foreach ([[PolicyKind::Page, false], [PolicyKind::Private, true]] as [$kind, $private]) {
+            $base = new Csp(new NoThirdPartySources())->policy($kind);
+            $sent = $csp->policy($kind);
+            $added = [];
+
+            foreach ($sent->directives() as $directive => $sources) {
+                $extra = array_values(array_diff($sources, $base->has($directive) ? $base->sources($directive) : []));
+
+                if ([] !== $extra && 'report-uri' !== $directive) {
+                    $added[$directive] = $extra;
+                }
+            }
+
+            $listed = [];
+
+            foreach ($csp->sources($private) as $source) {
+                $listed[$source['directive']][] = $source['source'];
+            }
+
+            ksort($added);
+            ksort($listed);
+            self::assertSame($added, $listed, $kind->value);
+        }
+
+        self::assertNotContains('https://www.googletagmanager.com/gtag/', array_column($csp->sources(private: true), 'source'), 'Private pages get no services.');
+    }
+
+    public function testItSaysWhereEachSourceComesFrom(): void
+    {
+        $csp = new Csp($this->thirdParty(['script-src' => ['https://www.googletagmanager.com/gtag/']]), reportUri: 'https://reports.example/csp', siteSources: ['img-src' => ['https://images.example.com']]);
+
+        self::assertSame([
+            ['directive' => 'script-src', 'source' => 'https://www.googletagmanager.com/gtag/', 'origin' => 'privacy'],
+            ['directive' => 'img-src', 'source' => 'https://images.example.com', 'origin' => 'site'],
+        ], $csp->sources());
+        self::assertSame('https://reports.example/csp', $csp->reportUri());
+        self::assertNull(new Csp(new NoThirdPartySources(), reportUri: '')->reportUri());
+    }
+
     public function testStoredFilesAreSandboxedAsCaddySendsThem(): void
     {
         self::assertSame(Csp::STORED_FILE, new Csp(new NoThirdPartySources())->policy(PolicyKind::StoredFile)->header());

@@ -74,3 +74,5 @@
 "The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there.": "The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there."
 "If you didn't expect this, contact the people who run the site at once.": "If you didn't expect this, contact the people who run the site at once."
 "You no longer see the site as {name}: {reason}": "You no longer see the site as {name}: {reason}"
+"A test e-mail from {site}": "A test e-mail from {site}"
+"This is the test e-mail you asked for: the site can send e-mails.": "This is the test e-mail you asked for: the site can send e-mails."

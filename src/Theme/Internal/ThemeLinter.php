@@ -44,9 +44,11 @@ final readonly class ThemeLinter
     }
 
     /**
+     * @param bool $render Whether checks that run the theme's code may run (only for the theme in use, in admin interfaces)
+     *
      * @return array{templates: int, errors: list<string>, warnings: list<string>}
      */
-    public function lint(string $id): array
+    public function lint(string $id, bool $render): array
     {
         try {
             $chain = ThemeChain::resolve($this->installed->themes(), $id, $this->extensions->resolve()->bootOrderIds());
@@ -133,6 +135,10 @@ final readonly class ThemeLinter
         [$screenshotErrors, $screenshotWarnings] = $this->screenshot($chain[0]);
 
         foreach ($this->checks as $check) {
+            if (!$render && $check->rendersTheme()) {
+                continue;
+            }
+
             foreach ($check->check($id, $templates) as $problem) {
                 if ($problem->error) {
                     $errors[] = $problem->message;

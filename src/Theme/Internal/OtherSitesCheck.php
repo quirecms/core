@@ -24,6 +24,11 @@ final readonly class OtherSitesCheck implements ThemeCheckInterface
     {
     }
 
+    public function rendersTheme(): bool
+    {
+        return false;
+    }
+
     public function check(string $theme, array $templates): array
     {
         $policy = $this->csp->policy(PolicyKind::Page);

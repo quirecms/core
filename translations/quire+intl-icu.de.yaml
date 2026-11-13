@@ -72,3 +72,5 @@
 "The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there.": "Die E-Mail-Adresse deines Kontos bei {site} wurde in {email} geändert. E-Mails zu deinem Konto, etwa Passwort-Links, gehen jetzt dorthin."
 "If you didn't expect this, contact the people who run the site at once.": "Wenn du das nicht erwartet hast, wende dich sofort an die Leute, die die Website betreiben."
 "You no longer see the site as {name}: {reason}": "Du siehst die Website nicht mehr als {name}: {reason}"
+"A test e-mail from {site}": "Eine Test-E-Mail von {site}"
+"This is the test e-mail you asked for: the site can send e-mails.": "Das ist die Test-E-Mail, die Sie angefordert haben: Die Website kann E-Mails senden."

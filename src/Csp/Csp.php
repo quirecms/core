@@ -105,6 +105,32 @@ final readonly class Csp
     }
 
     /**
+     * Where browsers report what the policy blocked ("quire.csp.report_uri"), or null.
+     */
+    public function reportUri(): ?string
+    {
+        return null === $this->reportUri || '' === $this->reportUri ? null : $this->reportUri;
+    }
+
+    /**
+     * What the site's pages may load besides their own, and why: Quire's own parts ("quire", e.g. a
+     * storage disk on another host), quire/privacy's services ("privacy"), and the site's
+     * configuration ("site", "quire.csp.sources"), which loads for every visitor without asking. The
+     * same list the policy is built from, so what an admin shows is what browsers get.
+     *
+     * @internal For the admin; made @api once a third party needs it
+     *
+     * @param bool $private The policy of pages with forms for passwords or accounts: no other sites'
+     *                      services, and never in a frame
+     *
+     * @return list<array{directive: string, source: string, origin: 'quire'|'privacy'|'site'}>
+     */
+    public function sources(bool $private = false): array
+    {
+        return array_map(static fn (array $added): array => ['directive' => $added['directive'], 'source' => $added['source'], 'origin' => $added['origin']], $this->added($private));
+    }
+
+    /**
      * A nonce for inline `<script>` or `<style>` elements of this response, e.g.
      * `<style nonce="…">`: the same for the whole response. The response is then never cached, since a
      * nonce must not be seen twice.
@@ -152,17 +178,9 @@ final readonly class Csp
             'frame-ancestors' => [$private ? "'none'" : "'self'"],
         ]);
 
-        foreach ($this->firstParty as $provider) {
-            $policy = $this->add($policy, $provider->sources(), hostsOnly: true);
+        foreach ($this->added($private) as $added) {
+            $policy = $policy->with($added['directive'], $added['source']);
         }
-
-        if (!$private) {
-            $policy = $this->add($policy, $this->thirdParty->sources(), hostsOnly: true);
-        }
-
-        // The site's own configuration may also change the document rules, e.g. let a partner's site
-        // show its pages in a frame; but a private page is never in a frame.
-        $policy = $this->add($policy, $private ? array_diff_key($this->siteSources, ['frame-ancestors' => true]) : $this->siteSources, hostsOnly: false);
 
         if (null !== $this->reportUri && '' !== $this->reportUri) {
             $policy = $policy->with('report-uri', $this->reportUri);
@@ -172,32 +190,49 @@ final readonly class Csp
     }
 
     /**
-     * @param array<string, list<string>> $sources
-     * @param bool                        $hostsOnly Only other sites' hosts, in fetch directives: what
-     *                                               core's parts and quire/privacy may add. Never a
-     *                                               keyword ("'unsafe-inline'"), a nonce or a bare scheme
-     *                                               ("https:", which allows every site).
+     * What's added to a page's policy, with where it comes from, in order: core's parts, quire/privacy's
+     * services (not on private pages), and the site's configuration (which may also change the
+     * document rules, e.g. let a partner's site show its pages in a frame; but a private page is never
+     * in a frame). Core's parts and quire/privacy may add only other sites' hosts, in fetch directives:
+     * never a keyword ("'unsafe-inline'"), a nonce or a bare scheme ("https:", which allows every site).
+     *
+     * @return list<array{directive: string, source: string, origin: 'quire'|'privacy'|'site'}>
      */
-    private function add(Policy $policy, array $sources, bool $hostsOnly): Policy
+    private function added(bool $private): array
     {
-        foreach ($sources as $directive => $list) {
-            if ($hostsOnly) {
-                if (!Policy::isFetchDirective($directive)) {
-                    throw new \InvalidArgumentException(\sprintf('Only fetch directives such as "script-src" or "img-src" can get another site\'s hosts, not "%s".', $directive));
+        $groups = [];
+
+        foreach ($this->firstParty as $provider) {
+            $groups[] = ['quire', $provider->sources()];
+        }
+
+        if (!$private) {
+            $groups[] = ['privacy', $this->thirdParty->sources()];
+        }
+
+        $groups[] = ['site', $private ? array_diff_key($this->siteSources, ['frame-ancestors' => true]) : $this->siteSources];
+        $added = [];
+
+        foreach ($groups as [$origin, $sources]) {
+            foreach ($sources as $directive => $list) {
+                if ('site' !== $origin) {
+                    if (!Policy::isFetchDirective($directive)) {
+                        throw new \InvalidArgumentException(\sprintf('Only fetch directives such as "script-src" or "img-src" can get another site\'s hosts, not "%s".', $directive));
+                    }
+
+                    foreach ($list as $source) {
+                        if (!Policy::isHost($source)) {
+                            throw new \InvalidArgumentException(\sprintf('"%s" for "%s" isn\'t a host such as "https://cdn.example.com": only the site\'s configuration can add keywords or schemes.', $source, $directive));
+                        }
+                    }
                 }
 
                 foreach ($list as $source) {
-                    if (!Policy::isHost($source)) {
-                        throw new \InvalidArgumentException(\sprintf('"%s" for "%s" isn\'t a host such as "https://cdn.example.com": only the site\'s configuration can add keywords or schemes.', $source, $directive));
-                    }
+                    $added[] = ['directive' => $directive, 'source' => $source, 'origin' => $origin];
                 }
-            }
-
-            if ([] !== $list) {
-                $policy = $policy->with($directive, ...$list);
             }
         }
 
-        return $policy;
+        return $added;
     }
 }

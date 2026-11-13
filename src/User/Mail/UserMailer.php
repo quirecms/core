@@ -114,6 +114,14 @@ final readonly class UserMailer
     }
 
     /**
+     * A test e-mail for someone setting up the site, to their own address: that the site can send.
+     */
+    public function sendTest(User $user): void
+    {
+        $this->send($user, 'mail_test', 'A test e-mail from {site}', ['home_url' => $this->link('quire_home')]);
+    }
+
+    /**
      * @param array<string, mixed> $context
      */
     private function send(User $user, string $template, string $subject, array $context): void

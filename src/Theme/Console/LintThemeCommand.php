@@ -52,7 +52,8 @@ final readonly class LintThemeCommand
             return Command::FAILURE;
         }
 
-        $result = $this->linter->lint($id);
+        // Asked about this theme by name: every check runs, also those that run its code.
+        $result = $this->linter->lint($id, render: true);
 
         foreach ($result['warnings'] as $warning) {
             $io->warning($warning);

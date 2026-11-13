@@ -1,0 +1,8 @@
+{# Variables: user, home_url #}
+{% extends 'email/layout.html.twig' %}
+
+{% block body %}
+    <p>{{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}</p>
+    <p>{{ 'This is the test e-mail you asked for: the site can send e-mails.'|trans({}, 'quire') }}</p>
+    <p><a href="{{ home_url }}">{{ site.title }}</a></p>
+{% endblock %}

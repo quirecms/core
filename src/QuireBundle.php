@@ -49,6 +49,7 @@ use Quire\Theme\Internal\SlotsPass;
 use Quire\Theme\Internal\TemplatePathsPass;
 use Quire\Theme\Themes;
 use Quire\User\CurrentUser;
+use Quire\User\Mail\Internal\MailTransportsPass;
 use Quire\User\Security\FormThrottle;
 use Quire\User\Security\UserProvider;
 use Quire\User\User;
@@ -81,6 +82,7 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new AssetsPass());
         $container->addCompilerPass(new PermissionsPass());
         $container->addCompilerPass(new RelationFieldsPass());
+        $container->addCompilerPass(new MailTransportsPass());
         // Once decoration has run: a decorator replaces the class that's bound (condition C-C).
         $container->addCompilerPass(new CspSourcesPass(), PassConfig::TYPE_BEFORE_REMOVING);
         // The same for the guard of trusted shortcodes' embeds (condition C-B).

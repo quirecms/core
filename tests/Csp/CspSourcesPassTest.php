@@ -392,6 +392,29 @@ final class CspSourcesPassTest extends TestCase
         $this->compile($container);
     }
 
+    public function testWithQuirePrivacyNoStrictDynamic(): void
+    {
+        $container = $this->container();
+        $container->register(FixtureSources::class, FixtureSources::class);
+        $container->setAlias(ThirdPartySourcesInterface::class, FixtureSources::class);
+        $this->guardEmbeds($container);
+        $container->setParameter(Csp::SOURCES_PARAMETER, ['script-src' => ["'strict-dynamic'"]]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('"quire.csp.sources" has \'strict-dynamic\' for "script-src".');
+
+        $this->compile($container);
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testWithoutItStrictDynamicIsTheSitesChoice(): void
+    {
+        $container = $this->container();
+        $container->setParameter(Csp::SOURCES_PARAMETER, ['script-src' => ["'strict-dynamic'"]]);
+
+        $this->compile($container);
+    }
+
     private function guardEmbeds(ContainerBuilder $container): void
     {
         $container->register(FixtureGuard::class, FixtureGuard::class);

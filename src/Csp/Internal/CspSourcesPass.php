@@ -7,6 +7,7 @@ namespace Quire\Csp\Internal;
 use Quire\Csp\Csp;
 use Quire\Csp\ThirdPartySourcesInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 
@@ -31,8 +32,12 @@ final readonly class CspSourcesPass extends PrivacySlotPass
 {
     public function process(ContainerBuilder $container): void
     {
+        $privacy = false;
+
         if ($container->hasAlias(ThirdPartySourcesInterface::class) || $container->hasDefinition(ThirdPartySourcesInterface::class)) {
-            $this->assertThirdParty($container, $this->class($container, ThirdPartySourcesInterface::class));
+            $class = $this->class($container, ThirdPartySourcesInterface::class);
+            $this->assertThirdParty($container, $class);
+            $privacy = $this->isPrivacy($container, $class);
         }
 
         foreach (array_keys($container->findTaggedServiceIds(FirstPartySourcesInterface::TAG)) as $id) {
@@ -46,11 +51,32 @@ final readonly class CspSourcesPass extends PrivacySlotPass
         $csp = $container->getDefinition(Csp::class);
         $this->assertBuiltBy($container, $csp, Csp::class, $this->assertSource(...), 'The Content-Security-Policy service');
 
+        if ($privacy) {
+            $this->assertNoStrictDynamic($container, $csp);
+        }
+
         // What the policy is actually built from, whatever ids the services have by now: services by
         // reference and inline ones alike (an extension's inline_service()), with what makes them.
         foreach ($this->definitions($container, $csp->getArguments()) as $definition) {
             $this->assertSource($container, $this->classOf($container, $definition));
             $this->assertBuiltBy($container, $definition, null, $this->assertSource(...), '');
+        }
+    }
+
+    /**
+     * Under 'strict-dynamic', browsers ignore the policy's hosts and let a trusted script load any other:
+     * then quire/privacy's services (and embeds loaded with consent) could load what no service
+     * declares, and the policy would no longer say what the privacy page lists.
+     */
+    private function assertNoStrictDynamic(ContainerBuilder $container, Definition $csp): void
+    {
+        $arguments = $csp->getArguments();
+        $sources = $container->getParameterBag()->resolveValue($arguments['$siteSources'] ?? ($container->getParameterBag()->all()[Csp::SOURCES_PARAMETER] ?? []));
+
+        foreach (\is_array($sources) ? $sources : [] as $directive => $list) {
+            if (\is_array($list) && \in_array("'strict-dynamic'", $list, true)) {
+                throw new InvalidArgumentException(\sprintf('"quire.csp.sources" has \'strict-dynamic\' for "%s". With quire/privacy, the policy\'s hosts are what visitors are asked about, and under \'strict-dynamic\' browsers ignore them: a script could load from any site. Remove it. See docs/security.md.', $directive));
+            }
         }
     }
 

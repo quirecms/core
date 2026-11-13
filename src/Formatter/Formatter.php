@@ -8,6 +8,7 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Quire\Content\Content;
 use Quire\Formatter\Exception\UnknownFormatException;
+use Quire\Formatter\Internal\NoEmbedGuard;
 use Quire\Formatter\Internal\Sanitizers;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\DependencyInjection\Attribute\AutowireLocator;
@@ -50,6 +51,7 @@ final class Formatter implements ResetInterface
         private readonly ?LoggerInterface $logger = null,
         #[Autowire(param: 'kernel.debug')]
         private readonly bool $debug = false,
+        private readonly EmbedGuardInterface $embeds = new NoEmbedGuard(),
     ) {
         $this->profiles = array_map(FormatterProfile::fromArray(...), $config['profiles']);
     }
@@ -192,7 +194,7 @@ final class Formatter implements ResetInterface
             return '';
         }
 
-        return $registration['trusted'] ? $html : $this->sanitizer($context->profile)->sanitize($html);
+        return $registration['trusted'] ? $this->embeds->guard($html) : $this->sanitizer($context->profile)->sanitize($html);
     }
 
     /**

@@ -13,12 +13,18 @@ use Quire\Csp\Internal\FirstPartySourcesInterface;
 use Quire\Csp\Internal\NoThirdPartySources;
 use Quire\Csp\ThirdPartySourcesInterface;
 use Quire\Extension\Boot\ExtensionPasses;
+use Quire\Formatter\EmbedGuardInterface;
+use Quire\Formatter\Formatter;
+use Quire\Formatter\Internal\EmbedGuardPass;
+use Quire\Formatter\Internal\NoEmbedGuard;
+use Quire\Privacy\Fixture\FixtureGuard;
 use Quire\Privacy\Fixture\FixtureSources;
 use Quire\QuireBundle;
 use Quire\Storage\Internal\DiskSources;
 use Quire\Storage\StorageDisks;
 use Quire\Tests\Csp\Fixtures\OutsideDecorator;
 use Quire\Tests\Csp\Fixtures\OutsideFirstPartyDecorator;
+use Quire\Tests\Csp\Fixtures\OutsideGuard;
 use Quire\Tests\Csp\Fixtures\OutsideSources;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -28,8 +34,9 @@ use Symfony\Component\DependencyInjection\Exception\InvalidArgumentException;
 use Symfony\Component\DependencyInjection\Reference;
 
 /**
- * Condition C-C (doc 20): other sites' hosts only from quire/privacy, core's own sources only from
- * core; checked on the container as compiled, so decorating a service doesn't get round it.
+ * Conditions C-C and C-B (doc 20): other sites' hosts only from quire/privacy, core's own sources only
+ * from core, and embeds guarded only by quire/privacy; checked on the container as compiled, so
+ * decorating a service doesn't get round it.
  */
 final class CspSourcesPassTest extends TestCase
 {
@@ -39,6 +46,7 @@ final class CspSourcesPassTest extends TestCase
     {
         // quire/privacy isn't installed here: its stand-in, where the pass is told the package is.
         require_once self::PRIVACY.'/src/FixtureSources.php';
+        require_once self::PRIVACY.'/src/FixtureGuard.php';
     }
 
     public function testTheBundleChecksOnceDecorationHasRun(): void
@@ -48,6 +56,7 @@ final class CspSourcesPassTest extends TestCase
         $passes = $container->getCompilerPassConfig();
 
         self::assertCount(1, array_filter($passes->getBeforeRemovingPasses(), static fn (object $pass): bool => $pass instanceof CspSourcesPass), 'Before decoration, a decorator would get round the check.');
+        self::assertCount(1, array_filter($passes->getBeforeRemovingPasses(), static fn (object $pass): bool => $pass instanceof EmbedGuardPass));
         self::assertSame([], array_filter([...$passes->getBeforeOptimizationPasses(), ...$passes->getOptimizationPasses()], static fn (object $pass): bool => $pass instanceof CspSourcesPass));
     }
 
@@ -63,6 +72,7 @@ final class CspSourcesPassTest extends TestCase
         $container = $this->container();
         $container->register(FixtureSources::class, FixtureSources::class);
         $container->setAlias(ThirdPartySourcesInterface::class, FixtureSources::class);
+        $this->guardEmbeds($container);
 
         $this->compile($container);
     }
@@ -74,6 +84,52 @@ final class CspSourcesPassTest extends TestCase
         $container->register(FixtureSources::class, FixtureSources::class)
             ->setDecoratedService(ThirdPartySourcesInterface::class)
             ->setArguments([new Reference('.inner')]);
+        $this->guardEmbeds($container);
+
+        $this->compile($container);
+    }
+
+    /**
+     * With quire/privacy's hosts in the policy, its guard must hold their embeds: every way of leaving
+     * the formatter without it.
+     *
+     * @return iterable<string, array{\Closure(ContainerBuilder): void}>
+     */
+    public static function noGuardWithPrivacy(): iterable
+    {
+        yield 'core\'s default in the slot' => [static function (ContainerBuilder $container): void {}];
+        yield 'the slot removed' => [static function (ContainerBuilder $container): void {
+            $container->removeAlias(EmbedGuardInterface::class);
+        }];
+        yield 'the slot and core\'s default removed' => [static function (ContainerBuilder $container): void {
+            $container->removeAlias(EmbedGuardInterface::class);
+            $container->removeDefinition(NoEmbedGuard::class);
+        }];
+        yield 'the formatter given core\'s default' => [static function (ContainerBuilder $container): void {
+            $container->register(FixtureGuard::class, FixtureGuard::class);
+            $container->setAlias(EmbedGuardInterface::class, FixtureGuard::class);
+            $container->getDefinition(Formatter::class)->setArgument('$embeds', new Reference(NoEmbedGuard::class));
+        }];
+        yield 'the formatter given core\'s default inline' => [static function (ContainerBuilder $container): void {
+            $container->register(FixtureGuard::class, FixtureGuard::class);
+            $container->setAlias(EmbedGuardInterface::class, FixtureGuard::class);
+            $container->getDefinition(Formatter::class)->setArgument('$embeds', new Definition(NoEmbedGuard::class));
+        }];
+    }
+
+    /**
+     * @param \Closure(ContainerBuilder): void $change
+     */
+    #[DataProvider('noGuardWithPrivacy')]
+    public function testWithQuirePrivacyOnlyItsGuardWillDo(\Closure $change): void
+    {
+        $container = $this->container();
+        $container->register(FixtureSources::class, FixtureSources::class);
+        $container->setAlias(ThirdPartySourcesInterface::class, FixtureSources::class);
+        $change($container);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('the formatter isn\'t given its guard of embeds');
 
         $this->compile($container);
     }
@@ -229,6 +285,119 @@ final class CspSourcesPassTest extends TestCase
         $this->compile($container);
     }
 
+    #[DoesNotPerformAssertions]
+    public function testQuirePrivacyMayGuardEmbeds(): void
+    {
+        $container = $this->container();
+        $container->register(FixtureGuard::class, FixtureGuard::class);
+        $container->setAlias(EmbedGuardInterface::class, FixtureGuard::class);
+
+        $this->compile($container);
+    }
+
+    #[DoesNotPerformAssertions]
+    public function testQuirePrivacyMayDecorateTheGuard(): void
+    {
+        $container = $this->container();
+        $container->register(FixtureGuard::class, FixtureGuard::class)
+            ->setDecoratedService(EmbedGuardInterface::class)
+            ->setArguments([new Reference('.inner')]);
+
+        $this->compile($container);
+    }
+
+    /**
+     * Every way of putting another guard of embeds in place, which would let embeds load before consent.
+     *
+     * @return iterable<string, array{\Closure(ContainerBuilder): void, ?string}>
+     */
+    public static function otherGuards(): iterable
+    {
+        yield 'in the slot' => [static function (ContainerBuilder $container): void {
+            $container->register('acme', OutsideGuard::class);
+            $container->setAlias(EmbedGuardInterface::class, 'acme');
+        }, self::PRIVACY];
+        yield 'decorating the slot' => [static function (ContainerBuilder $container): void {
+            $container->register('acme', OutsideGuard::class)->setDecoratedService(EmbedGuardInterface::class);
+        }, self::PRIVACY];
+        yield 'decorating core\'s default' => [static function (ContainerBuilder $container): void {
+            $container->register('acme', OutsideGuard::class)->setDecoratedService(NoEmbedGuard::class);
+        }, self::PRIVACY];
+        yield 'handed to the formatter by reference' => [static function (ContainerBuilder $container): void {
+            $container->register('acme', OutsideGuard::class);
+            $container->getDefinition(Formatter::class)->setArgument('$embeds', new Reference('acme'));
+        }, self::PRIVACY];
+        yield 'handed to the formatter inline' => [static function (ContainerBuilder $container): void {
+            $container->getDefinition(Formatter::class)->setArgument('$embeds', new Definition(OutsideGuard::class));
+        }, self::PRIVACY];
+        yield 'made by a factory' => [static function (ContainerBuilder $container): void {
+            $container->getDefinition(NoEmbedGuard::class)->setFactory([OutsideGuard::class, 'make']);
+        }, self::PRIVACY];
+        yield 'changed by a configurator' => [static function (ContainerBuilder $container): void {
+            $container->getDefinition(NoEmbedGuard::class)->setConfigurator([OutsideGuard::class, 'configure']);
+        }, self::PRIVACY];
+        yield 'quire/privacy\'s namespace from elsewhere' => [static function (ContainerBuilder $container): void {
+            $container->register(FixtureGuard::class, FixtureGuard::class);
+            $container->setAlias(EmbedGuardInterface::class, FixtureGuard::class);
+        }, null];
+    }
+
+    /**
+     * @param \Closure(ContainerBuilder): void $change
+     */
+    #[DataProvider('otherGuards')]
+    public function testNoOneElseGuardsEmbeds(\Closure $change, ?string $privacy): void
+    {
+        $container = $this->container();
+        $change($container);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('guards the embeds of trusted shortcodes. Only quire/privacy may');
+
+        $this->compile($container, $privacy);
+    }
+
+    public function testNorByReplacingTheFormatter(): void
+    {
+        $container = $this->container();
+        $container->getDefinition(Formatter::class)->setClass(OutsideGuard::class);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('The formatter service is "Quire\Tests\Csp\Fixtures\OutsideGuard"');
+
+        $this->compile($container);
+    }
+
+    /**
+     * An extension's pass runs before the check, whatever its type, so what it does to the guard is checked.
+     */
+    #[DataProvider('extensionPassTypes')]
+    public function testNorGuardsFromAnExtensionsPass(string $type): void
+    {
+        $container = $this->container();
+        ExtensionPasses::add($container, new class implements CompilerPassInterface {
+            public function process(ContainerBuilder $container): void
+            {
+                $container->getDefinition(Formatter::class)->setArgument('$embeds', new Definition(OutsideGuard::class));
+            }
+        }, $type, 0);
+
+        foreach (ExtensionPasses::runners() as $runnerType => $runner) {
+            $container->addCompilerPass($runner, $runnerType, PassConfig::TYPE_BEFORE_REMOVING === $runnerType ? 100 : -100);
+        }
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessageIsOrContains('OutsideGuard');
+
+        $this->compile($container);
+    }
+
+    private function guardEmbeds(ContainerBuilder $container): void
+    {
+        $container->register(FixtureGuard::class, FixtureGuard::class);
+        $container->setAlias(EmbedGuardInterface::class, FixtureGuard::class);
+    }
+
     /**
      * Core's services as core registers them (config/services.php, QuireBundle).
      */
@@ -243,6 +412,11 @@ final class CspSourcesPassTest extends TestCase
         $container->register(NoThirdPartySources::class, NoThirdPartySources::class);
         $container->setAlias(ThirdPartySourcesInterface::class, NoThirdPartySources::class);
         $container->register(Csp::class, Csp::class)->setAutowired(true)->setPublic(true);
+        $container->setParameter(Formatter::PARAMETER, ['formats' => [], 'profiles' => [], 'shortcodes' => [], 'commonmark' => [], 'pre' => [], 'post' => []]);
+        $container->setParameter('kernel.debug', false);
+        $container->register(NoEmbedGuard::class, NoEmbedGuard::class);
+        $container->setAlias(EmbedGuardInterface::class, NoEmbedGuard::class);
+        $container->register(Formatter::class, Formatter::class)->setAutowired(true)->setPublic(true);
 
         return $container;
     }
@@ -250,6 +424,7 @@ final class CspSourcesPassTest extends TestCase
     private function compile(ContainerBuilder $container, ?string $privacy = self::PRIVACY): void
     {
         $container->addCompilerPass(new CspSourcesPass($privacy ?? __DIR__.'/Fixtures/no-privacy-here'), PassConfig::TYPE_BEFORE_REMOVING);
+        $container->addCompilerPass(new EmbedGuardPass($privacy ?? __DIR__.'/Fixtures/no-privacy-here'), PassConfig::TYPE_BEFORE_REMOVING);
         $container->compile(true);
     }
 }

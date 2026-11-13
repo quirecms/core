@@ -17,6 +17,8 @@ use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\Boot\OfflineBoot;
 use Quire\Extension\ExtensionContributions;
 use Quire\Extension\InstalledExtensions;
+use Quire\Formatter\EmbedGuardInterface;
+use Quire\Formatter\Internal\NoEmbedGuard;
 use Quire\Health\HealthCheckInterface;
 use Quire\Http\Session\SessionHandlerFactory;
 use Quire\Permission\Access;
@@ -54,6 +56,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Head/Head.php',
             // Values, not services.
             '../src/Csp/{Policy,PolicyKind}.php',
+            '../src/Theme/{ThemeProblem,TemplateUrls}.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',
@@ -127,6 +130,9 @@ return static function (ContainerConfigurator $container): void {
 
     // Other sites' hosts in the policy: none, until quire/privacy replaces this (see Csp\Internal\CspSourcesPass).
     $services->alias(ThirdPartySourcesInterface::class, NoThirdPartySources::class);
+    // Trusted shortcodes' embeds as they are, until quire/privacy replaces this with click-to-load.
+    $services->set(NoEmbedGuard::class);
+    $services->alias(EmbedGuardInterface::class, NoEmbedGuard::class);
     // For extensions and themes that print inline code with a nonce, and for tests.
     $services->set(Csp::class)->public();
 

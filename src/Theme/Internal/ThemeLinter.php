@@ -10,6 +10,8 @@ use Quire\Extension\ExtensionManifest;
 use Quire\Extension\InstalledExtensions;
 use Quire\Theme\Exception\ThemeException;
 use Quire\Theme\Slots;
+use Quire\Theme\ThemeCheckInterface;
+use Symfony\Component\DependencyInjection\Attribute\AutowireIterator;
 use Twig\Environment;
 use Twig\Error\Error;
 use Twig\Node\Expression\ConstantExpression;
@@ -19,7 +21,8 @@ use Twig\Source;
 
 /**
  * Checks a theme without rendering it: its templates compile, together they render every standard slot,
- * and the assets they link exist.
+ * and the assets they link exist; then the checks of {@see ThemeCheckInterface}, e.g. what they load
+ * from other sites.
  *
  * The templates checked are those the site would use with the theme: the theme's, its parents' where it
  * has none, and Quire's built-in ones where no theme has one.
@@ -28,10 +31,15 @@ use Twig\Source;
  */
 final readonly class ThemeLinter
 {
+    /**
+     * @param iterable<ThemeCheckInterface> $checks Extensions' checks, and core's
+     */
     public function __construct(
         private Environment $twig,
         private InstalledExtensions $installed,
         private ExtensionManager $extensions,
+        #[AutowireIterator(ThemeCheckInterface::TAG)]
+        private iterable $checks = [],
     ) {
     }
 
@@ -123,6 +131,16 @@ final readonly class ThemeLinter
         }
 
         [$screenshotErrors, $screenshotWarnings] = $this->screenshot($chain[0]);
+
+        foreach ($this->checks as $check) {
+            foreach ($check->check($id, $templates) as $problem) {
+                if ($problem->error) {
+                    $errors[] = $problem->message;
+                } else {
+                    $warnings[] = $problem->message;
+                }
+            }
+        }
 
         return [
             'templates' => \count($templates),

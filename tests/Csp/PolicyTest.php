@@ -104,4 +104,37 @@ final class PolicyTest extends TestCase
     {
         self::assertSame($host, Policy::isHost($source));
     }
+
+    /**
+     * @return iterable<string, array{string, string, bool}>
+     */
+    public static function allowed(): iterable
+    {
+        yield 'the host' => ['https://player.video.example', 'https://player.video.example/embed/1', true];
+        yield 'another host' => ['https://player.video.example', 'https://video.example/embed/1', false];
+        yield 'a host that only ends the same' => ['https://video.example', 'https://evil-video.example/x', false];
+        yield 'upper case' => ['https://player.video.example', 'HTTPS://PLAYER.Video.EXAMPLE/x', true];
+        yield 'a trailing dot' => ['https://player.video.example', 'https://player.video.example./x', true];
+        yield 'userinfo' => ['https://player.video.example', 'https://evil.example@player.video.example/x', true];
+        yield 'userinfo naming the host' => ['https://player.video.example', 'https://player.video.example@evil.example/x', false];
+        yield 'a subdomain under *.' => ['https://*.video.example', 'https://a.b.video.example/x', true];
+        yield 'not the domain itself under *.' => ['https://*.video.example', 'https://video.example/x', false];
+        yield 'http allows https' => ['http://cdn.example', 'https://cdn.example/x', true];
+        yield 'https doesn\'t allow http' => ['https://cdn.example', 'http://cdn.example/x', false];
+        yield 'the default port' => ['https://cdn.example', 'https://cdn.example:443/x', true];
+        yield 'another port' => ['https://cdn.example', 'https://cdn.example:8443/x', false];
+        yield 'the port given' => ['https://cdn.example:8443', 'https://cdn.example:8443/x', true];
+        yield 'a path prefix' => ['https://cdn.example/libs/', 'https://cdn.example/libs/a.js', true];
+        yield 'outside the path' => ['https://cdn.example/libs/', 'https://cdn.example/other/a.js', false];
+        yield 'an exact path' => ['https://cdn.example/a.js', 'https://cdn.example/a.js', true];
+        yield 'an international name' => ['https://xn--bcher-kva.example', 'https://bücher.example/x', true];
+        yield 'a keyword never' => ["'self'", 'https://cdn.example/x', false];
+        yield 'not a URL' => ['https://cdn.example', 'cdn.example/x', false];
+    }
+
+    #[DataProvider('allowed')]
+    public function testASourceAllowsAUrlAsBrowsersMatch(string $source, string $url, bool $allowed): void
+    {
+        self::assertSame($allowed, Policy::allows($source, $url));
+    }
 }

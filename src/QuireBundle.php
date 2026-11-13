@@ -33,6 +33,7 @@ use Quire\Extension\State\PinnedExtensionStateStore;
 use Quire\Formatter\FormatInterface;
 use Quire\Formatter\Formatter;
 use Quire\Formatter\HtmlProcessorInterface;
+use Quire\Formatter\Internal\EmbedGuardPass;
 use Quire\Formatter\ShortcodeInterface;
 use Quire\Formatter\SourceProcessorInterface;
 use Quire\Head\HeadContributorInterface;
@@ -82,9 +83,11 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new RelationFieldsPass());
         // Once decoration has run: a decorator replaces the class that's bound (condition C-C).
         $container->addCompilerPass(new CspSourcesPass(), PassConfig::TYPE_BEFORE_REMOVING);
+        // The same for the guard of trusted shortcodes' embeds (condition C-B).
+        $container->addCompilerPass(new EmbedGuardPass(), PassConfig::TYPE_BEFORE_REMOVING);
 
         // Extensions' own passes (Extend\Services::compilerPass()): after Quire's of each type, and
-        // before the C-C check, which must see what they did.
+        // before the C-B and C-C checks, which must see what they did.
         foreach (ExtensionPasses::runners() as $type => $runner) {
             $container->addCompilerPass($runner, $type, PassConfig::TYPE_BEFORE_REMOVING === $type ? 100 : -100);
         }

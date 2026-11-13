@@ -22,8 +22,13 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
         It checks the templates the site would use with the theme (the theme's, its parents', and Quire's
         built-in ones where neither has one): they compile, they render every standard slot, so extensions
-        can add their parts, and the files they link with quire_asset() exist. It exits with an error code
-        when something is wrong, so it can run in CI.
+        can add their parts, and the files they link with quire_asset() exist; and what they load from
+        other sites: the site's policy must allow it, and a service visitors are asked about mustn't load
+        before they consent (with quire/privacy, which also refuses to build the site with such a load).
+        It exits with an error code when something is wrong, so it can run in CI.
+
+        It reads the templates without rendering them: URLs made in Twig ({{ … }}, asset(), variables)
+        aren't checked, so a clean run isn't proof of what pages load.
         HELP,
 )]
 final readonly class LintThemeCommand
@@ -60,7 +65,7 @@ final readonly class LintThemeCommand
             return Command::FAILURE;
         }
 
-        $io->success(\sprintf('The theme "%s" is fine: %d templates, every standard slot rendered.', $id, $result['templates']));
+        $io->success(\sprintf('The theme "%s" is fine: %d templates, every standard slot rendered. URLs made in Twig aren\'t checked.', $id, $result['templates']));
 
         return Command::SUCCESS;
     }

@@ -5,10 +5,10 @@
     "license": "proprietary",
     "require": {
         "php": ">=8.5",
-        "quire/core": "^0.2"
+        "quire/core": "^0.3"
     },
     "require-dev": {
-        "quire/testing": "^0.2"
+        "quire/testing": "^0.3"
     },
     "autoload": {
         "psr-4": {

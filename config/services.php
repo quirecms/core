@@ -17,6 +17,7 @@ use Quire\Database\SchemaAssetFilter;
 use Quire\Extension\Boot\OfflineBoot;
 use Quire\Extension\ExtensionContributions;
 use Quire\Extension\InstalledExtensions;
+use Quire\Extension\State\PinnedStateListener;
 use Quire\Formatter\EmbedGuardInterface;
 use Quire\Formatter\Internal\NoEmbedGuard;
 use Quire\Health\HealthCheckInterface;
@@ -64,7 +65,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Extension/ResolvedExtensions.php',
             '../src/Extension/Rebuild/RebuildFailedException.php',
             // The state store is chosen in QuireBundle::loadExtension(), depending on "quire.extensions.pinned".
-            '../src/Extension/State/',
+            '../src/Extension/State/{DatabaseExtensionStateStore,PinnedExtensionStateStore,ExtensionStateStoreInterface}.php',
             '../src/Settings/{Event,Exception}/',
             '../src/Settings/{SettingDefinition,SettingType}.php',
             '../src/Maker/{ExtensionSkeleton,ThemeSkeleton}.php',
@@ -177,10 +178,15 @@ return static function (ContainerConfigurator $container): void {
         'latest' => MigrationCommand\LatestCommand::class,
     ] as $name => $class) {
         // Not autoconfigured: that would also register them under Doctrine's own names.
-        $services->set('quire.migrations.command.'.$name, $class)
+        $command = $services->set('quire.migrations.command.'.$name, $class)
             ->autowire(false)
             ->autoconfigure(false)
             ->args([service(MigrationsFactory::SERVICE), 'quire:migrations:'.$name])
-            ->tag('console.command', ['command' => 'quire:migrations:'.$name]);
+            ->tag('console.command', ['command' => 'quire:migrations:'.$name] + ('migrate' === $name ? ['description' => PinnedStateListener::DESCRIPTION] : []));
+
+        if ('migrate' === $name) {
+            // It also keeps a pinned site's extensions and theme (PinnedStateListener): its help says so.
+            $command->configurator([PinnedStateListener::class, 'describe']);
+        }
     }
 };

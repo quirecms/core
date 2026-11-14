@@ -96,11 +96,24 @@ final class ConsoleAppRebuilderTest extends TestCase
         }
     }
 
-    private function rebuild(bool $migrate, ?string $failing = null, ?CompiledAssetMapperConfigReader $compiledAssets = null): string
+    public function testAFailureSaysWhyForThoseWhoDontSeeTheOutput(): void
     {
-        $rebuilder = new ConsoleAppRebuilder($this->workers, '/app', 'prod', function (array $command, \Closure $output) use ($failing): int {
+        // As Symfony prints a compiler pass's error (COLUMNS=1000, so not wrapped).
+        $printed = "\n Rebuilding…\n\nIn ConsentLoadsPass.php line 51:\n                                   \n  [Symfony\\Component\\DependencyInjection\\Exception\\InvalidArgumentException]  \n  The site's templates load services visitors are asked about before they consent:  \n  - templates/probe.html.twig line 1: loads https://www.googletagmanager.com/gtag/js.  \n                                   \n\nIn ContainerBuilder.php line 12:\n\n  Caused by this.\n\n";
+
+        try {
+            $this->rebuild(migrate: true, failing: 'cache:clear', printed: $printed);
+            self::fail('The failure was ignored.');
+        } catch (RebuildFailedException $e) {
+            self::assertSame('"bin/console cache:clear" failed: The site\'s templates load services visitors are asked about before they consent: - templates/probe.html.twig line 1: loads https://www.googletagmanager.com/gtag/js.', $e->getMessage());
+        }
+    }
+
+    private function rebuild(bool $migrate, ?string $failing = null, ?CompiledAssetMapperConfigReader $compiledAssets = null, string $printed = ''): string
+    {
+        $rebuilder = new ConsoleAppRebuilder($this->workers, '/app', 'prod', function (array $command, \Closure $output) use ($failing, $printed): int {
             $this->commands[] = implode(' ', \array_slice($command, 1));
-            $output('ran '.$command[2]."\n");
+            $output('ran '.$command[2]."\n".($command[2] === $failing ? $printed : ''));
 
             return $command[2] === $failing ? 1 : 0;
         }, $compiledAssets);

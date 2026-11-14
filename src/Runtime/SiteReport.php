@@ -10,6 +10,7 @@ use Quire\Database\MigrationsFactory;
 use Quire\Extension\ExtensionManager;
 use Quire\Extension\ExtensionManifest;
 use Quire\Extension\InstalledExtensions;
+use Quire\Extension\State\PinnedState;
 use Quire\Health\HealthCheckInterface;
 use Quire\Settings\Settings;
 use Quire\Storage\Internal\InstalledDisks;
@@ -61,6 +62,9 @@ final readonly class SiteReport
         #[Autowire(param: 'router.request_context.base_url')]
         private string $siteUri,
         private InstalledDisks $disks,
+        private PinnedState $pinnedState,
+        #[Autowire(param: Themes::PINNED_PARAMETER)]
+        private bool $pinned = false,
     ) {
     }
 
@@ -135,13 +139,23 @@ final readonly class SiteReport
     private function warnings(): array
     {
         try {
-            return array_map(
+            $warnings = array_map(
                 static fn (string $disk): string => \sprintf('"quire.storage.disks.%s" places a disk that no installed extension declares, so it isn\'t used. Set its "public" to make it a disk of the site\'s own, or remove it.', $disk),
                 $this->disks->placedButUndeclared(),
             );
         } catch (\Throwable $e) {
-            return [\sprintf('The storage disks couldn\'t be checked (%s): run "bin/console quire:storage:list" to see them.', $e::class)];
+            $warnings = [\sprintf('The storage disks couldn\'t be checked (%s): run "bin/console quire:storage:list" to see them.', $e::class)];
         }
+
+        try {
+            if (!$this->pinned && [] !== $this->users->all(Role::ADMIN, 1) && $this->pinnedState->mayHaveLostPinnedState()) {
+                $warnings[] = 'No extension was ever enabled on this site, not even the admin interface. If it was pinned ("quire.extensions.pinned") before Quire 0.3.1, what it ran pinned wasn\'t carried over: enable its extensions with "bin/console quire:extension:enable" and choose its theme with "bin/console quire:theme:use" (see "Stop pinning" in docs/extensions.md).';
+            }
+        } catch (\Throwable $e) {
+            $warnings[] = \sprintf('Whether the site lost what it ran pinned couldn\'t be checked (%s).', $e::class);
+        }
+
+        return $warnings;
     }
 
     /**

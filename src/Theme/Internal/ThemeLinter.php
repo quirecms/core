@@ -31,6 +31,9 @@ use Twig\Source;
  */
 final readonly class ThemeLinter
 {
+    /** The head tags quire_head() prints on every page; the others only when set (see SeoRenderer) */
+    private const array ALWAYS_IN_HEAD = ['<meta name="description">', '<link rel="canonical">', '<meta property="og:type">', '<meta property="og:title">', '<meta property="og:url">', '<meta property="og:site_name">', '<meta property="og:locale">', '<meta name="twitter:card">'];
+
     /**
      * @param iterable<ThemeCheckInterface> $checks Extensions' checks, and core's
      */
@@ -98,11 +101,23 @@ final readonly class ThemeLinter
                 }
             }
 
-            foreach ($this->handWrittenHeadTags((string) file_get_contents($file)) as [$tag, $line]) {
-                $warnings[] = \sprintf('%s line %d: prints %s itself, and quire_head() prints it too, so pages would have it twice. Remove it, and set the value with a head contributor (Extend\Head) instead.', $this->relative($file, $chain), $line, $tag);
+            // E-mails are no page: their mail client applies no Content-Security-Policy or quire_head(),
+            // and they must be styled inline.
+            $page = !$this->isEmail($name);
+
+            foreach ($page ? $this->handWrittenHeadTags((string) file_get_contents($file)) : [] as [$tag, $line]) {
+                $warnings[] = \sprintf(
+                    '%s line %d: prints %s itself, %s Remove it, and set the value with a head contributor (Extend\Head) instead.',
+                    $this->relative($file, $chain),
+                    $line,
+                    $tag,
+                    \in_array($tag, self::ALWAYS_IN_HEAD, true)
+                        ? 'and quire_head() prints it too, so pages would have it twice.'
+                        : 'and quire_head() prints it too on the pages where Quire, an extension or the theme sets it, so those would have it twice.',
+                );
             }
 
-            foreach ($this->inlineCode((string) file_get_contents($file)) as [$what, $line]) {
+            foreach ($page ? $this->inlineCode((string) file_get_contents($file)) : [] as [$what, $line]) {
                 $warnings[] = \sprintf('%s line %d: %s, which the site\'s Content-Security-Policy blocks. %s See "Content-Security-Policy" in docs/themes.md.', $this->relative($file, $chain), $line, $what, str_contains($what, 'script') || str_contains($what, 'handler') || str_contains($what, 'javascript:') ? 'Move the code to a script in the theme\'s assets (Extend\Assets).' : 'Move the styles to the theme\'s stylesheet, with a class.');
             }
 
@@ -312,6 +327,14 @@ final readonly class ThemeLinter
         }
 
         return 'Quire: '.basename(\dirname($file)).'/'.basename($file);
+    }
+
+    /**
+     * Whether a template is an e-mail's (see UserMailer): "email/…", in any namespace.
+     */
+    private function isEmail(string $name): bool
+    {
+        return 1 === preg_match('#^(?:@[^/]+/)?email/#', $name);
     }
 
     /**

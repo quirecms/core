@@ -101,7 +101,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
 
     /**
      * `{{ post.publishedAt|quire_date }}`: a date written the way the page's language writes it, e.g.
-     * "22 October 2026" in English and "22. Oktober 2026" in German.
+     * "October 22, 2026" in English ("en" is ICU's American English) and "22. Oktober 2026" in German.
      *
      * @param string $style "long" (default), "medium", "short" or "full"
      */

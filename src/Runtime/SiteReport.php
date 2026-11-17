@@ -37,6 +37,7 @@ use Symfony\Component\HttpKernel\Kernel;
  *     site: array{title: ?string, locale: ?string, timezone: ?string, url: ?string, installed: ?bool},
  *     extensions: list<array{id: string, package: string, version: string, type: string, status: string}>,
  *     theme: ?string,
+ *     storage: list<array{name: string, adapter: string, public: ?bool, location: ?string, in_use: bool}>|null,
  *     migrations: array{executed: ?int, pending: ?int},
  *     health: array{status: string, checks: array<string, array{status: string, message?: string}>},
  *     warnings: list<string>,
@@ -103,6 +104,9 @@ final readonly class SiteReport
                 },
             ], array_values($this->installed->all())),
             'theme' => $this->attempt(fn (): ?string => $this->themes->active()?->id),
+            // Where its stored files are, for tools that copy a site: a copy on the original's bucket
+            // would change the original's files. Null when the disks can't be read (the warnings say why).
+            'storage' => $this->attempt($this->storage(...)),
             'migrations' => [
                 'executed' => $this->attempt(fn (): int => \count($this->migrations->getMetadataStorage()->getExecutedMigrations()->getItems())),
                 'pending' => $this->attempt(fn (): int => \count($this->migrations->getMigrationStatusCalculator()->getNewMigrations())),
@@ -110,6 +114,31 @@ final readonly class SiteReport
             'health' => $this->health(),
             'warnings' => $this->warnings(),
         ];
+    }
+
+    /**
+     * Every disk the site has files on: those in use, a disabled extension's (where the site placed it,
+     * or where it is without configuration), and those the site placed that no extension declares.
+     *
+     * @return list<array{name: string, adapter: string, public: ?bool, location: ?string, in_use: bool}> By name
+     */
+    private function storage(): array
+    {
+        $all = $this->disks->all();
+        $disks = [];
+
+        foreach ($all->names() as $name) {
+            $disk = $all->get($name);
+            $disks[$name] = ['name' => $name, 'adapter' => $disk->adapter, 'public' => $disk->public, 'location' => $disk->location, 'in_use' => true];
+        }
+
+        foreach ($all->dormant() as $name) {
+            $disks[$name] ??= ['name' => $name, 'adapter' => $all->dormantAdapter($name), 'public' => null, 'location' => null, 'in_use' => false];
+        }
+
+        ksort($disks);
+
+        return array_values($disks);
     }
 
     /**

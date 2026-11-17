@@ -81,7 +81,8 @@ final readonly class DiskConfig
     {
         return match ($this->adapter) {
             'local' => 'local: '.$this->path,
-            's3' => 's3: '.$this->bucket.('' === $this->prefix ? '' : '/'.trim($this->prefix, '/')).(null === $this->endpoint ? '' : ' at '.$this->endpoint),
+            // Without any user and password in the endpoint's address: the location is shown and reported
+            's3' => 's3: '.$this->bucket.('' === $this->prefix ? '' : '/'.trim($this->prefix, '/')).(null === $this->endpoint ? '' : ' at '.preg_replace('#^([a-z][a-z0-9+.-]*://)[^/@]*@#i', '$1', $this->endpoint)),
             'service' => 'service: '.$this->service,
         };
     }

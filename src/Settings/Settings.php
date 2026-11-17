@@ -199,6 +199,33 @@ final class Settings implements ResetInterface
     }
 
     /**
+     * Removes a setting's stored value, whether anything declares it now or not: e.g. one of a disabled
+     * extension's, which is kept until it's enabled again. A declared one falls back to its default.
+     *
+     * @return bool Whether there was a stored value
+     *
+     * @throws InvalidSettingValueException when an environment variable overrides the setting
+     */
+    public function forget(string $key): bool
+    {
+        $definition = $this->schema->has($key) ? $this->schema->get($key) : null;
+
+        if ($definition instanceof SettingDefinition) {
+            $this->assertNotOverridden($definition);
+        }
+
+        $old = $definition instanceof SettingDefinition ? $this->get($key) : null;
+        $removed = $this->connection->executeStatement('DELETE FROM quire.setting WHERE name = :name', ['name' => $key]) > 0;
+        $this->stored = null;
+
+        if ($definition instanceof SettingDefinition && $removed && $old !== $definition->default) {
+            $this->dispatcher->dispatch(new SettingChanged($key, $old, $definition->default));
+        }
+
+        return $removed;
+    }
+
+    /**
      * Forgets the values loaded for this request, so long-running workers see changes made elsewhere.
      */
     public function reset(): void

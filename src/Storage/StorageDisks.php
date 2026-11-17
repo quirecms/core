@@ -95,6 +95,18 @@ final class StorageDisks
     }
 
     /**
+     * @internal
+     *
+     * @return string Where a disk the site placed but no enabled extension declares would be: "local", "s3" or "service"
+     */
+    public function dormantAdapter(string $name): string
+    {
+        $adapter = $this->dormant[$name]['adapter'] ?? 'local';
+
+        return \is_string($adapter) ? $adapter : 'local';
+    }
+
+    /**
      * @throws UnknownDiskException
      */
     public function get(string $name): Disk

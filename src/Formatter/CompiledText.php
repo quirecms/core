@@ -16,6 +16,8 @@ final readonly class CompiledText
      * @param list<Shortcode>                                   $shortcodes Indexed by placeholder number
      * @param list<array{id: string, text: string, level: int}> $headings   The headings the renderer gave anchors, in
      *                                                                      order, named as a reader reads them
+     * @param string                                            $mark       Its placeholders' mark ({@see FormatContext::$mark}); empty in
+     *                                                                      text compiled before placeholders had one
      */
     public function __construct(
         public string $html,
@@ -23,6 +25,7 @@ final readonly class CompiledText
         public string $profile,
         public string $format,
         public array $headings = [],
+        public string $mark = '',
     ) {
     }
 
@@ -31,13 +34,13 @@ final readonly class CompiledText
      */
     public function htmlWithoutShortcodes(): string
     {
-        return (string) preg_replace('/'.FormatContext::PLACEHOLDER_START.'\d+'.FormatContext::PLACEHOLDER_END.'/u', '', $this->html);
+        return (string) preg_replace('/'.FormatContext::placeholderPattern($this->mark).'/u', '', $this->html);
     }
 
     /**
      * @internal For caches
      *
-     * @return array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>}
+     * @return array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>, mark: string}
      */
     public function toArray(): array
     {
@@ -47,13 +50,14 @@ final readonly class CompiledText
             'profile' => $this->profile,
             'format' => $this->format,
             'headings' => $this->headings,
+            'mark' => $this->mark,
         ];
     }
 
     /**
      * @internal
      *
-     * @param array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings?: list<array{id: string, text: string, level: int}>} $data
+     * @param array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings?: list<array{id: string, text: string, level: int}>, mark?: string} $data
      */
     public static function fromArray(array $data): self
     {
@@ -63,6 +67,7 @@ final readonly class CompiledText
             $data['profile'],
             $data['format'],
             $data['headings'] ?? [],
+            $data['mark'] ?? '',
         );
     }
 }

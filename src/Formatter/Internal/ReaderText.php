@@ -40,7 +40,7 @@ final class ReaderText
 
     private static function clean(string $text): string
     {
-        $text = (string) preg_replace('/'.FormatContext::PLACEHOLDER_START.'\d+'.FormatContext::PLACEHOLDER_END.'/u', '', $text);
+        $text = (string) preg_replace('/'.FormatContext::PLACEHOLDER_START.'[0-9a-f]*\d+'.FormatContext::PLACEHOLDER_END.'|['.FormatContext::PLACEHOLDER_START.FormatContext::PLACEHOLDER_END.']/u', '', $text);
 
         return trim((string) preg_replace('/\s+/u', ' ', $text));
     }

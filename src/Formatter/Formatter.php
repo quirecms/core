@@ -33,8 +33,6 @@ final class Formatter implements ResetInterface
     /** Services the formatter uses: formats, shortcodes, CommonMark extensions and processors. */
     public const string SERVICE_TAG = 'quire.formatter.service';
 
-    private const string PLACEHOLDER = '/'.FormatContext::PLACEHOLDER_START.'(\d+)'.FormatContext::PLACEHOLDER_END.'/u';
-
     /** @var array<string, FormatterProfile> */
     private array $profiles;
 
@@ -89,7 +87,8 @@ final class Formatter implements ResetInterface
     {
         $context = $this->context($format, $profile, $content);
 
-        // Placeholders can't be forged: their marker characters are removed from the source.
+        // Placeholders can't be forged: their markers are removed from the source here, and those a character
+        // reference decodes to later carry no mark, so they're dropped once the HTML is made (below).
         $source = str_replace([FormatContext::PLACEHOLDER_START, FormatContext::PLACEHOLDER_END], '', $source);
 
         foreach ($this->processors('pre', $context->profile) as $processor) {
@@ -115,7 +114,15 @@ final class Formatter implements ResetInterface
             ['html' => $html, 'headings' => $headings] = $this->structure->apply($html, $context);
         }
 
-        return new CompiledText($html, $context->shortcodes(), $context->profile->name, $format, $headings);
+        // Only the placeholders made here stay. A character reference can decode to their markers on the way
+        // (in Markdown, in its raw HTML), and without the mark it's no placeholder: the markers are dropped.
+        $html = (string) preg_replace_callback(
+            '/'.FormatContext::placeholderPattern($context->mark).'|['.FormatContext::PLACEHOLDER_START.FormatContext::PLACEHOLDER_END.']/u',
+            static fn (array $match): string => isset($match[1]) && '' !== $match[1] ? $match[0] : '',
+            $html,
+        );
+
+        return new CompiledText($html, $context->shortcodes(), $context->profile->name, $format, $headings, $context->mark);
     }
 
     /**
@@ -127,7 +134,8 @@ final class Formatter implements ResetInterface
             return $compiled->html;
         }
 
-        $context = $this->context($compiled->format, $compiled->profile, $content);
+        $context = $this->context($compiled->format, $compiled->profile, $content, $compiled->mark);
+        $placeholder = FormatContext::placeholderPattern($compiled->mark);
         $rendered = [];
         $render = function (int $index) use ($compiled, $context, &$rendered): string {
             return $rendered[$index] ??= $this->renderShortcode($compiled->shortcodes[$index] ?? null, $context);
@@ -135,7 +143,7 @@ final class Formatter implements ResetInterface
 
         // A shortcode alone in a paragraph replaces the paragraph, so block output (a gallery) stays valid HTML.
         $html = (string) preg_replace_callback(
-            '#<p>\s*'.FormatContext::PLACEHOLDER_START.'(\d+)'.FormatContext::PLACEHOLDER_END.'\s*</p>#u',
+            '#<p>\s*'.$placeholder.'\s*</p>#u',
             static fn (array $match): string => $render((int) $match[1]),
             $compiled->html,
         );
@@ -146,8 +154,8 @@ final class Formatter implements ResetInterface
 
         foreach ($parts as $i => $part) {
             $parts[$i] = str_starts_with($part, '<')
-                ? (string) preg_replace(self::PLACEHOLDER, '', $part)
-                : (string) preg_replace_callback(self::PLACEHOLDER, static fn (array $match): string => $render((int) $match[1]), $part);
+                ? (string) preg_replace('/'.$placeholder.'/u', '', $part)
+                : (string) preg_replace_callback('/'.$placeholder.'/u', static fn (array $match): string => $render((int) $match[1]), $part);
         }
 
         return implode('', $parts);
@@ -168,7 +176,7 @@ final class Formatter implements ResetInterface
         $this->sanitizers = [];
     }
 
-    private function context(string $format, string $profileName, ?Content $content): FormatContext
+    private function context(string $format, string $profileName, ?Content $content, ?string $mark = null): FormatContext
     {
         $profile = $this->profile($profileName);
 
@@ -178,7 +186,7 @@ final class Formatter implements ResetInterface
 
         $shortcodes = array_values(array_filter(array_keys($this->config['shortcodes']), $profile->allowsShortcode(...)));
 
-        return new FormatContext($profile, $format, $content, $shortcodes);
+        return new FormatContext($profile, $format, $content, $shortcodes, $mark);
     }
 
     private function renderShortcode(?Shortcode $shortcode, FormatContext $context): string

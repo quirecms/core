@@ -106,7 +106,7 @@ final readonly class ContentRenderer
             $key .= \sprintf('.pending.%s.%d', str_replace('-', '', $pending->id), $pending->version);
         }
 
-        /** @var array{body: array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>}, teaser: ?array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>}} $cached */
+        /** @var array{body: array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>, mark: string}, teaser: ?array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>, mark: string}} $cached */
         $cached = $this->cache->get($key, function (ItemInterface $item) use ($content, $profile): array {
             // Entries for older versions are never read again; let them expire.
             $item->expiresAfter(30 * 24 * 3600);

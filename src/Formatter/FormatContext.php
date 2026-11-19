@@ -13,10 +13,20 @@ use Quire\Content\Content;
  */
 final class FormatContext
 {
-    /** Marks a shortcode placeholder. Private-use characters, removed from the source beforehand. */
+    /**
+     * Mark a shortcode placeholder, around the text's mark and the shortcode's number. Private-use
+     * characters, removed from the source beforehand. A character reference can still decode to them
+     * later (in Markdown, or in its raw HTML), so only a placeholder that also carries the mark counts.
+     */
     public const string PLACEHOLDER_START = "\u{E000}";
 
     public const string PLACEHOLDER_END = "\u{E001}";
+
+    /**
+     * The mark of this text's placeholders: random for each compile and kept with the compiled text,
+     * never in the output, so no author can write a placeholder.
+     */
+    public readonly string $mark;
 
     /** @var list<Shortcode> */
     private array $shortcodes = [];
@@ -29,7 +39,18 @@ final class FormatContext
         public readonly string $format,
         public readonly ?Content $content = null,
         private readonly array $shortcodeNames = [],
+        ?string $mark = null,
     ) {
+        $this->mark = $mark ?? bin2hex(random_bytes(16));
+    }
+
+    /**
+     * @internal The pattern of the placeholders with this mark, the shortcode's number as group 1; for a
+     * regular expression delimited by "/" or "#"
+     */
+    public static function placeholderPattern(string $mark): string
+    {
+        return self::PLACEHOLDER_START.preg_quote($mark, '#').'(\\d+)'.self::PLACEHOLDER_END;
     }
 
     /**
@@ -44,7 +65,7 @@ final class FormatContext
 
         $this->shortcodes[] = $shortcode;
 
-        return self::PLACEHOLDER_START.(\count($this->shortcodes) - 1).self::PLACEHOLDER_END;
+        return self::PLACEHOLDER_START.$this->mark.(\count($this->shortcodes) - 1).self::PLACEHOLDER_END;
     }
 
     /**

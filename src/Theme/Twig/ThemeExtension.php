@@ -27,6 +27,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
     {
         return [
             new TwigFilter('quire_date', [ThemeRuntime::class, 'date']),
+            // A translated message with HTML parameters: the text escaped, Markup parameters as they are
+            new TwigFilter('quire_trans_html', [TranslationRuntime::class, 'transHtml'], ['is_safe' => ['html']]),
         ];
     }
 

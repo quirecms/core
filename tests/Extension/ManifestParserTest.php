@@ -114,6 +114,8 @@ final class ManifestParserTest extends TestCase
         yield 'extra is not an object' => [['extra' => 'nope'], '"extra" must be a JSON object'];
         yield 'manifest is a list' => [['extra' => ['quire' => ['acme']]], '"extra.quire" must be a JSON object'];
         yield 'invalid ID' => [['extra' => ['quire' => ['id' => 'Acme_Reviews']]], 'IDs may only contain lowercase letters, digits and single hyphens, e.g. "acme-reviews"'];
+        yield 'core\'s own ID' => [['extra' => ['quire' => ['id' => 'quire']]], '"quire" is Quire\'s own name, which no extension or theme may take'];
+        yield 'core\'s extender ID' => [['extra' => ['quire' => ['id' => 'core']]], '"core" is Quire\'s own name'];
         yield 'typo in a key' => [['extra' => ['quire' => ['require' => []]]], '"extra.quire.require" is not a known key. Did you mean "requires"?'];
         yield 'unknown key' => [['extra' => ['quire' => ['colour' => 'red']]], 'Known keys:'];
         yield 'empty title' => [['extra' => ['quire' => ['title' => '  ']]], '"extra.quire.title" must be a non-empty string'];

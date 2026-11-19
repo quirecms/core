@@ -17,6 +17,9 @@ final class ManifestParser
 {
     private const string ID_PATTERN = '/^[a-z0-9]+(?:-[a-z0-9]+)*$/';
 
+    /** IDs that are core's: its assets are mapped as "quire/…", next to each extension's "<id>/…" */
+    private const array RESERVED_IDS = ['quire', 'core'];
+
     private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme', 'importmap'];
 
     /** An npm package, optionally with a file inside it: "@hotwired/turbo", "bootstrap/dist/css/bootstrap.min.css" */
@@ -52,6 +55,11 @@ final class ManifestParser
 
         if (1 !== preg_match(self::ID_PATTERN, $id)) {
             throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.id" is "%s", but IDs may only contain lowercase letters, digits and single hyphens, e.g. "%s".', $id, self::idFromPackageName($name)));
+        }
+
+        // Core's own: its assets are "quire/…", its template namespace "@Quire", its settings "quire.…"
+        if (\in_array($id, self::RESERVED_IDS, true)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"%s" is Quire\'s own name, which no extension or theme may take: set "extra.quire.id" to another, e.g. "%s-extension".', $id, $id));
         }
 
         $requires = $this->idList($name, $manifest, 'requires', $id);

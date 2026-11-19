@@ -562,7 +562,8 @@ final class QuireBundle extends AbstractBundle
      */
     private function mapAssets(ContainerBuilder $builder, InstalledExtensions $installed): void
     {
-        $paths = [];
+        // Core's own, e.g. "quire/show-password.js" for the account pages
+        $paths = [\dirname(ExtensionBooter::coreExtendFile()).\DIRECTORY_SEPARATOR.'assets' => 'quire'];
 
         foreach ($installed->extensionsAndThemes() as $manifest) {
             $directory = $manifest->path.\DIRECTORY_SEPARATOR.'assets';
@@ -573,9 +574,7 @@ final class QuireBundle extends AbstractBundle
             }
         }
 
-        if ([] !== $paths) {
-            $builder->prependExtensionConfig('framework', ['asset_mapper' => ['paths' => $paths]]);
-        }
+        $builder->prependExtensionConfig('framework', ['asset_mapper' => ['paths' => $paths]]);
     }
 
     /**

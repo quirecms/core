@@ -37,11 +37,12 @@
                 <form method="post" action="{{ path('quire_login') }}" class="form">
                     <p class="form-field">
                         <label for="username">{{ 'Email or username'|trans({}, 'quire') }}</label>
-                        <input type="text" id="username" name="_username" value="{{ last_username }}" autocomplete="username" required{% if error %} aria-describedby="sign-in-error"{% endif %}>
+                        <input type="text" id="username" name="_username" value="{{ last_username }}" autocomplete="username" required{% if error %} aria-describedby="sign-in-error" aria-invalid="true"{% endif %}>
                     </p>
                     <p class="form-field">
                         <label for="password">{{ 'Password'|trans({}, 'quire') }}</label>
-                        <input type="password" id="password" name="_password" autocomplete="current-password" required>
+                        <input type="password" id="password" spellcheck="false" autocapitalize="none" autocorrect="off" name="_password" autocomplete="current-password" required{% if error %} aria-describedby="sign-in-error" aria-invalid="true"{% endif %}>
+                        {{ include('security/_password_toggle.html.twig', {field: 'password'}) }}
                     </p>
                     <p class="form-check">
                         <input type="checkbox" id="remember-me" name="_remember_me" value="on">
@@ -67,4 +68,7 @@
             {% endif %}
         {% endif %}
     </section>
+    <script type="module" src="{{ asset('quire/show-password.js') }}"></script>
 {% endblock %}
+
+

@@ -24,6 +24,8 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  * - **Footnotes** (with the profile's footnotes): each note is put right after its first reference, as
  *   `<span class="footnote" id="fn-N" role="note">`, and the reference is a link named "Note N". On wide
  *   screens a theme sets it in the margin, on narrow ones it reads in place: no list at the end.
+ * - **Task lists**: each box is disabled and named by its state ("Done", "Still to come"), and its
+ *   item has `data-task="done"` or `"open"`, and the state's words in `data-state`.
  * - **Tables**: in `<div class="table" role="region" tabindex="0">`, named by the heading before them,
  *   so a wide one scrolls by keyboard. The table roles stay when CSS changes its display; every cell
  *   has `data-label` (its column's header), the first cell of a body row is a row header, a column's
@@ -60,17 +62,22 @@ final readonly class DocumentStructure
     ) {
     }
 
-    public function apply(string $html, FormatContext $context): string
+    /**
+     * @return array{html: string, headings: list<array{id: string, text: string, level: int}>} The HTML, and the
+     *                                                                                          headings it gave
+     *                                                                                          anchors, in order
+     */
+    public function apply(string $html, FormatContext $context): array
     {
         if (FormatterProfile::RICH !== $context->profile->sanitizer || '' === trim($html)) {
-            return $html;
+            return ['html' => $html, 'headings' => []];
         }
 
         $document = \Dom\HTMLDocument::createFromString('<!DOCTYPE html><html><body>'.$html.'</body></html>', \LIBXML_NOERROR, 'UTF-8');
         $body = $document->body;
 
         if (!$body instanceof \Dom\HTMLElement) {
-            return $html;
+            return ['html' => $html, 'headings' => []];
         }
 
         // The item's language; without an item, the one being rendered in
@@ -80,15 +87,14 @@ final readonly class DocumentStructure
         if ($context->profile->footnotes) {
             $this->footnotes($document, $body, $locale);
         }
-        if ($context->profile->headingAnchors) {
-            $this->headings($document, $body, $locale);
-        }
+        $headings = $context->profile->headingAnchors ? $this->headings($document, $body, $locale) : [];
         $this->unmark($body);
         $this->tables($document, $body, $locale);
         $this->codeBlocks($body, $locale);
+        $this->taskItems($body, $locale);
         $this->externalImages($document, $body, $locale);
 
-        return $body->innerHTML;
+        return ['html' => $body->innerHTML, 'headings' => $headings];
     }
 
     /**
@@ -127,9 +133,13 @@ final readonly class DocumentStructure
         }
     }
 
-    private function headings(\Dom\HTMLDocument $document, \Dom\HTMLElement $body, ?string $locale): void
+    /**
+     * @return list<array{id: string, text: string, level: int}>
+     */
+    private function headings(\Dom\HTMLDocument $document, \Dom\HTMLElement $body, ?string $locale): array
     {
         $marked = $this->mark->value.self::HEADING_PREFIX.'-';
+        $headings = [];
 
         foreach ($body->querySelectorAll('h2[id], h3[id], h4[id], h5[id], h6[id]') as $heading) {
             $id = (string) $heading->getAttribute('id');
@@ -139,6 +149,9 @@ final readonly class DocumentStructure
             }
             $id = self::HEADING_PREFIX.'-'.substr($id, \strlen($marked));
             $heading->setAttribute('id', $id);
+            // Its name as a reader reads it: without a footnote's number or "Note" for screen readers
+            $text = ReaderText::of($heading);
+            $headings[] = ['id' => $id, 'text' => $text, 'level' => (int) substr(strtolower($heading->tagName), 1)];
 
             $row = $document->createElement('div');
             $row->setAttribute('class', 'heading-row');
@@ -148,10 +161,12 @@ final readonly class DocumentStructure
             $anchor = $document->createElement('a');
             $anchor->setAttribute('class', 'heading-anchor');
             $anchor->setAttribute('href', '#'.$id);
-            $anchor->setAttribute('aria-label', $this->translator->trans('Link to the section “{title}”', ['title' => trim((string) $heading->textContent)], self::DOMAIN, $locale));
+            $anchor->setAttribute('aria-label', $this->translator->trans('Link to the section “{title}”', ['title' => $text], self::DOMAIN, $locale));
             $anchor->textContent = '#';
             $row->appendChild($anchor);
         }
+
+        return $headings;
     }
 
     /**
@@ -346,6 +361,27 @@ final readonly class DocumentStructure
             }
             $table->parentNode?->insertBefore($region, $table);
             $region->appendChild($table);
+        }
+    }
+
+    /**
+     * A task list's boxes ("- [x] Done", "- [ ] Not yet") are a state, not a control: disabled, named by
+     * their state in the item's language ("Done", "Still to come"), and their item says it with data-task
+     * (done, open), so a theme can draw the state without guessing.
+     */
+    private function taskItems(\Dom\HTMLElement $body, ?string $locale): void
+    {
+        foreach ($body->querySelectorAll('input[type="checkbox"]') as $box) {
+            $done = $box->hasAttribute('checked');
+            $state = $done ? $this->translator->trans('Done', [], self::DOMAIN, $locale) : $this->translator->trans('Still to come', [], self::DOMAIN, $locale);
+            $box->setAttribute('disabled', '');
+            $box->setAttribute('aria-label', $state);
+
+            if ($box->parentElement instanceof \Dom\Element && 'li' === strtolower($box->parentElement->tagName)) {
+                $box->parentElement->setAttribute('data-task', $done ? 'done' : 'open');
+                // For a theme to write the state beside the box: an attribute, so feeds and excerpts never carry it
+                $box->parentElement->setAttribute('data-state', $state);
+            }
         }
     }
 

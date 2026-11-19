@@ -109,11 +109,13 @@ final class Formatter implements ResetInterface
         $html = $this->sanitizer($context->profile)->sanitize($html);
 
         // After the sanitiser: the structure every theme gets (headings' links, notes, tables, code)
+        $headings = [];
+
         if ($this->structure instanceof DocumentStructure) {
-            $html = $this->structure->apply($html, $context);
+            ['html' => $html, 'headings' => $headings] = $this->structure->apply($html, $context);
         }
 
-        return new CompiledText($html, $context->shortcodes(), $context->profile->name, $format);
+        return new CompiledText($html, $context->shortcodes(), $context->profile->name, $format, $headings);
     }
 
     /**

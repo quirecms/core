@@ -128,10 +128,24 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     }
 
     /**
+     * The parts of a date a design asks for, as ICU skeletons: each language orders and writes them its own way.
+     */
+    private const array PARTS = [
+        'month-year' => 'yMMMM',      // November 2026, November 2026, ноември 2026
+        'month' => 'MMM',             // Nov
+        'day-month' => 'MMMMd',       // November 13, 13. November
+        'day-month-short' => 'MMMd',  // Nov 13
+        'weekday-day' => 'EEEMMMd',   // Wed, Nov 11; Mi., 11. Nov.
+        'day' => 'dd',                // 03, 11
+    ];
+
+    /**
      * `{{ post.publishedAt|quire_date }}`: a date written the way the page's language writes it, e.g.
      * "October 22, 2026" in English ("en" is ICU's American English) and "22. Oktober 2026" in German.
      *
-     * @param string $style "long" (default), "medium", "short" or "full"
+     * Styles: "long" (default), "medium", "short" or "full"; with the time, "long-time" ("November 12,
+     * 2026 at 6:04 PM"); or parts of it, "month-year", "month", "day-month", "day-month-short",
+     * "weekday-day" and "day", in the language's own order.
      */
     public function date(?\DateTimeInterface $date, string $style = 'long'): string
     {
@@ -141,7 +155,21 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
 
         $styles = ['full' => \IntlDateFormatter::FULL, 'long' => \IntlDateFormatter::LONG, 'medium' => \IntlDateFormatter::MEDIUM, 'short' => \IntlDateFormatter::SHORT];
         $locale = $this->requests->getCurrentRequest()?->getLocale() ?? $this->settings->getString('site.locale');
-        $formatter = new \IntlDateFormatter($locale, $styles[$style] ?? throw new RuntimeError(\sprintf('Unknown date style "%s". Use "full", "long", "medium" or "short".', $style)), \IntlDateFormatter::NONE, date_default_timezone_get());
+
+        if (isset(self::PARTS[$style])) {
+            $pattern = new \IntlDatePatternGenerator($locale)->getBestPattern(self::PARTS[$style]);
+            $formatter = new \IntlDateFormatter($locale, \IntlDateFormatter::NONE, \IntlDateFormatter::NONE, date_default_timezone_get(), null, false === $pattern ? null : $pattern);
+
+            return (string) $formatter->format($date);
+        }
+
+        if ('long-time' === $style) {
+            $formatter = new \IntlDateFormatter($locale, \IntlDateFormatter::LONG, \IntlDateFormatter::SHORT, date_default_timezone_get());
+
+            return (string) $formatter->format($date);
+        }
+
+        $formatter = new \IntlDateFormatter($locale, $styles[$style] ?? throw new RuntimeError(\sprintf('Unknown date style "%s". Use "full", "long", "medium", "short", "long-time" or one of "%s".', $style, implode('", "', array_keys(self::PARTS)))), \IntlDateFormatter::NONE, date_default_timezone_get());
 
         return (string) $formatter->format($date);
     }

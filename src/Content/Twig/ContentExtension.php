@@ -27,6 +27,7 @@ final class ContentExtension extends AbstractExtension
             new TwigFunction('quire_excerpt', [ContentRuntime::class, 'excerpt']),
             new TwigFunction('quire_latest', [ContentRuntime::class, 'latest']),
             new TwigFunction('quire_history', [ContentRuntime::class, 'history']),
+            new TwigFunction('quire_headings', [ContentRuntime::class, 'headings']),
         ];
     }
 }

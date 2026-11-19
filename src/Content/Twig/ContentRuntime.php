@@ -43,6 +43,19 @@ final readonly class ContentRuntime implements RuntimeExtensionInterface
     }
 
     /**
+     * The item's sections, for an "On this page" list: each heading of its text (h2 to h4) the renderer
+     * gave an id, from the same render as `quire_body()` (cached with it), so the two never disagree.
+     *
+     *     {% for heading in quire_headings(post) %}<a href="#{{ heading.id }}">{{ heading.text }}</a>{% endfor %}
+     *
+     * @return list<array{id: string, text: string, level: int}>
+     */
+    public function headings(Content $content, int $deepest = 4): array
+    {
+        return array_values(array_filter($this->renderer->headings($content), static fn (array $heading): bool => $heading['level'] <= $deepest));
+    }
+
+    /**
      * The latest published items, from the cache, for pages many visitors and bots hit such as
      * "page not found": `{% for post in quire_latest(3) %}`. Only what visitors may see.
      *

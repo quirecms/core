@@ -7,6 +7,7 @@ namespace Quire\Content;
 use Quire\Content\Revision\PendingRevision;
 use Quire\Formatter\CompiledText;
 use Quire\Formatter\Formatter;
+use Quire\Formatter\Internal\ReaderText;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Contracts\Cache\CacheInterface;
 use Symfony\Contracts\Cache\ItemInterface;
@@ -60,10 +61,21 @@ final readonly class ContentRenderer
      * A plain-text summary (escape it when printing): the item's excerpt, or the start of its teaser or
      * body, cut at a word boundary.
      */
+    /**
+     * The item's sections, for "On this page": the headings the renderer gave anchors, from the same
+     * render as its body (and cached with it).
+     *
+     * @return list<array{id: string, text: string, level: int}>
+     */
+    public function headings(Content $content, string $profile = 'content'): array
+    {
+        return $this->compiled($content, $profile)['body']->headings;
+    }
+
     public function excerpt(Content $content, int $length = 200, string $profile = 'content'): string
     {
         $compiled = $this->compiled($content, $profile);
-        $text = $content->excerpt ?? html_entity_decode(strip_tags(($compiled['teaser'] ?? $compiled['body'])->htmlWithoutShortcodes()), \ENT_QUOTES | \ENT_HTML5, 'UTF-8');
+        $text = $content->excerpt ?? ReaderText::ofHtml(($compiled['teaser'] ?? $compiled['body'])->html);
         $text = trim((string) preg_replace('/\s+/u', ' ', $text));
 
         if (mb_strlen($text) <= $length) {
@@ -94,7 +106,7 @@ final readonly class ContentRenderer
             $key .= \sprintf('.pending.%s.%d', str_replace('-', '', $pending->id), $pending->version);
         }
 
-        /** @var array{body: array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string}, teaser: ?array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string}} $cached */
+        /** @var array{body: array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>}, teaser: ?array{html: string, shortcodes: list<array{name: string, attributes: array<string, string|true>, source: string}>, profile: string, format: string, headings: list<array{id: string, text: string, level: int}>}} $cached */
         $cached = $this->cache->get($key, function (ItemInterface $item) use ($content, $profile): array {
             // Entries for older versions are never read again; let them expire.
             $item->expiresAfter(30 * 24 * 3600);

@@ -270,6 +270,53 @@ final class ContentQuery implements \IteratorAggregate
     }
 
     /**
+     * The item's ancestors in a hierarchical type, the top one first: a breadcrumb.
+     *
+     *     {% for crumb in quire_content('page').ancestorsOf(page) %}…{% endfor %}
+     *
+     * Like every query, only those the viewer may see: one that isn't published is left out.
+     */
+    public function ancestorsOf(Content $item): self
+    {
+        $query = $this->withCondition([
+            'sql' => 'c.id IN (WITH RECURSIVE up (id, depth) AS (SELECT parent_id, 1 FROM quire.content WHERE id = CAST(? AS uuid) AND parent_id IS NOT NULL UNION ALL SELECT x.parent_id, up.depth + 1 FROM quire.content x JOIN up ON x.id = up.id WHERE x.parent_id IS NOT NULL AND up.depth < 64) SELECT id FROM up)',
+            'params' => [$item->id],
+        ]);
+        // A path holds its ancestors' paths: the shortest is the top one
+        $query->orders = [['sql' => 'length(c.path)', 'direction' => 'ASC']];
+
+        return $query->record('ancestorsOf', [$item->id]);
+    }
+
+    /**
+     * The other items with the same parent (or, for a top-level item, the other top-level ones).
+     */
+    public function siblingsOf(Content $item): self
+    {
+        return $this->childrenOf($item->parentId)
+            ->withCondition(['sql' => 'c.id <> CAST(? AS uuid)', 'params' => [$item->id]])
+            ->record('siblingsOf', [$item->id]);
+    }
+
+    /**
+     * Items published after this one, the next first: `quire_content('post').newerThan(post).first()`
+     * is the newer neighbor. Ties in the date are broken by the id, so none is skipped or repeated.
+     */
+    public function newerThan(Content $item): self
+    {
+        return $this->neighbors($item, '>', 'ASC')->record('newerThan', [$item->id]);
+    }
+
+    /**
+     * Items published before this one, the closest first: `….olderThan(post).first()` is the older
+     * neighbor.
+     */
+    public function olderThan(Content $item): self
+    {
+        return $this->neighbors($item, '<', 'DESC')->record('olderThan', [$item->id]);
+    }
+
+    /**
      * Only items that match the search terms, best matches first unless the query sets an order.
      *
      *     ->search('markdown editor')                  // both words
@@ -777,6 +824,23 @@ final class ContentQuery implements \IteratorAggregate
             \is_array($value) => array_map(self::decode(...), $value),
             default => $value,
         };
+    }
+
+    /**
+     * @param 'ASC'|'DESC' $direction
+     */
+    private function neighbors(Content $item, string $operator, string $direction): self
+    {
+        $query = $item->publishedAt instanceof \DateTimeImmutable
+            ? $this->withCondition([
+                'sql' => '(c.published_at, c.id) '.$operator.' (CAST(? AS timestamptz), CAST(? AS uuid))',
+                'params' => [$item->publishedAt->format('Y-m-d\TH:i:s.uP'), $item->id],
+            ])
+            : $this->withCondition(['sql' => 'FALSE', 'params' => []]);
+        // The query adds the id after the date, in the same direction: ties are broken the same way
+        $query->orders = [['sql' => 'c.published_at', 'direction' => $direction]];
+
+        return $query;
     }
 
     /**

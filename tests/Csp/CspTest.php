@@ -161,6 +161,24 @@ final class CspTest extends TestCase
         self::assertNotSame($nonce, $csp->nonce(new Request()));
     }
 
+    public function testLoadsOnlyFromThisSiteFollowsThePolicySent(): void
+    {
+        self::assertTrue(new Csp(new NoThirdPartySources())->loadsOnlyFromThisSite(), 'Core\'s own policy: the site\'s own, data: and nothing else.');
+        self::assertTrue(new Csp(new NoThirdPartySources())->loadsOnlyFromThisSite(PolicyKind::Private));
+
+        self::assertFalse(new Csp($this->thirdParty(['script-src' => ['https://www.googletagmanager.com']]))->loadsOnlyFromThisSite(), 'A service quire/privacy declares is in every visitor\'s policy, consented or not.');
+        self::assertFalse(new Csp(new NoThirdPartySources(), siteSources: ['img-src' => ['https://images.example.com']])->loadsOnlyFromThisSite());
+        self::assertFalse(new Csp(new NoThirdPartySources(), siteSources: ['img-src' => ['https:']])->loadsOnlyFromThisSite(), 'A scheme allows every site.');
+        self::assertFalse(new Csp(new NoThirdPartySources(), siteSources: ['script-src' => ["'strict-dynamic'"]])->loadsOnlyFromThisSite());
+        self::assertTrue(new Csp(new NoThirdPartySources(), siteSources: ['style-src' => ["'unsafe-inline'"], 'script-src' => ["'sha256-abc+/='"]])->loadsOnlyFromThisSite(), 'Inline code is the page\'s own.');
+        self::assertTrue(new Csp(new NoThirdPartySources(), siteSources: ['frame-ancestors' => ['https://partner.example']])->loadsOnlyFromThisSite(), 'Who may frame the page isn\'t what it loads.');
+
+        self::assertFalse(new Csp(new NoThirdPartySources(), reportOnly: true)->loadsOnlyFromThisSite(), 'A report-only policy blocks nothing.');
+        self::assertFalse(new Csp(new NoThirdPartySources(), reportUri: 'https://reports.example/csp')->loadsOnlyFromThisSite(), 'Reports to another site carry the page\'s address.');
+        self::assertTrue(new Csp(new NoThirdPartySources(), reportUri: '/_quire/csp-report')->loadsOnlyFromThisSite());
+        self::assertFalse(new Csp(new NoThirdPartySources(), reportUri: '//reports.example/csp')->loadsOnlyFromThisSite());
+    }
+
     /**
      * @param array<string, list<string>> $sources
      */

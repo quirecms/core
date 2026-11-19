@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Twig;
 
+use Quire\Theme\Navigation\Navigation;
 use Twig\DeprecatedCallableInfo;
 use Twig\Extension\AbstractExtension;
 use Twig\Extension\GlobalsInterface;
@@ -40,6 +41,10 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_setting', [ThemeRuntime::class, 'setting']),
             new TwigFunction('quire_extension_enabled', [ThemeRuntime::class, 'extensionEnabled']),
             new TwigFunction('quire_asset', [ThemeRuntime::class, 'asset']),
+            // The site's navigation: core's top-level pages, or a menus extension's
+            new TwigFunction('quire_navigation', [Navigation::class, 'items']),
+            // Whether the page loads nothing from other sites: the policy sent, its head, the theme's templates
+            new TwigFunction('quire_loads_only_from_this_site', [ThemeRuntime::class, 'loadsOnlyFromThisSite'], ['needs_context' => true]),
             new TwigFunction('quire_head', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html']]),
             // The name before 0.3, when the head held only the SEO tags.
             new TwigFunction('quire_seo', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html'], 'deprecation_info' => new DeprecatedCallableInfo('quire/core', '0.3', 'quire_head')]),

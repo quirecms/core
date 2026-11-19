@@ -66,6 +66,10 @@ final readonly class CspListener
             }
         }
 
+        if (\in_array($kind, [PolicyKind::Page, PolicyKind::Private], true) && $this->csp->loadsOnlyFromThisSite($kind)) {
+            $this->dropCrossSiteHints($request, $response);
+        }
+
         $policy = $this->csp->policy($kind);
         $hashes = $request->attributes->get(Csp::HASHES_ATTRIBUTE);
 
@@ -99,6 +103,80 @@ final readonly class CspListener
         }
 
         $response->headers->set('Content-Security-Policy', $policy->header());
+    }
+
+    /**
+     * A page whose policy lets it load only from this site (Csp::loadsOnlyFromThisSite(), which a
+     * theme may say so by) never makes the browser connect elsewhere through a Link header either: a
+     * cross-site preconnect, dns-prefetch, prefetch, preload or modulepreload, which policies don't
+     * reliably govern, is dropped, and whoever added it is told in the log.
+     */
+    private function dropCrossSiteHints(Request $request, Response $response): void
+    {
+        $values = $response->headers->all('link');
+
+        if ([] === $values) {
+            return;
+        }
+        $kept = [];
+
+        foreach ($values as $value) {
+            foreach ($this->linkValues((string) $value) as $link) {
+                if (1 === preg_match('/;\s*rel\s*=\s*"?([^";,]+)/i', $link, $rel)
+                    && [] !== array_intersect(explode(' ', (string) preg_replace('/\s+/', ' ', strtolower(trim($rel[1])))), ['preconnect', 'dns-prefetch', 'prefetch', 'preload', 'modulepreload'])
+                    && 1 === preg_match('/^\s*<([^>]*)>/', $link, $target)
+                    && $this->otherSite($target[1], $request)
+                ) {
+                    $this->logger->warning('A Link header of "{route}" made the browser connect to another site ({link}), on a page that loads only from this site: dropped. Serve the file from the site, or declare the service through quire/privacy.', [
+                        'route' => $request->attributes->get('_route'),
+                        'link' => trim($link),
+                    ]);
+
+                    continue;
+                }
+                $kept[] = trim($link);
+            }
+        }
+
+        $response->headers->remove('link');
+
+        if ([] !== $kept) {
+            $response->headers->set('Link', implode(', ', $kept));
+        }
+    }
+
+    /**
+     * The links of one Link header: split on the commas between them, not in their <URL>.
+     *
+     * @return list<string>
+     */
+    private function linkValues(string $header): array
+    {
+        preg_match_all('/<[^>]*>[^,<]*/', $header, $matches);
+
+        return array_values(array_filter(array_map(trim(...), $matches[0]), static fn (string $link): bool => '' !== $link));
+    }
+
+    /**
+     * Whether a hint's target may be another site. Allowed only: a path on the site (exactly one "/",
+     * then neither "/" nor "\"), or an absolute http(s) URL of the request's own host, without spaces,
+     * tabs, line breaks or backslashes. Anything else counts as another site, since browsers read
+     * "\\host" and "/\host" as other sites and drop tabs and line breaks from URLs.
+     */
+    private function otherSite(string $url, Request $request): bool
+    {
+        if (1 === preg_match('/[\x00-\x20\\\\]/', $url)) {
+            return true;
+        }
+        if (1 === preg_match('#^/[^/]#', $url)) {
+            return false;
+        }
+        if (1 !== preg_match('#^https?://#i', $url)) {
+            return true;
+        }
+        $host = parse_url($url, \PHP_URL_HOST);
+
+        return !\is_string($host) || strtolower($host) !== strtolower($request->getHost());
     }
 
     private function kind(Request $request, Response $response): ?PolicyKind

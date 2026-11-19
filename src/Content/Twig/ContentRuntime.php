@@ -9,6 +9,7 @@ use Quire\Content\ContentRenderer;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Query\ContentQuery;
 use Quire\Content\Query\Internal\QueryRunner;
+use Quire\Content\Query\LatestPublished;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Twig\Extension\RuntimeExtensionInterface;
 
@@ -22,7 +23,19 @@ final readonly class ContentRuntime implements RuntimeExtensionInterface
         private QueryRunner $queries,
         private Permalinks $permalinks,
         private ContentRenderer $renderer,
+        private LatestPublished $latest,
     ) {
+    }
+
+    /**
+     * The latest published items, from the cache, for pages many visitors and bots hit such as
+     * "page not found": `{% for post in quire_latest(3) %}`. Only what visitors may see.
+     *
+     * @return list<Content>
+     */
+    public function latest(int $limit = 5): array
+    {
+        return $this->latest->items($limit);
     }
 
     /**

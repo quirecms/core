@@ -40,6 +40,7 @@ final readonly class Slots
         'content.footer' => 'At the end of a content item, e.g. comments. Context: content.',
         'sidebar' => 'The sidebar, when the theme has one. No context.',
         'footer' => 'The site footer. No context.',
+        'error404.suggestions' => 'On the "page not found" page: pages the visitor may have meant, as links, never a redirect (an SEO extension fills it). Context: path, the requested path (print it escaped, never raw). A theme renders it only when it\'s filled.',
     ];
 
     /** @var array<string, list<array{template: ?string, class: ?string, owner: string}>> */

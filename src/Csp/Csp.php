@@ -95,6 +95,26 @@ final readonly class Csp
     }
 
     /**
+     * Whether pages of this kind load nothing from other sites, by the very policy their header sends,
+     * so a theme's "this site loads nothing from other companies" can't drift from it (the default
+     * theme's footer). True only when the policy is enforced (not report-only), every fetch directive
+     * allows only the page's own site (`'self'`, `data:`, `blob:`, `'none'`, nonces, hashes and inline
+     * code, never another host, a scheme such as `https:`, `*` or `'strict-dynamic'`), and reports go
+     * nowhere else (no `report-to`, and `report-uri` a path on the site). It covers what Quire sends;
+     * a proxy that replaces the header isn't covered.
+     *
+     * What else a page makes the browser fetch or connect to, which no policy governs (a cross-site
+     * `preconnect`), is the theme's: `quire_loads_only_from_this_site()` checks the page's head and the
+     * active theme's templates too.
+     *
+     * @api
+     */
+    public function loadsOnlyFromThisSite(PolicyKind $kind = PolicyKind::Page): bool
+    {
+        return !$this->reportOnly && $this->policy($kind)->loadsOnlyFromItsSite();
+    }
+
+    /**
      * Whether the site's pages get their policy as "Content-Security-Policy-Report-Only": the browser
      * reports what it would block, and blocks nothing ("quire.csp.mode: report-only"), to try a policy
      * out on a live site.

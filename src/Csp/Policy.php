@@ -267,4 +267,48 @@ final readonly class Policy implements \Stringable
             throw new \InvalidArgumentException(\sprintf('"%s" isn\'t a Content-Security-Policy source: a keyword such as "\'self\'", a scheme such as "https:", or a host such as "https://cdn.example.com".', $source));
         }
     }
+
+    /**
+     * Whether this policy lets a page load only from its own site: it has `default-src` (which every
+     * fetch directive it leaves out falls back to), every fetch directive allows only the page's own
+     * site (`'self'`, `data:`, `blob:`, `'none'`, nonces, hashes and inline code; never another host,
+     * a scheme such as `https:`, `*` or `'strict-dynamic'`), and reports go nowhere else (no
+     * `report-to`, and `report-uri` a path on the site). Whether it's enforced is the caller's
+     * ({@see Csp::loadsOnlyFromThisSite()}).
+     */
+    public function loadsOnlyFromItsSite(): bool
+    {
+        if (!$this->has('default-src') || $this->has('report-to')) {
+            return false;
+        }
+
+        foreach ($this->sources('report-uri') as $uri) {
+            if (!str_starts_with($uri, '/') || str_starts_with($uri, '//')) {
+                return false;
+            }
+        }
+
+        foreach ($this->directives() as $directive => $sources) {
+            if (!self::isFetchDirective($directive)) {
+                continue;
+            }
+
+            foreach ($sources as $source) {
+                if (!$this->ownSite($source)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /** A source that allows only what the page itself holds or its own site serves */
+    private function ownSite(string $source): bool
+    {
+        $source = strtolower($source);
+
+        return \in_array($source, ["'self'", 'data:', 'blob:', "'none'", "'unsafe-inline'", "'unsafe-eval'", "'wasm-unsafe-eval'", "'unsafe-hashes'", "'report-sample'"], true)
+            || 1 === preg_match("/^'(?:nonce|sha256|sha384|sha512)-[A-Za-z0-9+\\/_=-]+'\\z/", $source);
+    }
 }

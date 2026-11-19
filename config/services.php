@@ -32,6 +32,8 @@ use Quire\Settings\SettingsTransfer;
 use Quire\Storage\ObjectStore;
 use Quire\Storage\StorageDisks;
 use Quire\Theme\ContentPreviews;
+use Quire\Theme\Navigation\Internal\TopLevelPages;
+use Quire\Theme\Navigation\NavigationProviderInterface;
 use Quire\User\Preference\UserPreferences;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\HttpFoundation\Session\Storage\Handler\PdoSessionHandler;
@@ -61,6 +63,7 @@ return static function (ContainerConfigurator $container): void {
             // Values, not services.
             '../src/Csp/{Policy,PolicyKind}.php',
             '../src/Theme/{ThemeProblem,TemplateUrls}.php',
+            '../src/Theme/Navigation/NavigationItem.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',
@@ -136,6 +139,9 @@ return static function (ContainerConfigurator $container): void {
     $services->alias(ThirdPartySourcesInterface::class, NoThirdPartySources::class);
     // Trusted shortcodes' embeds as they are, until quire/privacy replaces this with click-to-load.
     // The structure the renderer gives every theme (headings' links, notes, tables, code), after the sanitiser
+    // The site's navigation: core's provider, which a menus extension decorates
+    $services->set(TopLevelPages::class);
+    $services->alias(NavigationProviderInterface::class, TopLevelPages::class);
     // One per process: the renderer's mark for its own ids, which MarkdownFormat and DocumentStructure share
     $services->set(StructureMark::class);
     $services->set(DocumentStructure::class);

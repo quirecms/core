@@ -131,6 +131,55 @@ final class CspListenerTest extends TestCase
         self::assertSame(Csp::STORED_FILE, $this->respond($this->request([Csp::ATTRIBUTE => 'stored-file']), csp: $csp)->headers->get('Content-Security-Policy'), 'Uploads are always sandboxed.');
     }
 
+    public function testAPageThatLoadsOnlyFromThisSiteSendsNoCrossSiteHint(): void
+    {
+        $logger = new class extends AbstractLogger {
+            /** @var list<string> */
+            public array $logged = [];
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                $this->logged[] = \is_string($context['link'] ?? null) ? $context['link'] : '';
+            }
+        };
+        // As an extension would add them
+        $response = new Response('<!doctype html><title>Page</title>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+        $response->headers->set('Link', ['<https://fonts.example.com>; rel=preconnect', '</build/app.css>; rel=preload; as=style, <https://cdn.example.net/a.js>; rel="modulepreload"', '<https://example.org/about>; rel=canonical']);
+
+        $sent = $this->respond($this->request(), $response, logger: $logger);
+
+        self::assertSame(['</build/app.css>; rel=preload; as=style, <https://example.org/about>; rel=canonical'], $sent->headers->all('link'), 'The site\'s own hints and links that aren\'t hints stay.');
+        self::assertSame(['<https://fonts.example.com>; rel=preconnect', '<https://cdn.example.net/a.js>; rel="modulepreload"'], $logger->logged);
+
+        // Only a site path or the site's own host is kept: "\\host", "/\host", URLs with breaks, other schemes go
+        $logger = new class extends AbstractLogger {
+            /** @var list<string> */
+            public array $logged = [];
+
+            public function log($level, \Stringable|string $message, array $context = []): void
+            {
+                $this->logged[] = \is_string($context['link'] ?? null) ? $context['link'] : '';
+            }
+        };
+        $response = new Response('<!doctype html><title>Page</title>', 200, ['Content-Type' => 'text/html; charset=UTF-8']);
+        $response->headers->set('Link', ['<\\evil.example/x.css>; rel=preload', '</\evil.example/y.js>; rel=preload', "<https://evil.example\t/z>; rel=prefetch", '<ftp://evil.example/f>; rel=prefetch', '<https://localhost/own.css>; rel=preload', '</own.js>; rel=modulepreload']);
+        $request = $this->request();
+        $request->headers->set('Host', 'localhost');
+        $sent = $this->respond($request, $response, logger: $logger);
+        self::assertSame(['<https://localhost/own.css>; rel=preload, </own.js>; rel=modulepreload'], $sent->headers->all('link'));
+        self::assertSame(['<\\evil.example/x.css>; rel=preload', '</\evil.example/y.js>; rel=preload', "<https://evil.example\t/z>; rel=prefetch", '<ftp://evil.example/f>; rel=prefetch'], $logger->logged);
+
+        // A page that loads from other sites anyway (a service declared through quire/privacy) keeps them
+        $csp = new Csp(new class implements \Quire\Csp\ThirdPartySourcesInterface {
+            public function sources(): array
+            {
+                return ['script-src' => ['https://cdn.example.net']];
+            }
+        });
+        $response = new Response('<!doctype html><title>Page</title>', 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Link' => '<https://cdn.example.net/a.js>; rel=modulepreload']);
+        self::assertSame(['<https://cdn.example.net/a.js>; rel=modulepreload'], $this->respond($this->request(), $response, $csp)->headers->all('link'));
+    }
+
     /**
      * @param array<string, mixed> $attributes
      */

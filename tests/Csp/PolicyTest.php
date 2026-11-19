@@ -137,4 +137,12 @@ final class PolicyTest extends TestCase
     {
         self::assertSame($allowed, Policy::allows($source, $url));
     }
+
+    public function testItLoadsOnlyFromItsSiteOnlyWithADefaultForWhatItLeavesOut(): void
+    {
+        self::assertFalse(new Policy(['script-src' => ["'self'"]])->loadsOnlyFromItsSite(), 'Without default-src, img-src and the rest allow any site.');
+        self::assertTrue(new Policy(['default-src' => ["'self'"], 'script-src' => ["'self'", "'nonce-abc'"], 'img-src' => ["'self'", 'data:']])->loadsOnlyFromItsSite());
+        self::assertFalse(new Policy(['default-src' => ['*']])->loadsOnlyFromItsSite());
+        self::assertFalse(new Policy(['default-src' => ["'self'"], 'report-to' => ['endpoint']])->loadsOnlyFromItsSite());
+    }
 }

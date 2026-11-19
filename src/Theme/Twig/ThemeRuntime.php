@@ -9,6 +9,7 @@ use Quire\Head\Internal\HeadRenderer;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
 use Quire\Theme\Exception\AssetNotFoundException;
+use Quire\Theme\Internal\ThemeLoads;
 use Quire\Theme\Slots;
 use Quire\Theme\ThemeAssets;
 use Quire\Theme\ThemePreview;
@@ -35,6 +36,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
         private array $extensions,
         private RequestStack $requests,
         private ThemePreview $preview,
+        private ThemeLoads $loads,
     ) {
     }
 
@@ -97,6 +99,18 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     public function head(array $context): string
     {
         return $this->head->render($context);
+    }
+
+    /**
+     * `{% if quire_loads_only_from_this_site() %}This site loads nothing from other companies.{% endif %}`:
+     * decided by the very policy the page's header sends, its head and the theme's own templates, so
+     * the sentence can't drift from what browsers do.
+     *
+     * @param array<string, mixed> $context
+     */
+    public function loadsOnlyFromThisSite(array $context): bool
+    {
+        return $this->loads->onlyFromThisSite($context);
     }
 
     /**

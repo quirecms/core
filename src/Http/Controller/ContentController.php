@@ -18,6 +18,7 @@ use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\Viewer;
 use Quire\Settings\Settings;
+use Quire\Theme\Navigation\Navigation;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -99,6 +100,9 @@ final readonly class ContentController
         if ($event->isDenied()) {
             throw new NotFoundHttpException('A listener denied viewing the item.');
         }
+
+        // Which item the page shows, for what's read around it (the navigation's current item)
+        $request->attributes->set(Navigation::CONTENT_ATTRIBUTE, $content);
 
         $template = $this->twig->resolveTemplate([
             \sprintf('content/%s/%s.html.twig', $content->type, $content->slug),

@@ -21,6 +21,7 @@ final readonly class ExtensionManifest
      * @param array<string, string> $importmap   JavaScript (or CSS) packages its scripts import, with their versions,
      *                                           e.g. ["@hotwired/turbo" => "8.0.23"]
      * @param string|null           $screenshot  For themes: the path of a picture of the site with the theme, in the package
+     * @param list<string>          $supports    For themes: what they draw beyond the templates every theme has, e.g. "edition"
      */
     public function __construct(
         public string $id,
@@ -37,6 +38,7 @@ final readonly class ExtensionManifest
         public ?string $parent = null,
         public array $importmap = [],
         public ?string $screenshot = null,
+        public array $supports = [],
     ) {
     }
 

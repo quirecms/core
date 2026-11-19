@@ -48,8 +48,9 @@ final readonly class PermalinkResolver
                 continue;
             }
 
-            // The homepage may show the listing: then it has one URL, the homepage's.
-            return $path === $this->permalinks->listingPath($type) ? Resolution::listing($type) : Resolution::redirect($this->permalinks->listingUrl($type));
+            // The homepage may show the listing: then it has one URL, the homepage's. That follows a setting,
+            // not a move, so the redirect is temporary: a browser that kept it would loop once the setting changes.
+            return $path === $this->permalinks->listingPath($type) ? Resolution::listing($type) : Resolution::redirect($this->permalinks->listingUrl($type), 302);
         }
 
         $patterns = $this->permalinks->patterns();
@@ -58,7 +59,7 @@ final readonly class PermalinkResolver
             $item = $this->find($type, $pattern, $normalized, earlier: false);
 
             if ($item instanceof Content) {
-                return $this->permalinks->path($item) === $path ? Resolution::content($item) : Resolution::redirect($this->permalinks->url($item));
+                return $this->permalinks->path($item) === $path ? Resolution::content($item) : $this->toItem($item);
             }
         }
 
@@ -67,7 +68,7 @@ final readonly class PermalinkResolver
             $item = $this->viewer->canPreviewType($type) ? $this->find($type, $pattern, $normalized, earlier: false, drafts: true) : null;
 
             if ($item instanceof Content) {
-                return $this->permalinks->path($item) === $path ? Resolution::content($item) : Resolution::redirect($this->permalinks->url($item));
+                return $this->permalinks->path($item) === $path ? Resolution::content($item) : $this->toItem($item);
             }
         }
 
@@ -86,7 +87,7 @@ final readonly class PermalinkResolver
             $item = $this->find($type, $pattern, $normalized, earlier: true);
 
             if ($item instanceof Content) {
-                return Resolution::redirect($this->permalinks->url($item));
+                return $this->toItem($item);
             }
         }
 
@@ -94,7 +95,7 @@ final readonly class PermalinkResolver
             $item = $this->find($type, $pattern, $normalized, earlier: false) ?? $this->find($type, $pattern, $normalized, earlier: true);
 
             if ($item instanceof Content) {
-                return Resolution::redirect($this->permalinks->url($item));
+                return $this->toItem($item);
             }
         }
 
@@ -176,5 +177,16 @@ final readonly class PermalinkResolver
         }
 
         return $patterns;
+    }
+
+    /**
+     * To an item's current URL: for good (an old address, another spelling), except to the homepage, where
+     * a page is only while the homepage setting says so.
+     */
+    private function toItem(Content $item): Resolution
+    {
+        $url = $this->permalinks->url($item);
+
+        return Resolution::redirect($url, '/' === $this->permalinks->path($item) ? 302 : 301);
     }
 }

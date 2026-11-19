@@ -3,7 +3,8 @@
     templates/content/list.html.twig, or for one type with templates/content/<type>/list.html.twig.
 
     Variables: type (the content type), page (a ContentPage: iterate it for the items; page.page,
-    page.pageCount), is_home (whether it's the homepage), previous_url, next_url (null when there's no
+    page.pageCount), is_home (whether it's the homepage), edition (when the homepage is the type's edition:
+    site.homepage = edition), previous_url, next_url (null when there's no
     such page), canonical_url, site, theme. Each item is shown with its card: content/_card.html.twig,
     or content/<type>/_card.html.twig.
 #}

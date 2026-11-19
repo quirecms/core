@@ -10,6 +10,7 @@ use Quire\Content\Content;
 use Quire\Content\ContentRenderer;
 use Quire\Content\ContentRepository;
 use Quire\Content\Event\ContentViewing;
+use Quire\Content\Permalink\Internal\PermalinkSettings;
 use Quire\Content\Permalink\PermalinkResolver;
 use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Permalink\Resolution;
@@ -63,9 +64,10 @@ final readonly class ContentController
 
     public function home(Request $request): Response
     {
-        return match ($this->settings->getString('site.homepage')) {
+        return match ($this->permalinks->homepage()) {
             'page' => $this->homepagePage($request),
             'route' => $this->homepageRoute($request),
+            'edition' => $this->homepageEdition($request),
             default => $this->homepageListing($request),
         };
     }
@@ -128,7 +130,7 @@ final readonly class ContentController
         return $response;
     }
 
-    private function listing(Request $request, string $type, bool $isHome): Response
+    private function listing(Request $request, string $type, bool $isHome, bool $edition = false): Response
     {
         if (!$this->viewer->canViewType($type)) {
             throw $this->denied(ContentAbilities::name($type, 'view'));
@@ -169,7 +171,9 @@ final readonly class ContentController
             'type' => $definition,
             'page' => $items,
             'is_home' => $isHome,
-            'canonical_url' => $this->permalinks->listingUrl($type, $page, UrlGeneratorInterface::ABSOLUTE_URL),
+            'edition' => $edition,
+            // The edition is its own page, not the list's first: the list keeps its own address
+            'canonical_url' => $edition ? $this->permalinks->homeUrl(UrlGeneratorInterface::ABSOLUTE_URL) : $this->permalinks->listingUrl($type, $page, UrlGeneratorInterface::ABSOLUTE_URL),
             'previous_url' => $items->hasPreviousPage() ? $this->permalinks->listingUrl($type, $page - 1) : null,
             'next_url' => $items->hasNextPage() ? $this->permalinks->listingUrl($type, $page + 1) : null,
         ]));
@@ -184,6 +188,34 @@ final readonly class ContentController
         }
 
         return $this->listing($request, $type, isHome: true);
+    }
+
+    /**
+     * The homepage as an edition of a type's newest items (a theme lays it out: the default theme leads
+     * with the newest post), with the type's whole list at its own address from page 1. Its pages are
+     * the list's, so "/?page=2" goes there.
+     */
+    private function homepageEdition(Request $request): Response
+    {
+        $type = $this->settings->getString('site.homepage_listing');
+
+        if (!$this->types->has($type) || !$this->types->get($type)->has(Capability::LISTABLE)) {
+            return $this->welcome(\sprintf('The homepage should be an edition of "%s", which isn\'t a content type with a list.', $type));
+        }
+        if (null === $this->permalinks->configuredListingPath($type)) {
+            return $this->welcome(\sprintf('The homepage should be an edition of "%1$s", whose list has no address of its own: set one with "%2$s%1$s", e.g. /blog.', $type, PermalinkSettings::LISTING_PREFIX));
+        }
+
+        $requested = $request->query->get('page');
+
+        if (null !== $requested) {
+            $page = 1 === preg_match('/^[1-9][0-9]{0,8}$/', $requested) ? (int) $requested : 1;
+
+            // Temporary: it follows the homepage setting, and a kept 301 would loop if the site went back to "listing"
+            return $this->redirect($request, $page > 1 ? $this->permalinks->listingUrl($type, $page) : $this->permalinks->homeUrl(), 302, keepQuery: false);
+        }
+
+        return $this->listing($request, $type, isHome: true, edition: true);
     }
 
     private function homepagePage(Request $request): Response

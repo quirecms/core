@@ -46,10 +46,15 @@ final readonly class ListPermalinksCommand
 
         $io->table(['Type', 'Items', 'List'], $rows);
 
-        $homepage = $this->settings->getString('site.homepage');
+        $homepage = $this->permalinks->homepage();
+
+        if ($homepage !== $this->settings->getString('site.homepage')) {
+            $io->warning('The homepage is set to be an edition, but the active theme draws none (it doesn\'t declare "edition" in extra.quire.theme.supports), so the homepage is the list.');
+        }
         $io->text(\sprintf('Homepage: %s', match ($homepage) {
             'page' => \sprintf('the page "%s"', \is_string($page = $this->settings->get('site.homepage_page')) ? $page : ''),
             'route' => \sprintf('the route "%s"', \is_string($route = $this->settings->get('site.homepage_route')) ? $route : ''),
+            'edition' => \sprintf('an edition of %s', $this->types->has($type = $this->settings->getString('site.homepage_listing')) ? strtolower($this->types->get($type)->pluralLabel) : '"'.$type.'"'),
             default => \sprintf('the list of %s', $this->types->has($type = $this->settings->getString('site.homepage_listing')) ? strtolower($this->types->get($type)->pluralLabel) : '"'.$type.'"'),
         }));
         $io->newLine();

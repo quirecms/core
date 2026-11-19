@@ -11,6 +11,8 @@ use Quire\Content\Type\Capability;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Theme\Themes;
+use Symfony\Component\DependencyInjection\Attribute\AutowireServiceClosure;
 use Symfony\Component\Routing\Exception\ExceptionInterface as RoutingException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
@@ -29,6 +31,9 @@ final readonly class PermalinkSettingsValidator implements SettingValidatorInter
         private Permalinks $permalinks,
         private UrlGeneratorInterface $urls,
         private Connection $connection,
+        /** @var \Closure(): Themes */
+        #[AutowireServiceClosure(Themes::class)]
+        private \Closure $themes,
     ) {
     }
 
@@ -36,7 +41,8 @@ final readonly class PermalinkSettingsValidator implements SettingValidatorInter
     {
         return match (true) {
             str_starts_with($key, PermalinkSettings::PERMALINK_PREFIX) => $this->pattern(substr($key, \strlen(PermalinkSettings::PERMALINK_PREFIX)), $value),
-            str_starts_with($key, PermalinkSettings::LISTING_PREFIX) => $this->listing(substr($key, \strlen(PermalinkSettings::LISTING_PREFIX)), $value),
+            str_starts_with($key, PermalinkSettings::LISTING_PREFIX) => $this->listing(substr($key, \strlen(PermalinkSettings::LISTING_PREFIX)), $value, $settings),
+            'site.homepage' === $key => $this->homepage($value, $settings),
             'site.homepage_listing' === $key => $this->homepageListing($value),
             'site.homepage_page' === $key => $this->homepagePage($value),
             'site.homepage_route' === $key => $this->homepageRoute($value),
@@ -87,10 +93,13 @@ final readonly class PermalinkSettingsValidator implements SettingValidatorInter
         return null;
     }
 
-    private function listing(string $type, mixed $value): ?string
+    private function listing(string $type, mixed $value, ?Settings $settings = null): ?string
     {
         if (null === $value || '' === $value || !\is_string($value)) {
-            return null;
+            // The homepage's edition needs its list somewhere
+            return $settings instanceof Settings && 'edition' === $settings->get('site.homepage') && $type === $settings->get('site.homepage_listing')
+                ? \sprintf('The homepage is an edition of %s, whose list needs an address of its own. Change "site.homepage" first.', strtolower($this->types->get($type)->pluralLabel))
+                : null;
         }
 
         if (1 !== preg_match(self::LISTING_PATTERN, $value)) {
@@ -104,6 +113,22 @@ final readonly class PermalinkSettingsValidator implements SettingValidatorInter
         }
 
         return null;
+    }
+
+    /** An edition needs its type's list at an address of its own, for the archive */
+    private function homepage(mixed $value, Settings $settings): ?string
+    {
+        if ('edition' === $value && !($this->themes)()->supports('edition')) {
+            return 'The active theme draws no edition (it doesn\'t declare "edition" in extra.quire.theme.supports), so the homepage would only be the list. Use "listing", or a theme that draws one.';
+        }
+
+        $type = $settings->get('site.homepage_listing');
+
+        if ('edition' !== $value || !\is_string($type) || !$this->types->has($type) || null !== $this->permalinks->configuredListingPath($type)) {
+            return null;
+        }
+
+        return \sprintf('An edition keeps the list of %1$s at its own address, and it has none: set "%2$s%3$s" first, e.g. /blog.', strtolower($this->types->get($type)->pluralLabel), PermalinkSettings::LISTING_PREFIX, $type);
     }
 
     private function homepageListing(mixed $value): ?string

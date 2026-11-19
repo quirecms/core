@@ -12,6 +12,8 @@ use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Settings\Event\SettingChanged;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
+use Quire\Theme\Themes;
+use Symfony\Component\DependencyInjection\Attribute\AutowireServiceClosure;
 use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Symfony\Contracts\Service\ResetInterface;
@@ -48,7 +50,22 @@ final class Permalinks implements ResetInterface
         private readonly SettingsSchema $schema,
         private readonly UrlGeneratorInterface $urls,
         private readonly Connection $connection,
+        /** @var \Closure(): Themes */
+        #[AutowireServiceClosure(Themes::class)]
+        private readonly \Closure $themes,
     ) {
+    }
+
+    /**
+     * What the homepage shows, as served: "site.homepage", except that an edition with a theme that draws
+     * none (it doesn't declare "edition" in extra.quire.theme.supports) is served as the list. Its first
+     * page and /blog would otherwise be the same list at two addresses.
+     */
+    public function homepage(): string
+    {
+        $homepage = $this->settings->getString('site.homepage');
+
+        return 'edition' === $homepage && !($this->themes)()->supports('edition') ? 'listing' : $homepage;
     }
 
     /**
@@ -126,7 +143,7 @@ final class Permalinks implements ResetInterface
      */
     public function listingPath(string $type): ?string
     {
-        if ('listing' === $this->settings->getString('site.homepage') && $type === $this->settings->getString('site.homepage_listing')) {
+        if ('listing' === $this->homepage() && $type === $this->settings->getString('site.homepage_listing')) {
             return '/';
         }
 

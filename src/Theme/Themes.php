@@ -110,6 +110,18 @@ final readonly class Themes
     }
 
     /**
+     * Whether the active theme draws something beyond the templates every theme has, e.g. "edition" (a
+     * front page for site.homepage = edition): declared in "extra.quire.theme.supports" by it or a theme
+     * it inherits from. False with Quire's built-in templates.
+     */
+    public function supports(string $feature): bool
+    {
+        $themes = $this->installed->themes();
+
+        return array_any($this->chain(), static fn (string $id): bool => \in_array($feature, $themes[$id]->supports ?? [], true));
+    }
+
+    /**
      * Why the theme that is set couldn't be used when the application was built, e.g. it was uninstalled.
      */
     public function problem(): ?string

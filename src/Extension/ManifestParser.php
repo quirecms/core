@@ -28,7 +28,10 @@ final class ManifestParser
     /** An exact version, so that every site downloads the same file: "8.0.23", "1.0.0-beta.2" */
     private const string VERSION_PATTERN = '/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/';
 
-    private const array KNOWN_THEME_KEYS = ['parent', 'screenshot'];
+    private const array KNOWN_THEME_KEYS = ['parent', 'screenshot', 'supports'];
+
+    /** What a theme may say it draws ("extra.quire.theme.supports"): "edition", a front page for site.homepage = edition */
+    public const array THEME_FEATURES = ['edition'];
 
     /**
      * @param array<mixed> $package           One entry of Composer's installed.json
@@ -70,7 +73,7 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, \sprintf('"%s" is listed in both "extra.quire.requires" and "extra.quire.optional". Keep it in only one of them.', $overlap[0]));
         }
 
-        [$parent, $screenshot] = $this->theme($name, $type, $manifest, $id);
+        [$parent, $screenshot, $supports] = $this->theme($name, $type, $manifest, $id);
 
         return new ExtensionManifest(
             id: $id,
@@ -88,6 +91,7 @@ final class ManifestParser
             parent: $parent,
             importmap: $this->importmap($name, $manifest),
             screenshot: $screenshot,
+            supports: $supports,
         );
     }
 
@@ -162,12 +166,13 @@ final class ManifestParser
      *
      * @param array<string, mixed> $manifest
      *
-     * @return array{0: ?string, 1: ?string} The parent's ID, and the screenshot's path in the package
+     * @return array{0: ?string, 1: ?string, 2: list<string>} The parent's ID, the screenshot's path in the package, and
+     *                                                        what it says it draws ("supports")
      */
     private function theme(string $name, ExtensionType $type, array $manifest, string $ownId): array
     {
         if (!\array_key_exists('theme', $manifest)) {
-            return [null, null];
+            return [null, null, []];
         }
 
         if (ExtensionType::Theme !== $type) {
@@ -202,7 +207,15 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image in the package, e.g. "screenshot.png"; got %s.', json_encode($screenshot)));
         }
 
-        return [$parent, $screenshot];
+        $supports = $theme['supports'] ?? [];
+
+        $features = \is_array($supports) && array_is_list($supports) ? array_filter($supports, static fn (mixed $feature): bool => \is_string($feature) && \in_array($feature, self::THEME_FEATURES, true)) : [];
+
+        if (!\is_array($supports) || \count($features) !== \count($supports)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.theme.supports" must be a list of what the theme draws, of: "%s"; got %s.', implode('", "', self::THEME_FEATURES), json_encode($supports)));
+        }
+
+        return [$parent, $screenshot, array_values(array_unique($features))];
     }
 
     /**

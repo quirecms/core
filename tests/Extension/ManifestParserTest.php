@@ -87,6 +87,10 @@ final class ManifestParserTest extends TestCase
         self::assertSame('docs/screenshot.png', $pictured?->screenshot);
         self::assertStringEndsWith(\DIRECTORY_SEPARATOR.'docs/screenshot.png', (string) $pictured->screenshotPath());
         self::assertNull($manifest->screenshotPath());
+
+        $edition = $this->parse($this->package('acme/reviews', ['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['supports' => ['edition', 'edition']]]]]));
+        self::assertSame(['edition'], $edition?->supports, 'What it says it draws.');
+        self::assertSame([], $manifest->supports);
     }
 
     public function testReadsTheNpmPackagesItsScriptsImport(): void
@@ -125,7 +129,9 @@ final class ManifestParserTest extends TestCase
         yield 'both required and optional' => [['extra' => ['quire' => ['requires' => ['quire-tags'], 'optional' => ['quire-tags']]]], '"quire-tags" is listed in both'];
         yield 'theme section in an extension' => [['extra' => ['quire' => ['theme' => ['parent' => 'acme-base']]]], '"extra.quire.theme" is only for packages of type "quire-theme"'];
         yield 'theme section is a list' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['acme-base']]]], '"extra.quire.theme" must be a JSON object'];
-        yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent, screenshot.'];
+        yield 'unknown theme key' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parnet' => 'acme-base']]]], '"extra.quire.theme.parnet" is not a known key. Known keys: parent, screenshot, supports.'];
+        yield 'something a theme can\'t say it draws' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['supports' => ['editions']]]]], '"extra.quire.theme.supports" must be a list of what the theme draws, of: "edition"'];
+        yield 'supports that isn\'t a list' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['supports' => 'edition']]]], '"extra.quire.theme.supports" must be a list'];
         yield 'screenshot outside the package' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['screenshot' => '../shot.png']]]], '"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image in the package'];
         yield 'screenshot that is no picture' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['screenshot' => 'shot.svg']]]], '"extra.quire.theme.screenshot" must be the path of a PNG, JPEG or WebP image'];
         yield 'parent is a package name' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme/base']]]], '"extra.quire.theme.parent" must be the ID of a theme'];

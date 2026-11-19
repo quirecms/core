@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Quire\Extend;
 
+use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 
 /**
  * What an extender can see and change while the container is being built.
@@ -68,6 +70,43 @@ final readonly class ExtenderContext
         return $this->container->register($class, $class)
             ->setAutowired(true)
             ->setAutoconfigured(true);
+    }
+
+    /**
+     * @internal Registers every class of a directory as a service, like {@see PhpFileLoader::registerClasses()},
+     * except that a class that already has a definition keeps it: an extender's, with its tags (a check, a
+     * listener, a controller). Symfony's loader would replace it, dropping its tags, so the order of an
+     * extension's extenders would decide whether its services work. The kept definition gets the prototype's
+     * tags and visibility (a controller's).
+     *
+     * @param list<string> $exclude
+     */
+    public function registerClasses(Definition $prototype, string $namespace, string $directory, array $exclude = []): void
+    {
+        $before = $this->container->getDefinitions();
+        $loader = new PhpFileLoader($this->container, new FileLocator($directory));
+        $loader->registerClasses($prototype, $namespace, rtrim($directory, '/').'/', $exclude);
+
+        foreach ($before as $id => $definition) {
+            if (!$this->container->hasDefinition($id) || $this->container->getDefinition($id) === $definition) {
+                continue;
+            }
+
+            /** @var array<string, list<array<string, mixed>>> $tags */
+            $tags = $prototype->getTags();
+
+            foreach ($tags as $name => $instances) {
+                foreach ($definition->hasTag($name) ? [] : $instances as $attributes) {
+                    $definition->addTag($name, $attributes);
+                }
+            }
+
+            if ($prototype->isPublic()) {
+                $definition->setPublic(true);
+            }
+
+            $this->container->setDefinition($id, $definition);
+        }
     }
 
     /**

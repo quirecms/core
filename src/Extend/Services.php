@@ -92,9 +92,8 @@ final class Services implements ExtenderInterface
                 throw $context->error($where, \sprintf('The directory "%s" doesn\'t exist.', $autoload['directory']));
             }
 
-            $prototype = new Definition()->setAutowired(true)->setAutoconfigured(true);
-            $loader = new PhpFileLoader($container, new FileLocator($autoload['directory']));
-            $loader->registerClasses($prototype, $autoload['namespace'], rtrim($autoload['directory'], '/').'/', $autoload['exclude']);
+            // A class another extender defined keeps its definition, and its tags, whichever runs first
+            $context->registerClasses(new Definition()->setAutowired(true)->setAutoconfigured(true), $autoload['namespace'], $autoload['directory'], $autoload['exclude']);
         }
 
         foreach ($this->files as $file) {

@@ -4,9 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Extend;
 
-use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Definition;
-use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
 
 /**
  * Adds HTTP routes.
@@ -193,8 +191,7 @@ final class Routes implements ExtenderInterface
             ->setPublic(true)
             ->addTag('controller.service_arguments');
 
-        $loader = new PhpFileLoader($context->container(), new FileLocator($controllers['directory']));
-        $loader->registerClasses($prototype, $controllers['namespace'], rtrim($controllers['directory'], '/').'/');
+        $context->registerClasses($prototype, $controllers['namespace'], $controllers['directory']);
 
         $context->appendToParameter(self::PARAMETER, [
             'type' => 'import',

@@ -119,8 +119,9 @@ final class Formatter implements ExtenderInterface
         bool $images = true,
         bool $rawHtml = false,
         array $linkRel = [],
+        bool $footnotes = false,
     ): self {
-        $this->calls[] = fn (ExtenderContext $context) => $this->addProfile($context, new FormatterProfile($name, $context->id, $formats, $shortcodes, $sanitizer, $headingAnchors, $images, $rawHtml, $linkRel));
+        $this->calls[] = fn (ExtenderContext $context) => $this->addProfile($context, new FormatterProfile($name, $context->id, $formats, $shortcodes, $sanitizer, $headingAnchors, $images, $rawHtml, $linkRel, $footnotes));
 
         return $this;
     }

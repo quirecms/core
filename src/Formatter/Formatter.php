@@ -8,6 +8,7 @@ use Psr\Container\ContainerInterface;
 use Psr\Log\LoggerInterface;
 use Quire\Content\Content;
 use Quire\Formatter\Exception\UnknownFormatException;
+use Quire\Formatter\Internal\DocumentStructure;
 use Quire\Formatter\Internal\NoEmbedGuard;
 use Quire\Formatter\Internal\Sanitizers;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -52,6 +53,7 @@ final class Formatter implements ResetInterface
         #[Autowire(param: 'kernel.debug')]
         private readonly bool $debug = false,
         private readonly EmbedGuardInterface $embeds = new NoEmbedGuard(),
+        private readonly ?DocumentStructure $structure = null,
     ) {
         $this->profiles = array_map(FormatterProfile::fromArray(...), $config['profiles']);
     }
@@ -104,7 +106,14 @@ final class Formatter implements ResetInterface
             $html = $processor->process($html, $context);
         }
 
-        return new CompiledText($this->sanitizer($context->profile)->sanitize($html), $context->shortcodes(), $context->profile->name, $format);
+        $html = $this->sanitizer($context->profile)->sanitize($html);
+
+        // After the sanitiser: the structure every theme gets (headings' links, notes, tables, code)
+        if ($this->structure instanceof DocumentStructure) {
+            $html = $this->structure->apply($html, $context);
+        }
+
+        return new CompiledText($html, $context->shortcodes(), $context->profile->name, $format);
     }
 
     /**

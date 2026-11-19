@@ -19,7 +19,10 @@ use Quire\Extension\ExtensionContributions;
 use Quire\Extension\InstalledExtensions;
 use Quire\Extension\State\PinnedStateListener;
 use Quire\Formatter\EmbedGuardInterface;
+use Quire\Formatter\Internal\DocumentStructure;
+use Quire\Formatter\Internal\ExternalImages;
 use Quire\Formatter\Internal\NoEmbedGuard;
+use Quire\Formatter\Internal\StructureMark;
 use Quire\Health\HealthCheckInterface;
 use Quire\Http\Session\SessionHandlerFactory;
 use Quire\Permission\Access;
@@ -132,6 +135,11 @@ return static function (ContainerConfigurator $container): void {
     // Other sites' hosts in the policy: none, until quire/privacy replaces this (see Csp\Internal\CspSourcesPass).
     $services->alias(ThirdPartySourcesInterface::class, NoThirdPartySources::class);
     // Trusted shortcodes' embeds as they are, until quire/privacy replaces this with click-to-load.
+    // The structure the renderer gives every theme (headings' links, notes, tables, code), after the sanitiser
+    // One per process: the renderer's mark for its own ids, which MarkdownFormat and DocumentStructure share
+    $services->set(StructureMark::class);
+    $services->set(DocumentStructure::class);
+    $services->set(ExternalImages::class);
     $services->set(NoEmbedGuard::class);
     $services->alias(EmbedGuardInterface::class, NoEmbedGuard::class);
     // For extensions and themes that print inline code with a nonce, and for tests.

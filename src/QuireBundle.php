@@ -549,7 +549,8 @@ final class QuireBundle extends AbstractBundle
         ContentAbilities::declare($builder);
 
         // Changes when the formatter setup or any installed package changes, so cached HTML is never stale.
-        $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode($builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));
+        // The site's own policy sources too: the renderer's placeholders for other sites' images follow them.
+        $builder->setParameter('quire.formatter.fingerprint', substr(hash('xxh128', json_encode([$builder->getParameterBag()->all()[Formatter::PARAMETER] ?? [], $builder->getParameterBag()->all()[Csp::SOURCES_PARAMETER] ?? []], \JSON_THROW_ON_ERROR).(is_file($installedJson) ? hash_file('xxh128', $installedJson) : '')), 0, 16));
     }
 
     /**

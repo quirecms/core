@@ -34,6 +34,7 @@ final readonly class FormatterProfile
         public bool $images = true,
         public bool $rawHtml = false,
         public array $linkRel = [],
+        public bool $footnotes = false,
     ) {
     }
 
@@ -59,6 +60,7 @@ final readonly class FormatterProfile
             'images' => $this->images,
             'raw_html' => $this->rawHtml,
             'link_rel' => $this->linkRel,
+            'footnotes' => $this->footnotes,
         ];
     }
 
@@ -69,7 +71,7 @@ final readonly class FormatterProfile
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{name: string, owner: string, formats: list<string>, shortcodes: list<string>, sanitizer: string, heading_anchors: bool, images: bool, raw_html: bool, link_rel: list<string>} $profile */
+        /** @var array{name: string, owner: string, formats: list<string>, shortcodes: list<string>, sanitizer: string, heading_anchors: bool, images: bool, raw_html: bool, link_rel: list<string>, footnotes?: bool} $profile */
         $profile = $data;
 
         return new self(
@@ -82,6 +84,7 @@ final readonly class FormatterProfile
             images: $profile['images'],
             rawHtml: $profile['raw_html'],
             linkRel: $profile['link_rel'],
+            footnotes: $profile['footnotes'] ?? false,
         );
     }
 }

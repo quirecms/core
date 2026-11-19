@@ -8,6 +8,7 @@ use Quire\Content\Action as ContentAction;
 use Quire\Content\Check\ContentChecker;
 use Quire\Content\Check\Internal\AltTextCheck;
 use Quire\Content\Check\Internal\ExcerptCheck;
+use Quire\Content\Check\Internal\ExternalImagesCheck;
 use Quire\Content\Check\Internal\LinksCheck;
 use Quire\Content\Check\Internal\TitleLengthCheck;
 use Quire\Content\Check\Job\RecheckContent;
@@ -56,6 +57,7 @@ return [
     // Checks before publishing (see docs/content.md): warnings until a site makes them errors.
     new Extend\ContentChecks()
         ->check('core.alt-text', AltTextCheck::class, 'Images have a description')
+        ->check('core.external-images', ExternalImagesCheck::class, 'Images are on the site, not loaded from others')
         ->check('core.links', LinksCheck::class, 'Links to the site lead to pages visitors can see')
         ->check('core.excerpt', ExcerptCheck::class, 'Items have an excerpt')
         ->check('core.title-length', TitleLengthCheck::class, 'Titles fit in search results'),
@@ -146,7 +148,7 @@ return [
         ->format('text', Format\TextFormat::class)
         ->format('html', Format\HtmlFormat::class)
         // Content written by editors.
-        ->profile('content', formats: ['markdown', 'text', 'html'], shortcodes: ['*'], headingAnchors: true)
+        ->profile('content', formats: ['markdown', 'text', 'html'], shortcodes: ['*'], headingAnchors: true, footnotes: true)
         // Text written by visitors, e.g. comments: basic markup, no images, links marked as user-generated.
         ->profile('comment', formats: ['markdown', 'text'], sanitizer: 'basic', images: false, linkRel: ['nofollow', 'ugc']),
 

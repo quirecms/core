@@ -86,7 +86,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Content/{Content,Status}.php',
             '../src/Content/{Command,Event,Exception}/',
             '../src/Content/Internal/{Locales,Row}.php',
-            '../src/Content/Revision/{Comment,CommentAnchor,CommentThread,Diff,DiffLine,Merge,PendingRevision,Review,ReviewState,Revision,Snapshot,Verdict}.php',
+            '../src/Content/Revision/{Comment,CommentAnchor,CommentThread,Diff,DiffLine,Merge,PendingRevision,PublicChange,PublicChangeKind,PublicNote,Review,ReviewState,Revision,Snapshot,Verdict}.php',
             '../src/Content/Revision/Internal/',
             '../src/Content/Workflow/ContentSubject.php',
             '../src/Content/Console/ConsoleErrors.php',

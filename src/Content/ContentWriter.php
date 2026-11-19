@@ -44,6 +44,7 @@ use Quire\Content\Revision\Internal\Values;
 use Quire\Content\Revision\PendingRevision;
 use Quire\Content\Revision\PendingRevisionRepository;
 use Quire\Content\Revision\PendingRevisionWriter;
+use Quire\Content\Revision\PublicNote;
 use Quire\Content\Revision\Review;
 use Quire\Content\Revision\ReviewState;
 use Quire\Content\Revision\RevisionRepository;
@@ -207,8 +208,10 @@ final readonly class ContentWriter
      *
      * When the site requires approval ("quire.content.changes_need_approval"), it must be approved.
      *
-     * @param int         $expectedVersion The pending revision's version the publisher saw
-     * @param string|null $actorId         Who publishes it. The revision is credited to the changes' author.
+     * @param int             $expectedVersion The pending revision's version the publisher saw
+     * @param string|null     $actorId         Who publishes it. The revision is credited to the changes' author.
+     * @param PublicNote|null $note            What readers are told about the change ("Updated" or "Corrected", in
+     *                                         the item's public history, {@see PublicHistory}); null for none
      *
      * @throws ContentNotFoundException
      * @throws PendingRevisionConflictException   when it was saved since the expected version
@@ -216,9 +219,9 @@ final readonly class ContentWriter
      * @throws InvalidContentException            when the merged item breaks a rule (e.g. an empty title), or it needs approval
      * @throws ContentOperationCancelledException
      */
-    public function publishPendingRevision(string $id, int $expectedVersion, ?string $actorId = null): Content
+    public function publishPendingRevision(string $id, int $expectedVersion, ?string $actorId = null, ?PublicNote $note = null): Content
     {
-        return $this->write(function (\ArrayObject $events) use ($id, $expectedVersion, $actorId): Content {
+        return $this->write(function (\ArrayObject $events) use ($id, $expectedVersion, $actorId, $note): Content {
             $pending = $this->pendingRevisions->lock($id);
 
             if ($pending->version !== $expectedVersion) {
@@ -252,6 +255,13 @@ final readonly class ContentWriter
                 ->fields($merged->fields), $approval?->reviewerId, $pending);
 
             $this->connection->executeStatement('DELETE FROM quire.content_pending_revision WHERE id = ?', [$pending->id]);
+
+            if ($note instanceof PublicNote) {
+                $this->connection->executeStatement(
+                    'INSERT INTO quire.content_public_change (content_id, content_version, kind, note, author_id) VALUES (?, ?, ?, ?, ?)',
+                    [$after->id, $after->version, $note->kind->value, $note->note, $actorId ?? $pending->authorId],
+                );
+            }
             $events->append(new PendingRevisionPublished($pending, $after, $actorId));
 
             return $after;

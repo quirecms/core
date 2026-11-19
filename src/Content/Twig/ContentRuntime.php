@@ -10,6 +10,8 @@ use Quire\Content\Permalink\Permalinks;
 use Quire\Content\Query\ContentQuery;
 use Quire\Content\Query\Internal\QueryRunner;
 use Quire\Content\Query\LatestPublished;
+use Quire\Content\Revision\PublicChange;
+use Quire\Content\Revision\PublicHistory;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 use Twig\Extension\RuntimeExtensionInterface;
 
@@ -24,7 +26,20 @@ final readonly class ContentRuntime implements RuntimeExtensionInterface
         private Permalinks $permalinks,
         private ContentRenderer $renderer,
         private LatestPublished $latest,
+        private PublicHistory $history,
     ) {
+    }
+
+    /**
+     * A published item's public history, newest first: what its authors told readers when they
+     * published a change, "Updated" or "Corrected" (`{% for change in quire_history(post) %}`). Only
+     * what was published; the item's own "Published" date is the template's.
+     *
+     * @return list<PublicChange>
+     */
+    public function history(Content $content): array
+    {
+        return $this->history->of($content);
     }
 
     /**

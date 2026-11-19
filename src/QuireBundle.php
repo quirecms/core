@@ -42,6 +42,7 @@ use Quire\Permission\Internal\ContentAbilities;
 use Quire\Permission\Internal\PermissionsPass;
 use Quire\Routing\ExtensionRouteLoader;
 use Quire\Settings\SettingValidatorInterface;
+use Quire\Setup\Internal\SetupStepsPass;
 use Quire\Storage\Internal\DiskConfig;
 use Quire\Storage\StorageDisks;
 use Quire\Theme\Internal\AssetsPass;
@@ -83,6 +84,7 @@ final class QuireBundle extends AbstractBundle
         $container->addCompilerPass(new PermissionsPass());
         $container->addCompilerPass(new RelationFieldsPass());
         $container->addCompilerPass(new MailTransportsPass());
+        $container->addCompilerPass(new SetupStepsPass());
         // Once decoration has run: a decorator replaces the class that's bound (condition C-C).
         $container->addCompilerPass(new CspSourcesPass(), PassConfig::TYPE_BEFORE_REMOVING);
         // The same for the guard of trusted shortcodes' embeds (condition C-B).

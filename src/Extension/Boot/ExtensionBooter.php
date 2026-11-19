@@ -15,6 +15,7 @@ use Quire\Extend\ExtenderInterface;
 use Quire\Extend\Head;
 use Quire\Extend\Permissions;
 use Quire\Extend\Routes;
+use Quire\Extend\SetupSteps;
 use Quire\Extend\Views;
 use Quire\Extension\DependencyResolver;
 use Quire\Extension\ExtensionManifest;
@@ -79,6 +80,7 @@ final readonly class ExtensionBooter
         $container->setParameter(Permissions::PARAMETER, ['roles' => [], 'abilities' => [], 'rules' => []]);
         $container->setParameter(Auth::PARAMETER, []);
         $container->setParameter(ContentChecks::PARAMETER, []);
+        $container->setParameter(SetupSteps::PARAMETER, []);
         $container->setParameter(Actions::PARAMETER, []);
         $container->setParameter(Head::PARAMETER, []);
 

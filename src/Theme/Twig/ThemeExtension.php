@@ -43,6 +43,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_asset', [ThemeRuntime::class, 'asset']),
             // The site's navigation: core's top-level pages, or a menus extension's
             new TwigFunction('quire_navigation', [Navigation::class, 'items']),
+            // The site's setup steps the viewer may take, while some aren't done (the empty home page)
+            new TwigFunction('quire_setup_steps', [ThemeRuntime::class, 'setupSteps']),
             // Whether the page loads nothing from other sites: the policy sent, its head, the theme's templates
             new TwigFunction('quire_loads_only_from_this_site', [ThemeRuntime::class, 'loadsOnlyFromThisSite'], ['needs_context' => true]),
             new TwigFunction('quire_head', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html']]),

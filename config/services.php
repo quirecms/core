@@ -64,6 +64,7 @@ return static function (ContainerConfigurator $container): void {
             '../src/Csp/{Policy,PolicyKind}.php',
             '../src/Theme/{ThemeProblem,TemplateUrls}.php',
             '../src/Theme/Navigation/NavigationItem.php',
+            '../src/Setup/SetupStep.php',
             '../src/Extension/ExtensionManifest.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',

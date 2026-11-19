@@ -8,6 +8,7 @@ use Quire\Extension\Boot\ExtensionBooter;
 use Quire\Head\Internal\HeadRenderer;
 use Quire\Settings\Settings;
 use Quire\Settings\SettingsSchema;
+use Quire\Setup\SetupSteps;
 use Quire\Theme\Exception\AssetNotFoundException;
 use Quire\Theme\Internal\ThemeLoads;
 use Quire\Theme\Slots;
@@ -37,6 +38,7 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
         private RequestStack $requests,
         private ThemePreview $preview,
         private ThemeLoads $loads,
+        private SetupSteps $setup,
     ) {
     }
 
@@ -99,6 +101,18 @@ final readonly class ThemeRuntime implements RuntimeExtensionInterface
     public function head(array $context): string
     {
         return $this->head->render($context);
+    }
+
+    /**
+     * `{% set setup = quire_setup_steps() %}{% if setup %}…{{ setup.done }} of {{ setup.steps|length }}…{% endif %}`:
+     * the site's setup steps the viewer may take, while some aren't done; null for visitors and once
+     * all are. A page that shows them is the viewer's alone (private, never stored).
+     *
+     * @return array{steps: list<\Quire\Setup\SetupStep>, done: int}|null
+     */
+    public function setupSteps(): ?array
+    {
+        return $this->setup->pending();
     }
 
     /**

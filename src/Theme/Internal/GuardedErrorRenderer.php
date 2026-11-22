@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Theme\Internal;
 
 use Psr\Log\LoggerInterface;
+use Quire\Http\ErrorReference;
 use Symfony\Component\DependencyInjection\Attribute\AsDecorator;
 use Symfony\Component\DependencyInjection\Attribute\AutowireDecorated;
 use Symfony\Component\ErrorHandler\ErrorRenderer\ErrorRendererInterface;
@@ -25,6 +26,7 @@ final readonly class GuardedErrorRenderer implements ErrorRendererInterface
         #[AutowireDecorated]
         private ErrorRendererInterface $inner,
         private LoggerInterface $logger,
+        private ErrorReference $reference,
     ) {
     }
 
@@ -37,7 +39,10 @@ final readonly class GuardedErrorRenderer implements ErrorRendererInterface
             $flat = FlattenException::createFromThrowable($exception);
             $title = 404 === $flat->getStatusCode() ? 'Page not found' : 'Something went wrong';
 
-            return $flat->setAsString(\sprintf('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%1$s</title></head><body><main><h1>%1$s</h1><p><a href="/">Go to the home page</a></p></main></body></html>', $title));
+            $reference = $this->reference->current();
+            $quote = null === $reference ? '' : \sprintf('<p>If it keeps happening, tell the site\'s owner this reference: <code>%s</code> (%s)</p>', $reference['code'], $reference['at']->format(\DATE_ATOM));
+
+            return $flat->setAsString(\sprintf('<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>%1$s</title></head><body><main><h1>%1$s</h1>%2$s<p><a href="/">Go to the home page</a></p></main></body></html>', $title, $quote));
         }
     }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Twig;
 
+use Quire\Http\ErrorReference;
 use Quire\Theme\Navigation\Navigation;
 use Twig\DeprecatedCallableInfo;
 use Twig\Extension\AbstractExtension;
@@ -30,6 +31,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFilter('quire_date', [ThemeRuntime::class, 'date']),
             // A translated message with HTML parameters: the text escaped, Markup parameters as they are
             new TwigFilter('quire_trans_html', [TranslationRuntime::class, 'transHtml'], ['is_safe' => ['html']]),
+            // A theme's text: translated, and marked as English where the page's language has no translation
+            new TwigFilter('quire_trans', [TranslationRuntime::class, 'transHtml'], ['is_safe' => ['html']]),
         ];
     }
 
@@ -48,6 +51,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             // Whether the page loads nothing from other sites: the policy sent, its head, the theme's templates
             new TwigFunction('quire_loads_only_from_this_site', [ThemeRuntime::class, 'loadsOnlyFromThisSite'], ['needs_context' => true]),
             new TwigFunction('quire_head', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html']]),
+            // A server error's reference and time, for the error page (null on other pages)
+            new TwigFunction('quire_error_reference', [ErrorReference::class, 'current']),
             // The name before 0.3, when the head held only the SEO tags.
             new TwigFunction('quire_seo', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html'], 'deprecation_info' => new DeprecatedCallableInfo('quire/core', '0.3', 'quire_head')]),
         ];

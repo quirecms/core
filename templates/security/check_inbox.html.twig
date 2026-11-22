@@ -2,15 +2,36 @@
     After a form that emails a link. It reads the same whether the email has an account or not.
 
     Variables: email (where the email went, if it has an account)
+    Variables: flow ("register", "reset" or "resend": which words, and where "Send it again" goes)
+    Blocks: account (everything on the page, its script included: a theme wraps it, e.g. in a card), and in it
+    account_heading (the heading and its intro).
 #}
 {% extends 'layout.html.twig' %}
 
 {% block title %}{{ 'Check your inbox'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
 
 {% block content %}
-    <section class="sign-in">
-        <h1>{{ 'Check your inbox'|trans({}, 'quire') }}</h1>
-        <p role="status">{{ 'If {email} has an account with us, we\'ve sent it an email with a link. It can take a few minutes; check your spam folder too.'|trans({ email }, 'quire') }}</p>
-        <p><a href="{{ path('quire_login') }}">{{ 'Back to signing in'|trans({}, 'quire') }}</a></p>
+    <section class="sign-in account">
+        {% block account %}
+            {#- One page for every answer of a flow, whether the address has an account or not (D-44) -#}
+            {% set flow = flow ?? 'reset' %}
+            {% block account_heading %}
+                <h1>{{ 'Check your inbox'|quire_trans({}, 'quire') }}</h1>
+            {% endblock %}
+            {% if flow == 'register' %}
+                <p class="account-intro" role="status">{{ 'We’ve sent an email to {email}. Open the link in it to finish creating your account. If this address already has an account, the email tells you how to sign in instead.'|quire_trans_html({email: _self.chip(email)}, 'quire') }}</p>
+            {% else %}
+                <p class="account-intro" role="status">{{ 'If {email} has an account with us, we\'ve sent it an email with a link. It can take a few minutes; check your spam folder too.'|quire_trans_html({email: _self.chip(email)}, 'quire') }}</p>
+            {% endif %}
+            <div class="account-links">
+                {% set again = flow == 'reset' ? path('quire_forgot_password') : (flow == 'register' ? path('quire_resend_verification') : path('quire_resend_verification')) %}
+                <p>{{ 'Nothing after 10 minutes?'|quire_trans({}, 'quire') }} <a href="{{ again }}">{{ 'Send it again'|quire_trans({}, 'quire') }}</a></p>
+                <p>{{ 'Wrong address?'|quire_trans({}, 'quire') }} <a href="{{ flow == 'register' ? path('quire_register') : again }}">{{ 'Use a different one'|quire_trans({}, 'quire') }}</a></p>
+                <p><a href="{{ path('quire_login') }}">{{ 'Back to signing in'|quire_trans({}, 'quire') }}</a></p>
+            </div>
+        {% endblock %}
     </section>
 {% endblock %}
+
+{# The address, as HTML the translated message holds #}
+{% macro chip(email) %}<span class="email">{{ email }}</span>{% endmacro %}

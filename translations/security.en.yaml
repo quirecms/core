@@ -1,3 +1,5 @@
 # Why signing in failed, for Quire's account checks (Symfony's own messages are in the "security" domain too).
 'This account is suspended.': 'This account is suspended.'
 'Confirm your email address first: open the link we emailed you.': 'Confirm your email address first: open the link we emailed you.'
+# Symfony's own message for a wrong username or password: the same words for both, so they don't tell which (D-44)
+'Invalid credentials.': 'The email, username or password is wrong. Check them and try again.'

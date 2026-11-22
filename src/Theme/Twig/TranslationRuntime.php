@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Quire\Theme\Twig;
 
+use Symfony\Component\Translation\TranslatorBagInterface;
+use Symfony\Contracts\Translation\LocaleAwareInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Extension\RuntimeExtensionInterface;
 use Twig\Markup;
@@ -16,6 +18,11 @@ use Twig\Markup;
  * script, in every page that shows it.
  *
  *     {{ 'saved {when}'|quire_trans_html({when: item.updatedAt|quire_admin_when}, 'quire-admin') }}
+ *
+ * A message the page's language has no translation of shows in the fallback language (English), marked as
+ * such, `<bdi lang="en">…</bdi>`: screen readers read it as English, and in a right-to-left page its
+ * punctuation stays where English puts it ("Nothing here yet.", not ".Nothing here yet"). Themes print
+ * their texts with `quire_trans`, which does the same without HTML parameters.
  *
  * @internal
  */
@@ -51,6 +58,37 @@ final readonly class TranslationRuntime implements RuntimeExtensionInterface
 
         $text = htmlspecialchars($this->translator->trans($message, $marked, $domain, $locale), \ENT_QUOTES | \ENT_SUBSTITUTE | \ENT_HTML5, 'UTF-8');
 
-        return new Markup([] === $html ? $text : strtr($text, $html), 'UTF-8');
+        $text = [] === $html ? $text : strtr($text, $html);
+        $fallback = $this->fallbackLocale($message, $domain ?? 'messages', $locale);
+
+        return new Markup(null === $fallback ? $text : \sprintf('<bdi lang="%s">%s</bdi>', htmlspecialchars($fallback, \ENT_QUOTES, 'UTF-8'), $text), 'UTF-8');
+    }
+
+    /**
+     * The language a message shows in when the page's own has no translation of it, or null when it has
+     * one (or is the fallback language itself).
+     */
+    private function fallbackLocale(string $message, string $domain, ?string $locale): ?string
+    {
+        // A translator without catalogues (a host application's own) can't tell: nothing is marked
+        if (!$this->translator instanceof TranslatorBagInterface) {
+            return null;
+        }
+
+        $catalogue = $this->translator->getCatalogue($locale ?? ($this->translator instanceof LocaleAwareInterface ? $this->translator->getLocale() : null));
+
+        for ($fallback = $catalogue->getFallbackCatalogue(); $fallback instanceof \Symfony\Component\Translation\MessageCatalogueInterface; $fallback = $fallback->getFallbackCatalogue()) {
+            if ($catalogue->defines($message, $domain)) {
+                return null;
+            }
+
+            if ($fallback->defines($message, $domain)) {
+                return $fallback->getLocale();
+            }
+
+            $catalogue = $fallback;
+        }
+
+        return null;
     }
 }

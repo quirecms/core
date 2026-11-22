@@ -2,27 +2,35 @@
     Asks for the email to send a new confirmation link to, when "quire.auth.email_verification" is on.
 
     Variables: email (what was typed), errors (form)
+    Blocks: account (everything on the page, its script included: a theme wraps it, e.g. in a card), and in it
+    account_heading (the heading and its intro).
 #}
 {% extends 'layout.html.twig' %}
 
-{% block title %}{{ 'Confirm your email address'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+{% block title %}{{ 'Get a new confirmation link'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
 
 {% block content %}
-    <section class="sign-in">
-        <h1>{{ 'Confirm your email address'|trans({}, 'quire') }}</h1>
-        <p>{{ 'Didn\'t get the email, or did the link expire? Enter your email address for a new one.'|trans({}, 'quire') }}</p>
+    <section class="sign-in account">
+        {% block account %}
+            {% block account_heading %}
+                <h1>{{ 'Get a new confirmation link'|quire_trans({}, 'quire') }}</h1>
+                <p class="account-intro">{{ 'Didn’t get the email to confirm your address, or did its link expire? Enter your email address and we’ll send a new one.'|quire_trans({}, 'quire') }}</p>
+            {% endblock %}
 
-        {% if errors.form is defined %}
-            <p class="form-error" role="alert">{{ errors.form|trans({}, 'quire') }}</p>
-        {% endif %}
+            {% if errors.form is defined %}
+                <p class="form-error" role="alert"><span>{{ errors.form|quire_trans({}, 'quire') }}</span></p>
+            {% endif %}
 
-        <form method="post" action="{{ path('quire_resend_verification') }}" class="form">
-            <p class="form-field">
-                <label for="email">{{ 'Email'|trans({}, 'quire') }}</label>
-                <input type="email" id="email" name="email" value="{{ email }}" autocomplete="email" required>
-            </p>
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token('resend_verification') }}">
-            <p><button type="submit">{{ 'Send the link'|trans({}, 'quire') }}</button></p>
-        </form>
+            <form method="post" action="{{ path('quire_resend_verification') }}" class="form">
+                <p class="form-field">
+                    <label for="email">{{ 'Email'|quire_trans({}, 'quire') }}</label>
+                    <input type="email" id="email" name="email" value="{{ email }}" autocomplete="email" required>
+                </p>
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('resend_verification') }}">
+                <p><button type="submit">{{ 'Send the link'|quire_trans({}, 'quire') }}</button></p>
+            </form>
+
+            <div class="account-links"><p><a href="{{ path('quire_login') }}">{{ 'Back to signing in'|quire_trans({}, 'quire') }}</a></p></div>
+        {% endblock %}
     </section>
 {% endblock %}

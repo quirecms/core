@@ -2,19 +2,25 @@
     An emailed link that doesn't work: it expired, was used already, or was replaced by a newer one.
 
     Variables: retry_route (the page to ask for a new link; null when only an admin can send one)
+    Blocks: account (everything on the page, its script included: a theme wraps it, e.g. in a card), and in it
+    account_heading (the heading and its intro).
 #}
 {% extends 'layout.html.twig' %}
 
 {% block title %}{{ 'This link doesn\'t work anymore'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
 
 {% block content %}
-    <section class="sign-in">
-        <h1>{{ 'This link doesn\'t work anymore'|trans({}, 'quire') }}</h1>
-        <p>{{ 'Links in our emails work once, for a limited time, and only the newest one does.'|trans({}, 'quire') }}</p>
-        {% if retry_route %}
-            <p><a href="{{ path(retry_route) }}">{{ 'Get a new link'|trans({}, 'quire') }}</a></p>
-        {% else %}
-            <p>{{ 'Ask the person who invited you to send a new invitation.'|trans({}, 'quire') }}</p>
-        {% endif %}
+    <section class="sign-in account">
+        {% block account %}
+            {% block account_heading %}
+                <h1>{{ 'This link doesn\'t work anymore'|quire_trans({}, 'quire') }}</h1>
+                <p class="account-intro">{{ 'Links in our emails work once, for a limited time, and only the newest one does.'|quire_trans({}, 'quire') }}</p>
+            {% endblock %}
+            {% if retry_route %}
+                <p><a class="account-action account-action--main" href="{{ path(retry_route) }}">{{ 'Get a new link'|quire_trans({}, 'quire') }}</a></p>
+            {% else %}
+                <p>{{ 'Ask the person who invited you to send a new invitation.'|quire_trans({}, 'quire') }}</p>
+            {% endif %}
+        {% endblock %}
     </section>
 {% endblock %}

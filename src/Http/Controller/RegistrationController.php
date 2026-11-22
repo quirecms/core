@@ -100,7 +100,7 @@ final readonly class RegistrationController
 
         // Bots fill in every field, people don't see this one: tell them it worked.
         if ('' !== $request->request->getString('website')) {
-            return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
+            return $this->render('security/check_inbox.html.twig', ['email' => $values['email'], 'flow' => 'register']);
         }
 
         if ('' === $values['email']) {
@@ -116,7 +116,7 @@ final readonly class RegistrationController
             $this->hashers->getPasswordHasher(User::class)->hash($request->request->getString('password'));
             $this->attempt(fn () => $this->mailer->sendAccountExists($existing));
 
-            return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
+            return $this->render('security/check_inbox.html.twig', ['email' => $values['email'], 'flow' => 'register']);
         }
 
         try {
@@ -145,7 +145,7 @@ final readonly class RegistrationController
         $this->dispatcher->dispatch(new UserRegistered($user, $request));
         $this->sendVerification($user);
 
-        return $this->render('security/check_inbox.html.twig', ['email' => $values['email']]);
+        return $this->render('security/check_inbox.html.twig', ['email' => $values['email'], 'flow' => 'register']);
     }
 
     /**
@@ -197,7 +197,7 @@ final readonly class RegistrationController
             $this->sendVerification($user);
         }
 
-        return $this->render('security/check_inbox.html.twig', ['email' => $email]);
+        return $this->render('security/check_inbox.html.twig', ['email' => $email, 'flow' => 'resend']);
     }
 
     private function sendVerification(User $user): void

@@ -1,3 +1,4 @@
 # Why signing in failed, for Quire's account checks (Symfony's own messages are in the "security" domain too).
 'This account is suspended.': 'Dieses Konto ist gesperrt.'
 'Confirm your email address first: open the link we emailed you.': 'Bestätigen Sie zuerst Ihre E-Mail-Adresse: Öffnen Sie den Link, den wir Ihnen geschickt haben.'
+'Invalid credentials.': 'Die E-Mail-Adresse, der Benutzername oder das Passwort ist falsch. Prüfen Sie die Angaben und versuchen Sie es erneut.'

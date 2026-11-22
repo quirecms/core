@@ -6,10 +6,12 @@ namespace Quire\Http\Controller;
 
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
+use Quire\Permission\Permissions;
 use Quire\Settings\Settings;
 use Quire\User\AccountSettings;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Mail\UserMailer;
+use Quire\User\Role;
 use Quire\User\Security\FormThrottle;
 use Quire\User\Security\SignInListener;
 use Quire\User\Token\UserTokens;
@@ -63,6 +65,7 @@ final readonly class PasswordResetController
         private Connection $connection,
         private UrlGeneratorInterface $urls,
         private LoggerInterface $logger,
+        private Permissions $permissions,
     ) {
     }
 
@@ -102,7 +105,7 @@ final readonly class PasswordResetController
             }
         }
 
-        return $this->render('security/check_inbox.html.twig', ['email' => $email]);
+        return $this->render('security/check_inbox.html.twig', ['email' => $email, 'flow' => 'reset']);
     }
 
     /**
@@ -162,6 +165,9 @@ final readonly class PasswordResetController
             return $this->render('security/link_expired.html.twig', ['retry_route' => UserTokens::PASSWORD_RESET === $purpose ? self::FORGOT_ROUTE : null], Response::HTTP_GONE);
         }
 
+        // An invitation says as what (the first of the user's roles a site gives, by its label)
+        $variables['role'] = UserTokens::INVITATION === $purpose ? $this->roleLabel($user) : null;
+
         if (!$request->isMethod('POST')) {
             return $this->render('security/reset_password.html.twig', [...$variables, 'user' => $user, 'errors' => []]);
         }
@@ -203,5 +209,18 @@ final readonly class PasswordResetController
     private function render(string $template, array $variables, int $status = Response::HTTP_OK): Response
     {
         return PrivatePage::secure(new Response($this->twig->render($template, $variables), $status));
+    }
+
+    private function roleLabel(User $user): ?string
+    {
+        $labels = $this->permissions->roles();
+
+        foreach ($user->roles as $role) {
+            if (Role::GUEST !== $role && Role::MEMBER !== $role && isset($labels[$role])) {
+                return $labels[$role];
+            }
+        }
+
+        return null;
     }
 }

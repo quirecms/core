@@ -58,10 +58,6 @@ final readonly class ContentRenderer
     }
 
     /**
-     * A plain-text summary (escape it when printing): the item's excerpt, or the start of its teaser or
-     * body, cut at a word boundary.
-     */
-    /**
      * The item's sections, for "On this page": the headings the renderer gave anchors, from the same
      * render as its body (and cached with it).
      *
@@ -72,10 +68,14 @@ final readonly class ContentRenderer
         return $this->compiled($content, $profile)['body']->headings;
     }
 
+    /**
+     * A plain-text summary (escape it when printing): the item's excerpt, or the start of its teaser's or
+     * body's prose (ReaderText::summaryOfHtml(): no tables, code or image links), cut at a word boundary.
+     */
     public function excerpt(Content $content, int $length = 200, string $profile = 'content'): string
     {
         $compiled = $this->compiled($content, $profile);
-        $text = $content->excerpt ?? ReaderText::ofHtml(($compiled['teaser'] ?? $compiled['body'])->html);
+        $text = $content->excerpt ?? ReaderText::summaryOfHtml(($compiled['teaser'] ?? $compiled['body'])->html);
         $text = trim((string) preg_replace('/\s+/u', ' ', $text));
 
         if (mb_strlen($text) <= $length) {

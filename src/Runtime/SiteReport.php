@@ -15,6 +15,7 @@ use Quire\Health\HealthCheckInterface;
 use Quire\Settings\Settings;
 use Quire\Storage\Internal\InstalledDisks;
 use Quire\Theme\Themes;
+use Quire\Translation\Internal\TranslationArtifactsPass;
 use Quire\User\Role;
 use Quire\User\UserRepository;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
@@ -40,6 +41,7 @@ use Symfony\Component\HttpKernel\Kernel;
  *     storage: list<array{name: string, adapter: string, public: ?bool, location: ?string, in_use: bool}>|null,
  *     migrations: array{executed: ?int, pending: ?int},
  *     health: array{status: string, checks: array<string, array{status: string, message?: string}>},
+ *     translations: list<array{name: string, package: ?string, locale: ?string, status: string, reason: ?string, files: list<string>}>,
  *     warnings: list<string>,
  * }
  */
@@ -66,6 +68,9 @@ final readonly class SiteReport
         private PinnedState $pinnedState,
         #[Autowire(param: Themes::PINNED_PARAMETER)]
         private bool $pinned = false,
+        /** @var list<array{name: string, package: ?string, locale: ?string, status: string, reason: ?string, files: list<string>}> */
+        #[Autowire(param: TranslationArtifactsPass::ARTIFACTS)]
+        private array $translations = [],
     ) {
     }
 
@@ -112,6 +117,8 @@ final readonly class SiteReport
                 'pending' => $this->attempt(fn (): int => \count($this->migrations->getMigrationStatusCalculator()->getNewMigrations())),
             ],
             'health' => $this->health(),
+            // The language packages installed, each loaded or ignored with why
+            'translations' => $this->translations,
             'warnings' => $this->warnings(),
         ];
     }
@@ -182,6 +189,12 @@ final readonly class SiteReport
             }
         } catch (\Throwable $e) {
             $warnings[] = \sprintf('Whether the site lost what it ran pinned couldn\'t be checked (%s).', $e::class);
+        }
+
+        foreach ($this->translations as $artifact) {
+            if ('loaded' !== $artifact['status']) {
+                $warnings[] = \sprintf('The language package "%s" isn\'t loaded: %s', $artifact['name'], $artifact['reason']);
+            }
         }
 
         return $warnings;

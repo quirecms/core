@@ -111,9 +111,49 @@ final class InstalledExtensions implements ResetInterface
             $manifests[$manifest->id] = $manifest;
         }
 
+        $this->oneOwnerPerDomain($manifests);
         ksort($manifests);
 
         return $manifests;
+    }
+
+    /**
+     * A translation domain is one package's (core's "quire" is core's): two with the same one would each
+     * change the other's texts, and a language package for one would reach into the other.
+     *
+     * @param array<string, ExtensionManifest> $manifests
+     */
+    private function oneOwnerPerDomain(array $manifests): void
+    {
+        $owners = ['quire' => 'quire/core'];
+
+        foreach ($manifests as $manifest) {
+            foreach ($manifest->translations()->domains as $domain) {
+                if (isset($owners[$domain])) {
+                    throw new ExtensionDiscoveryException(\sprintf('The packages "%s" and "%s" both declare the translation domain "%s". A domain is one package\'s; change "extra.quire.translations.domains" in one of them.', $owners[$domain], $manifest->packageName, $domain));
+                }
+
+                $owners[$domain] = $manifest->packageName;
+            }
+        }
+    }
+
+    /**
+     * Every installed package, as Composer's installed.json lists it.
+     *
+     * @return list<array<mixed>>
+     */
+    public function composerPackages(): array
+    {
+        return array_values(array_filter($this->packages(), \is_array(...)));
+    }
+
+    /**
+     * Where installed.json is: packages' install paths are relative to it.
+     */
+    public function vendorComposerDir(): string
+    {
+        return \dirname($this->installedJsonPath);
     }
 
     /**

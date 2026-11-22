@@ -11,6 +11,8 @@ use Quire\Extension\Exception\InvalidManifestException;
 use Quire\Extension\ExtensionManifest;
 use Quire\Extension\ExtensionType;
 use Quire\Extension\ManifestParser;
+use Quire\Translation\TranslationDelivery;
+use Quire\Translation\TranslationsDeclaration;
 
 final class ManifestParserTest extends TestCase
 {
@@ -105,6 +107,26 @@ final class ManifestParserTest extends TestCase
         self::assertSame([], $this->parse($this->package('acme/reviews'))?->importmap);
     }
 
+    public function testReadsWhatAPackageSaysAboutItsTexts(): void
+    {
+        $default = $this->parse($this->package('acme/reviews'))?->translations();
+        self::assertEquals(new TranslationsDeclaration('acme/reviews', ['acme-reviews']), $default, 'English, bundled, in the domain of its ID.');
+
+        $hub = $this->parse($this->package('acme/reviews', ['extra' => ['quire' => ['translations' => ['version' => 1, 'source' => 'pt_BR', 'delivery' => 'hub', 'domains' => ['acme-reviews', 'acme-stars', 'acme-stars']]]]]))?->translations();
+        self::assertEquals(new TranslationsDeclaration('acme/reviews', ['acme-reviews', 'acme-stars'], TranslationDelivery::Hub, 'pt_BR'), $hub);
+
+        $this->composer->addPackage('quire/comments');
+        $quire = $this->parse($this->package('quire/comments', ['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['quire-comments']]]]]))?->translations();
+        self::assertSame(['quire-comments'], $quire?->domains, 'Quire\'s own packages may have "quire-…" domains.');
+    }
+
+    public function testADeclarationMadeInCodeIsCheckedToo(): void
+    {
+        $this->expectExceptionMessageIsOrContains('lists "quire", which is reserved for Quire\'s own packages');
+
+        new TranslationsDeclaration('acme/reviews', ['quire'], TranslationDelivery::Hub);
+    }
+
     public function testAcceptsAnEmptyManifestObject(): void
     {
         self::assertNotNull($this->parse($this->package('acme/reviews', ['extra' => ['quire' => []]])));
@@ -120,6 +142,8 @@ final class ManifestParserTest extends TestCase
         yield 'invalid ID' => [['extra' => ['quire' => ['id' => 'Acme_Reviews']]], 'IDs may only contain lowercase letters, digits and single hyphens, e.g. "acme-reviews"'];
         yield 'core\'s own ID' => [['extra' => ['quire' => ['id' => 'quire']]], '"quire" is Quire\'s own name, which no extension or theme may take'];
         yield 'core\'s extender ID' => [['extra' => ['quire' => ['id' => 'core']]], '"core" is Quire\'s own name'];
+        yield 'a name of core\'s activity' => [['extra' => ['quire' => ['id' => 'user']]], '"user" is a name core uses for its own activity and settings'];
+        yield 'a group of core\'s settings' => [['extra' => ['quire' => ['id' => 'site']]], '"site" is a name core uses for its own activity and settings'];
         yield 'typo in a key' => [['extra' => ['quire' => ['require' => []]]], '"extra.quire.require" is not a known key. Did you mean "requires"?'];
         yield 'unknown key' => [['extra' => ['quire' => ['colour' => 'red']]], 'Known keys:'];
         yield 'empty title' => [['extra' => ['quire' => ['title' => '  ']]], '"extra.quire.title" must be a non-empty string'];
@@ -139,6 +163,18 @@ final class ManifestParserTest extends TestCase
         yield 'importmap names a URL' => [['extra' => ['quire' => ['importmap' => ['https://cdn.example.com/turbo.js' => '8.0.23']]]], 'which is not the name of an npm package'];
         yield 'importmap has a range' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo' => '^8.0']]]], '"extra.quire.importmap.@hotwired/turbo" must be an exact version, such as "1.2.3", so every site gets the same file; got "^8.0".'];
         yield 'importmap version is not a string' => [['extra' => ['quire' => ['importmap' => ['@hotwired/turbo' => 8]]]], 'must be an exact version'];
+        yield 'translations is a list' => [['extra' => ['quire' => ['translations' => ['acme-reviews']]]], '"extra.quire.translations" must be a JSON object'];
+        yield 'unknown translations key' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domain' => 'acme-reviews']]]], '"extra.quire.translations.domain" is not a known key. Known keys: version, source, delivery, domains.'];
+        yield 'translations without a version' => [['extra' => ['quire' => ['translations' => ['delivery' => 'hub', 'domains' => ['acme-reviews']]]]], '"extra.quire.translations.version" must be 1, the version of the format this Quire reads; got null.'];
+        yield 'a newer translations format' => [['extra' => ['quire' => ['translations' => ['version' => 2]]]], 'got 2. A newer format needs a newer Quire.'];
+        yield 'a source that isn\'t a language code' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'source' => 'pt-BR']]]], '"extra.quire.translations.source" must be the language the texts are written in'];
+        yield 'an unknown delivery' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'cdn']]]], '"extra.quire.translations.delivery" must be "bundled" or "hub"; got "cdn".'];
+        yield 'from the hub without domains' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'hub']]]], '"extra.quire.translations.domains" must list the domains of a package whose texts come from the hub'];
+        yield 'no domains' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => []]]]], '"extra.quire.translations.domains" must be a list of translation domains'];
+        yield 'a domain that isn\'t one' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['Acme Reviews']]]]], 'lists "Acme Reviews", which is not a domain'];
+        yield 'a domain of Quire\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['quire']]]]], 'lists "quire", which is reserved for Quire\'s own packages'];
+        yield 'a domain like Quire\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['quire-admin']]]]], 'lists "quire-admin", which is reserved for Quire\'s own packages'];
+        yield 'a domain of Symfony\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['security']]]]], 'lists "security", which is one of Symfony\'s own domains'];
         yield 'parent is the theme itself' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme-reviews']]]], 'is the theme itself'];
     }
 

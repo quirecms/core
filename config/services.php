@@ -66,6 +66,9 @@ return static function (ContainerConfigurator $container): void {
             '../src/Theme/Navigation/NavigationItem.php',
             '../src/Setup/SetupStep.php',
             '../src/Extension/ExtensionManifest.php',
+            // Language packages: values, and what's used while the container is built
+            '../src/Translation/{ArtifactStatus,Locales,PlainTexts,TranslationArtifact,TranslationArtifacts,TranslationDelivery,TranslationsDeclaration,VersionLine}.php',
+            '../src/Translation/Internal/{ArtifactLoader,TranslationArtifactsPass}.php',
             '../src/Extension/ExtensionType.php',
             '../src/Extension/Exception/',
             '../src/Extension/Event/',

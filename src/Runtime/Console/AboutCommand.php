@@ -16,8 +16,9 @@ use Symfony\Component\Console\Style\SymfonyStyle;
     description: 'Show what runs the site and how it is: versions, extensions, migrations and health',
     help: <<<'HELP'
         Shows the site's Quire, PHP and Symfony versions, its title, language and address, whether
-        it's installed, its extensions and theme, its database's migrations, and its health checks
-        (those of /_quire/health):
+        it's installed, its extensions and theme, its language packages (each loaded, or ignored with
+        why, among the warnings), its database's migrations, and its health checks (those of
+        /_quire/health):
 
           <info>%command.full_name%</info>
 
@@ -69,6 +70,10 @@ final readonly class AboutCommand
 
         if ([] !== $report['extensions']) {
             $io->table(['Extension', 'Status', 'Version', 'Type'], array_map(static fn (array $extension): array => [$extension['id'], $extension['status'], $extension['version'], $extension['type']], $report['extensions']));
+        }
+
+        if ([] !== $report['translations']) {
+            $io->table(['Language package', 'For', 'Language', 'Status'], array_map(static fn (array $artifact): array => [$artifact['name'], $artifact['package'] ?? '', $artifact['locale'] ?? '', $artifact['status']], $report['translations']));
         }
 
         $io->table(['Health check', 'Status', 'Message'], array_map(

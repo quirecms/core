@@ -59,6 +59,40 @@ final class InstalledExtensionsTest extends TestCase
         new InstalledExtensions($composer->installedJsonPath())->all();
     }
 
+    public function testATranslationDomainIsOnePackages(): void
+    {
+        $declares = static fn (string ...$domains): array => ['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'hub', 'domains' => $domains]]]];
+
+        // The default (its ID) counts too
+        $composer = new FakeComposerInstallation()
+            ->addPackage('acme/reviews')
+            ->addPackage('other/stars', overrides: $declares('other-stars', 'acme-reviews'));
+
+        try {
+            new InstalledExtensions($composer->installedJsonPath())->all();
+            self::fail('Two packages with one domain.');
+        } catch (ExtensionDiscoveryException $e) {
+            self::assertStringContainsString('The packages "acme/reviews" and "other/stars" both declare the translation domain "acme-reviews"', $e->getMessage());
+        }
+
+        $composer = new FakeComposerInstallation()
+            ->addPackage('quire/stars', overrides: $declares('quire'));
+
+        $this->expectException(ExtensionDiscoveryException::class);
+        $this->expectExceptionMessageIsOrContains('The packages "quire/core" and "quire/stars" both declare the translation domain "quire"');
+
+        new InstalledExtensions($composer->installedJsonPath())->all();
+    }
+
+    public function testPackagesWithTheirOwnDomainsAreFine(): void
+    {
+        $composer = new FakeComposerInstallation()
+            ->addPackage('acme/reviews')
+            ->addPackage('other/stars', overrides: ['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'hub', 'domains' => ['other-stars', 'other-ratings']]]]]);
+
+        self::assertCount(2, new InstalledExtensions($composer->installedJsonPath())->all());
+    }
+
     public function testMissingInstalledJsonExplainsTheFix(): void
     {
         $this->expectException(ExtensionDiscoveryException::class);

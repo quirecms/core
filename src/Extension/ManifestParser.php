@@ -6,6 +6,8 @@ namespace Quire\Extension;
 
 use Quire\Extension\Exception\ExtensionDiscoveryException;
 use Quire\Extension\Exception\InvalidManifestException;
+use Quire\Translation\TranslationDelivery;
+use Quire\Translation\TranslationsDeclaration;
 
 /**
  * Turns a Composer package entry into an {@see ExtensionManifest}.
@@ -20,7 +22,16 @@ final class ManifestParser
     /** IDs that are core's: its assets are mapped as "quire/…", next to each extension's "<id>/…" */
     private const array RESERVED_IDS = ['quire', 'core'];
 
-    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme', 'importmap'];
+    /**
+     * Names core and the admin use under an extension's ID elsewhere: the activity log's actions and their
+     * texts ("user.created", "audit.origin.web") and the groups of settings ("site"). An extension's own
+     * actions and group are described from its own texts, so one named like these would word core's.
+     */
+    public const array CORE_NAMESPACES = ['appearance', 'area', 'content', 'detail', 'extension', 'mail', 'origin', 'permalinks', 'role', 'setting', 'site', 'storage', 'theme', 'user', 'users', 'via'];
+
+    private const array KNOWN_KEYS = ['id', 'title', 'description', 'category', 'icon', 'requires', 'optional', 'theme', 'importmap', 'translations'];
+
+    private const array KNOWN_TRANSLATIONS_KEYS = ['version', 'source', 'delivery', 'domains'];
 
     /** An npm package, optionally with a file inside it: "@hotwired/turbo", "bootstrap/dist/css/bootstrap.min.css" */
     private const string PACKAGE_PATTERN = '#^(?:@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*(?:/[A-Za-z0-9._-]+)*$#';
@@ -65,6 +76,10 @@ final class ManifestParser
             throw InvalidManifestException::forPackage($name, \sprintf('"%s" is Quire\'s own name, which no extension or theme may take: set "extra.quire.id" to another, e.g. "%s-extension".', $id, $id));
         }
 
+        if (\in_array($id, self::CORE_NAMESPACES, true)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"%s" is a name core uses for its own activity and settings, which no extension or theme may take: set "extra.quire.id" to another, e.g. "%s".', $id, self::idFromPackageName($name)));
+        }
+
         $requires = $this->idList($name, $manifest, 'requires', $id);
         $optional = $this->idList($name, $manifest, 'optional', $id);
         $overlap = array_values(array_intersect($requires, $optional));
@@ -92,6 +107,7 @@ final class ManifestParser
             importmap: $this->importmap($name, $manifest),
             screenshot: $screenshot,
             supports: $supports,
+            translations: $this->translations($name, $manifest, $id),
         );
     }
 
@@ -216,6 +232,62 @@ final class ManifestParser
         }
 
         return [$parent, $screenshot, array_values(array_unique($features))];
+    }
+
+    /**
+     * Reads "extra.quire.translations": {"version": 1, "source": "en", "delivery": "hub", "domains": ["acme-shop"]}.
+     * Left out, the package's texts are English, bundled, in the domain of its ID.
+     *
+     * @param array<string, mixed> $manifest
+     */
+    private function translations(string $name, array $manifest, string $id): TranslationsDeclaration
+    {
+        if (!\array_key_exists('translations', $manifest)) {
+            return new TranslationsDeclaration($name, [$id]);
+        }
+
+        $declared = $manifest['translations'];
+        $example = '{"version": 1, "delivery": "hub", "domains": ["'.$id.'"]}';
+
+        if (!\is_array($declared) || array_is_list($declared)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations" must be a JSON object, e.g. %s.', $example));
+        }
+
+        foreach (array_keys($declared) as $key) {
+            if (!\in_array($key, self::KNOWN_TRANSLATIONS_KEYS, true)) {
+                throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations.%s" is not a known key. Known keys: %s.', $key, implode(', ', self::KNOWN_TRANSLATIONS_KEYS)));
+            }
+        }
+
+        // The hub reads this too: a format Quire doesn't know is refused, never guessed at
+        $version = $declared['version'] ?? null;
+        $source = $declared['source'] ?? 'en';
+        $delivery = \is_string($declared['delivery'] ?? 'bundled') ? TranslationDelivery::tryFrom($declared['delivery'] ?? 'bundled') : null;
+
+        if (!\is_int($version)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations.version" must be %d, the version of the format this Quire reads; got %s.', TranslationsDeclaration::VERSION, json_encode($version)));
+        }
+
+        if (!\is_string($source)) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations.source" must be the language the texts are written in, as a code such as "en" or "pt_BR"; got %s.', json_encode($source)));
+        }
+
+        if (null === $delivery) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations.delivery" must be "bundled" or "hub"; got %s.', json_encode($declared['delivery'])));
+        }
+
+        $domains = TranslationDelivery::Hub === $delivery ? ($declared['domains'] ?? []) : ($declared['domains'] ?? [$id]);
+
+        if (!\is_array($domains) || array_filter($domains, \is_string(...)) !== $domains) {
+            throw InvalidManifestException::forPackage($name, \sprintf('"extra.quire.translations.domains" must be a list of translation domains, e.g. ["%s"].', $id));
+        }
+
+        // The declaration checks the rest itself, so one made elsewhere can't skip it
+        try {
+            return new TranslationsDeclaration($name, array_values(array_unique($domains)), $delivery, $source, $version);
+        } catch (\InvalidArgumentException $e) {
+            throw InvalidManifestException::forPackage($name, $e->getMessage());
+        }
     }
 
     /**

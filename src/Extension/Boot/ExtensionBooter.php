@@ -28,6 +28,11 @@ use Quire\Theme\Internal\ThemePreviews;
 use Quire\Theme\Slots;
 use Quire\Theme\ThemePreview;
 use Quire\Theme\Themes;
+use Quire\Translation\ArtifactStatus;
+use Quire\Translation\Internal\TranslationArtifactsPass;
+use Quire\Translation\TranslationArtifact;
+use Quire\Translation\TranslationArtifacts;
+use Symfony\Component\Config\Resource\DirectoryResource;
 use Symfony\Component\Config\Resource\FileExistenceResource;
 use Symfony\Component\Config\Resource\FileResource;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -228,5 +233,29 @@ final readonly class ExtensionBooter
         if ([] !== $paths) {
             $container->prependExtensionConfig('framework', ['translator' => ['paths' => $paths]]);
         }
+
+        $this->addTranslationArtifacts($container, $themes);
+    }
+
+    /**
+     * Decides the installed language artifacts, for TranslationArtifactsPass to load the ones that fit. Their
+     * directories are watched, so a file dropped into one decides it again.
+     *
+     * @param list<ExtensionManifest> $themes The active theme first
+     */
+    private function addTranslationArtifacts(ContainerBuilder $container, array $themes): void
+    {
+        $packages = $this->installed->composerPackages();
+        $statuses = new TranslationArtifacts()->read($packages, $this->installed->vendorComposerDir());
+
+        foreach ($packages as $package) {
+            if (TranslationArtifact::TYPE === ($package['type'] ?? null) && \is_string($package['install-path'] ?? null)) {
+                $directory = $this->installed->vendorComposerDir().\DIRECTORY_SEPARATOR.$package['install-path'].\DIRECTORY_SEPARATOR.'translations';
+                $container->addResource(is_dir($directory) ? new DirectoryResource($directory) : new FileExistenceResource($directory));
+            }
+        }
+
+        $container->setParameter(TranslationArtifactsPass::ARTIFACTS, array_map(static fn (ArtifactStatus $status): array => $status->toArray(), $statuses));
+        $container->setParameter(TranslationArtifactsPass::OVERRIDE_DIRS, array_map(static fn (ExtensionManifest $theme): string => $theme->path.\DIRECTORY_SEPARATOR.'translations', $themes));
     }
 }

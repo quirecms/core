@@ -65,6 +65,15 @@ final readonly class TranslationRuntime implements RuntimeExtensionInterface
     }
 
     /**
+     * The language a message shows in when the page's language has none of it ("en"), or null: for text a
+     * script writes, which marks it as quire_trans does (`lang`, isolated).
+     */
+    public function fallbackLanguage(string $message, ?string $domain = null): ?string
+    {
+        return $this->fallbackLocale($message, $domain ?? 'messages', null);
+    }
+
+    /**
      * The language a message shows in when the page's own has no translation of it, or null when it has
      * one (or is the fallback language itself).
      */

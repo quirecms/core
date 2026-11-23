@@ -15,7 +15,7 @@
 {% block content %}
     <article>
         {% if preview|default(false) %}
-            <p class="notice" role="status">{{ 'Preview: this isn\'t published, so only people who may see unpublished content see it.'|trans({}, 'quire') }}</p>
+            <p class="notice" role="status">{{ 'Preview: this isn’t published, so only people who may see unpublished content see it.'|trans({}, 'quire') }}</p>
         {% endif %}
         {{ quire_slot('content.before_title', { content }) }}
         <h1>{{ content.title }}</h1>

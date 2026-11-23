@@ -55,6 +55,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             // A server error's reference and time, for the error page (null on other pages)
             new TwigFunction('quire_error_reference', [ErrorReference::class, 'current']),
             // The names people read for types, roles, abilities and settings, in the page's language (Quire\Translation\Labels)
+            // The language a text shows in when the page's has none of it ("en"), for text a script writes
+            new TwigFunction('quire_fallback_language', [TranslationRuntime::class, 'fallbackLanguage']),
             new TwigFunction('quire_type_label', [Labels::class, 'type']),
             new TwigFunction('quire_type_phrase', [Labels::class, 'phrase']),
             new TwigFunction('quire_role_label', [Labels::class, 'role']),

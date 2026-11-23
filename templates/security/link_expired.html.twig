@@ -7,13 +7,13 @@
 #}
 {% extends 'layout.html.twig' %}
 
-{% block title %}{{ 'This link doesn\'t work anymore'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
+{% block title %}{{ 'This link doesn’t work anymore'|trans({}, 'quire') }} – {{ site.title }}{% endblock %}
 
 {% block content %}
     <section class="sign-in account">
         {% block account %}
             {% block account_heading %}
-                <h1>{{ 'This link doesn\'t work anymore'|quire_trans({}, 'quire') }}</h1>
+                <h1>{{ 'This link doesn’t work anymore'|quire_trans({}, 'quire') }}</h1>
                 <p class="account-intro">{{ 'Links in our emails work once, for a limited time, and only the newest one does.'|quire_trans({}, 'quire') }}</p>
             {% endblock %}
             {% if retry_route %}

@@ -5,9 +5,9 @@
 'Email or username': 'Email or username'
 'Password': 'Password'
 'Keep me signed in on this device': 'Keep me signed in on this device'
-"You're signed in as {name}.": "You're signed in as {name}."
+"You’re signed in as {name}.": "You’re signed in as {name}."
 'Signing in with a password is turned off.': 'Signing in with a password is turned off.'
-"Preview: this isn't published, so only people who may see unpublished content see it.": "Preview: this isn't published, so only people who may see unpublished content see it."
+"Preview: this isn’t published, so only people who may see unpublished content see it.": "Preview: this isn’t published, so only people who may see unpublished content see it."
 "Create an account": "Create an account"
 "Name": "Name"
 "Email": "Email"
@@ -16,17 +16,17 @@
 "Already have an account?": "Already have an account?"
 "New here?": "New here?"
 "Forgot your password?": "Forgot your password?"
-"Enter your email address, and we'll send you a link to choose a new password.": "Enter your email address, and we'll send you a link to choose a new password."
+"Enter your email address, and we’ll send you a link to choose a new password.": "Enter your email address, and we’ll send you a link to choose a new password."
 "Send the link": "Send the link"
 "Back to signing in": "Back to signing in"
 "Choose a new password": "Choose a new password"
 "New password": "New password"
 "Change password": "Change password"
 "Confirm your email address": "Confirm your email address"
-"Didn't get the email, or did the link expire? Enter your email address for a new one.": "Didn't get the email, or did the link expire? Enter your email address for a new one."
+"Didn’t get the email, or did the link expire? Enter your email address for a new one.": "Didn’t get the email, or did the link expire? Enter your email address for a new one."
 "Check your inbox": "Check your inbox"
-"If {email} has an account with us, we've sent it an email with a link. It can take a few minutes; check your spam folder too.": "If {email} has an account with us, we've sent it an email with a link. It can take a few minutes; check your spam folder too."
-"This link doesn't work anymore": "This link doesn't work anymore"
+"If {email} has an account with us, we’ve sent it an email with a link. It can take a few minutes; check your spam folder too.": "If {email} has an account with us, we’ve sent it an email with a link. It can take a few minutes; check your spam folder too."
+"This link doesn’t work anymore": "This link doesn’t work anymore"
 "Links in our emails work once, for a limited time, and only the newest one does.": "Links in our emails work once, for a limited time, and only the newest one does."
 "Get a new link": "Get a new link"
 "Send a new link": "Send a new link"
@@ -37,23 +37,23 @@
 "Another user has this email.": "Another user has this email."
 "Passwords must be at least 8 characters long.": "Passwords must be at least 8 characters long."
 "The display name must be 1 to 100 characters long.": "The display name must be 1 to 100 characters long."
-"This link doesn't work anymore.": "This link doesn't work anymore."
+"This link doesn’t work anymore.": "This link doesn’t work anymore."
 "Your email address is confirmed. You can sign in now.": "Your email address is confirmed. You can sign in now."
 "Your password is changed. You can sign in with it now.": "Your password is changed. You can sign in with it now."
 "Reset your password": "Reset your password"
 "You already have an account": "You already have an account"
 "Hello {name},": "Hello {name},"
 "Someone asked to reset the password of your account. If it was you, choose a new password here:": "Someone asked to reset the password of your account. If it was you, choose a new password here:"
-"The link works once, for one hour. If you didn't ask for it, ignore this email: your password stays as it is.": "The link works once, for one hour. If you didn't ask for it, ignore this email: your password stays as it is."
+"The link works once, for one hour. If you didn’t ask for it, ignore this email: your password stays as it is.": "The link works once, for one hour. If you didn’t ask for it, ignore this email: your password stays as it is."
 "Please confirm that this is your email address, so you can sign in:": "Please confirm that this is your email address, so you can sign in:"
 "Confirm my email address": "Confirm my email address"
-"The link works for two days. If you didn't create an account, ignore this email.": "The link works for two days. If you didn't create an account, ignore this email."
+"The link works for two days. If you didn’t create an account, ignore this email.": "The link works for two days. If you didn’t create an account, ignore this email."
 "Someone tried to create an account with your email address, but you already have one.": "Someone tried to create an account with your email address, but you already have one."
-"If it wasn't you, ignore this email: nothing changed.": "If it wasn't you, ignore this email: nothing changed."
-'You''re invited to {site}': 'You''re invited to {site}'
+"If it wasn’t you, ignore this email: nothing changed.": "If it wasn’t you, ignore this email: nothing changed."
+'You’re invited to {site}': 'You’re invited to {site}'
 'Choose your password': 'Choose your password'
 'Save password': 'Save password'
-'Welcome to {site}, {name}. Choose the password you''ll sign in with as {username}.': 'Welcome to {site}, {name}. Choose the password you''ll sign in with as {username}.'
+'Welcome to {site}, {name}. Choose the password you’ll sign in with as {username}.': 'Welcome to {site}, {name}. Choose the password you’ll sign in with as {username}.'
 'Ask the person who invited you to send a new invitation.': 'Ask the person who invited you to send a new invitation.'
 '{admin} added you to {site}, as {username}. Choose your password to sign in:': '{admin} added you to {site}, as {username}. Choose your password to sign in:'
 'You were added to {site}, as {username}. Choose your password to sign in:': 'You were added to {site}, as {username}. Choose your password to sign in:'
@@ -72,7 +72,7 @@
 "The link works once, for a day. Until you use it, your password stays as it is.": "The link works once, for a day. Until you use it, your password stays as it is."
 "{admin} changed the email address of your account on {site} to {email}. Emails about your account, such as password links, now go there.": "{admin} changed the email address of your account on {site} to {email}. Emails about your account, such as password links, now go there."
 "The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there.": "The email address of your account on {site} was changed to {email}. Emails about your account, such as password links, now go there."
-"If you didn't expect this, contact the people who run the site at once.": "If you didn't expect this, contact the people who run the site at once."
+"If you didn’t expect this, contact the people who run the site at once.": "If you didn’t expect this, contact the people who run the site at once."
 "You no longer see the site as {name}: {reason}": "You no longer see the site as {name}: {reason}"
 "A test e-mail from {site}": "A test e-mail from {site}"
 "This is the test e-mail you asked for: the site can send e-mails.": "This is the test e-mail you asked for: the site can send e-mails."
@@ -101,7 +101,7 @@
 'Wrong address?': 'Wrong address?'
 'Use a different one': 'Use a different one'
 'Welcome, {name}': 'Welcome, {name}'
-'You’ve been invited to {site} as “{role}”. Choose the password you’ll sign in with as {username}.': 'You’ve been invited to {site} as “{role}”. Choose the password you’ll sign in with as {username}.'
+'You’ve been invited to {site} as {role}. Choose the password you’ll sign in with as {username}.': 'You’ve been invited to {site} as {role}. Choose the password you’ll sign in with as {username}.'
 'You’ve been invited to {site}. Choose the password you’ll sign in with as {username}.': 'You’ve been invited to {site}. Choose the password you’ll sign in with as {username}.'
 'Not expecting this invitation? Leave this page. Nothing happens until you choose a password.': 'Not expecting this invitation? Leave this page. Nothing happens until you choose a password.'
 'You’ll sign in with it as {username}.': 'You’ll sign in with it as {username}.'

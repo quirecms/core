@@ -8,6 +8,7 @@ use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
 use Quire\Permission\Permissions;
 use Quire\Settings\Settings;
+use Quire\Translation\Labels;
 use Quire\User\AccountSettings;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Mail\UserMailer;
@@ -66,6 +67,7 @@ final readonly class PasswordResetController
         private UrlGeneratorInterface $urls,
         private LoggerInterface $logger,
         private Permissions $permissions,
+        private Labels $labels,
     ) {
     }
 
@@ -179,7 +181,7 @@ final readonly class PasswordResetController
         try {
             // The token is used up only when the new password is accepted.
             $this->connection->transactional(function () use ($token, $purpose, $request): void {
-                $user = $this->tokens->consume($token, $purpose) ?? throw InvalidUserException::single('form', 'This link doesn\'t work anymore.');
+                $user = $this->tokens->consume($token, $purpose) ?? throw InvalidUserException::single('form', 'This link doesn’t work anymore.');
                 $this->writer->changePassword($user->id, $request->request->getString('password'));
                 // Opening the link proved they read the email.
                 $this->writer->markEmailVerified($user->id);
@@ -213,11 +215,9 @@ final readonly class PasswordResetController
 
     private function roleLabel(User $user): ?string
     {
-        $labels = $this->permissions->roles();
-
         foreach ($user->roles as $role) {
-            if (Role::GUEST !== $role && Role::MEMBER !== $role && isset($labels[$role])) {
-                return $labels[$role];
+            if (Role::GUEST !== $role && Role::MEMBER !== $role && $this->permissions->hasRole($role)) {
+                return $this->labels->role($role);
             }
         }
 

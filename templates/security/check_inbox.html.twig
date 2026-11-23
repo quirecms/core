@@ -21,7 +21,7 @@
             {% if flow == 'register' %}
                 <p class="account-intro" role="status">{{ 'We’ve sent an email to {email}. Open the link in it to finish creating your account. If this address already has an account, the email tells you how to sign in instead.'|quire_trans_html({email: _self.chip(email)}, 'quire') }}</p>
             {% else %}
-                <p class="account-intro" role="status">{{ 'If {email} has an account with us, we\'ve sent it an email with a link. It can take a few minutes; check your spam folder too.'|quire_trans_html({email: _self.chip(email)}, 'quire') }}</p>
+                <p class="account-intro" role="status">{{ 'If {email} has an account with us, we’ve sent it an email with a link. It can take a few minutes; check your spam folder too.'|quire_trans_html({email: _self.chip(email)}, 'quire') }}</p>
             {% endif %}
             <div class="account-links">
                 {% set again = flow == 'reset' ? path('quire_forgot_password') : (flow == 'register' ? path('quire_resend_verification') : path('quire_resend_verification')) %}

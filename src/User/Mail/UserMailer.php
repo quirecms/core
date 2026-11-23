@@ -62,7 +62,7 @@ final readonly class UserMailer
      */
     public function sendInvitation(User $user, string $token, ?User $invitedBy = null): void
     {
-        $this->send($user, 'invitation', 'You\'re invited to {site}', [
+        $this->send($user, 'invitation', 'You’re invited to {site}', [
             'url' => $this->link('quire_welcome', ['token' => $token]),
             'invited_by' => $invitedBy,
         ]);

@@ -140,6 +140,26 @@ final class ContentTypeTest extends ExtenderTestCase
         $this->assertExtenderFails(new ContentType('product')->sortBy('title', 'up'), 'The sort direction is "asc" or "desc".');
     }
 
+    public function testATypeWordsItsPhrases(): void
+    {
+        $this->apply(new ContentType('product')->label('Product', 'Products')->phrases(['new' => 'New product', 'count' => '{count, plural, one {# product} other {# products}}']));
+
+        self::assertSame(['new' => 'New product', 'count' => '{count, plural, one {# product} other {# products}}'], $this->registry()->get('product')->phrases);
+    }
+
+    public function testPhrasesAreCheckedWhenTheTypeIsDeclared(): void
+    {
+        $this->assertExtenderFails(new ContentType('product')->phrases(['create' => 'New product']), '"create" isn\'t a phrase a type words. Phrases: new, all, count, search, empty.');
+        $this->assertExtenderFails(new ContentType('product')->phrases(['new' => ' ']), 'The phrase "new" is empty.');
+        $this->assertExtenderFails(new ContentType('product')->phrases(['count' => 'Some products']), 'The phrase "count" says how many with {count}');
+        $this->assertExtenderFails(new ContentType('product')->phrases(['new' => 'New {product']), 'The phrase "new" isn\'t an ICU message (');
+        $this->assertExtenderFails(new ContentType('product')->phrases(['count' => '{count, plural, one {# product}']), 'The phrase "count" isn\'t an ICU message (');
+
+        $this->apply(new ContentType('product'));
+
+        $this->assertExtenderFails(ContentType::existing('product')->phrases(['new' => 'New thing']), 'Only capabilities and fields can be added to a type registered elsewhere.');
+    }
+
     public function testDuplicateTypesAreRejected(): void
     {
         $this->apply(new ContentType('product'));

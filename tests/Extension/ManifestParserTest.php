@@ -174,6 +174,7 @@ final class ManifestParserTest extends TestCase
         yield 'a domain that isn\'t one' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['Acme Reviews']]]]], 'lists "Acme Reviews", which is not a domain'];
         yield 'a domain of Quire\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['quire']]]]], 'lists "quire", which is reserved for Quire\'s own packages'];
         yield 'a domain like Quire\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['quire-admin']]]]], 'lists "quire-admin", which is reserved for Quire\'s own packages'];
+        yield 'the site\'s domain' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'hub', 'domains' => ['site']]]]], 'lists "site", which is the site\'s own'];
         yield 'a domain of Symfony\'s' => [['extra' => ['quire' => ['translations' => ['version' => 1, 'domains' => ['security']]]]], 'lists "security", which is one of Symfony\'s own domains'];
         yield 'parent is the theme itself' => [['type' => 'quire-theme', 'extra' => ['quire' => ['theme' => ['parent' => 'acme-reviews']]]], 'is the theme itself'];
     }

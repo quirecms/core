@@ -171,12 +171,26 @@ return [
 
     new Extend\ContentType('post')
         ->label('Post', 'Posts')
+        ->phrases([
+            'new' => 'New post',
+            'all' => 'All posts',
+            'count' => '{count, plural, one {# post} other {# posts}}',
+            'search' => 'Search {count, plural, one {# post} other {# posts}}…',
+            'empty' => 'No posts yet.',
+        ])
         ->capabilities(Capability::REVISIONS, Capability::SCHEDULING, Capability::EXCERPT, Capability::LISTABLE, Capability::SEARCHABLE, Capability::AUTHOR)
         ->permalink('/blog/{slug}')
         ->sortBy('published_at', 'desc'),
 
     new Extend\ContentType('page')
         ->label('Page', 'Pages')
+        ->phrases([
+            'new' => 'New page',
+            'all' => 'All pages',
+            'count' => '{count, plural, one {# page} other {# pages}}',
+            'search' => 'Search {count, plural, one {# page} other {# pages}}…',
+            'empty' => 'No pages yet.',
+        ])
         ->capabilities(Capability::HIERARCHICAL, Capability::REVISIONS, Capability::SEARCHABLE, Capability::AUTHOR)
         ->permalink('/{path}')
         ->sortBy('position'),

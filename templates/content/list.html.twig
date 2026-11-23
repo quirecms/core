@@ -10,21 +10,21 @@
 #}
 {% extends 'layout.html.twig' %}
 
-{% block title %}{{ is_home ? site.title : type.pluralLabel ~ ' – ' ~ site.title }}{% endblock %}
+{% block title %}{{ is_home ? site.title : quire_type_label(type, true) ~ ' – ' ~ site.title }}{% endblock %}
 
 {% block content %}
-    {% if not is_home %}<h1>{{ type.pluralLabel }}</h1>{% endif %}
+    {% if not is_home %}<h1>{{ quire_type_label(type, true) }}</h1>{% endif %}
 
     {% for item in page %}
         {{ include(['content/' ~ type.id ~ '/_card.html.twig', 'content/_card.html.twig'], {item: item, type: type}) }}
     {% else %}
-        <p>No {{ type.pluralLabel|lower }} yet.</p>
+        <p>{{ quire_type_phrase(type, 'empty') }}</p>
     {% endfor %}
 
     {% if previous_url or next_url %}
         <nav aria-label="Pages">
-            {% if next_url %}<a href="{{ next_url }}" rel="next">Older {{ type.pluralLabel|lower }}</a>{% endif %}
-            {% if previous_url %}<a href="{{ previous_url }}" rel="prev">Newer {{ type.pluralLabel|lower }}</a>{% endif %}
+            {% if next_url %}<a href="{{ next_url }}" rel="next">Older</a>{% endif %}
+            {% if previous_url %}<a href="{{ previous_url }}" rel="prev">Newer</a>{% endif %}
         </nav>
     {% endif %}
 {% endblock %}

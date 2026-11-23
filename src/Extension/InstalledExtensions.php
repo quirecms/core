@@ -6,6 +6,7 @@ namespace Quire\Extension;
 
 use Quire\Extension\Exception\ExtensionDiscoveryException;
 use Quire\Extension\Exception\UnknownExtensionException;
+use Quire\Translation\TranslationsDeclaration;
 use Symfony\Contracts\Service\ResetInterface;
 
 /**
@@ -125,7 +126,7 @@ final class InstalledExtensions implements ResetInterface
      */
     private function oneOwnerPerDomain(array $manifests): void
     {
-        $owners = ['quire' => 'quire/core'];
+        $owners = ['quire' => 'quire/core', TranslationsDeclaration::SITE_DOMAIN => 'the site'];
 
         foreach ($manifests as $manifest) {
             foreach ($manifest->translations()->domains as $domain) {

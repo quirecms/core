@@ -84,6 +84,17 @@ final class InstalledExtensionsTest extends TestCase
         new InstalledExtensions($composer->installedJsonPath())->all();
     }
 
+    public function testNoPackageHasTheSitesDomain(): void
+    {
+        // An ID can't be "site" either (a name core uses), so only a declaration could claim it, and it's refused
+        $this->expectException(\Quire\Extension\Exception\InvalidManifestException::class);
+        $this->expectExceptionMessageIsOrContains('lists "site", which is the site\'s own');
+
+        $composer = new FakeComposerInstallation()->addPackage('acme/names', overrides: ['extra' => ['quire' => ['translations' => ['version' => 1, 'delivery' => 'hub', 'domains' => ['site']]]]]);
+
+        new InstalledExtensions($composer->installedJsonPath())->all();
+    }
+
     public function testPackagesWithTheirOwnDomainsAreFine(): void
     {
         $composer = new FakeComposerInstallation()

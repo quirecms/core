@@ -6,6 +6,7 @@ namespace Quire\Theme\Twig;
 
 use Quire\Http\ErrorReference;
 use Quire\Theme\Navigation\Navigation;
+use Quire\Translation\Labels;
 use Twig\DeprecatedCallableInfo;
 use Twig\Extension\AbstractExtension;
 use Twig\Extension\GlobalsInterface;
@@ -53,6 +54,12 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_head', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html']]),
             // A server error's reference and time, for the error page (null on other pages)
             new TwigFunction('quire_error_reference', [ErrorReference::class, 'current']),
+            // The names people read for types, roles and settings, in the page's language (Quire\Translation\Labels)
+            new TwigFunction('quire_type_label', [Labels::class, 'type']),
+            new TwigFunction('quire_type_phrase', [Labels::class, 'phrase']),
+            new TwigFunction('quire_role_label', [Labels::class, 'role']),
+            new TwigFunction('quire_setting_label', [Labels::class, 'setting']),
+            new TwigFunction('quire_setting_help', [Labels::class, 'settingHelp']),
             // The name before 0.3, when the head held only the SEO tags.
             new TwigFunction('quire_seo', [ThemeRuntime::class, 'head'], ['needs_context' => true, 'is_safe' => ['html'], 'deprecation_info' => new DeprecatedCallableInfo('quire/core', '0.3', 'quire_head')]),
         ];

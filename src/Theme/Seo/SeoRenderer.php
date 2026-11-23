@@ -15,6 +15,7 @@ use Quire\Head\Head;
 use Quire\Settings\Settings;
 use Quire\Theme\Event\SeoTagsBuilding;
 use Quire\Theme\Twig\SiteView;
+use Quire\Translation\Labels;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
 /**
@@ -39,6 +40,7 @@ final readonly class SeoRenderer
         private EventDispatcherInterface $dispatcher,
         private Permalinks $permalinks,
         private Settings $settings,
+        private Labels $labels,
     ) {
     }
 
@@ -95,7 +97,7 @@ final readonly class SeoRenderer
         if (!$content instanceof Content) {
             $type = ($context['type'] ?? null) instanceof ContentTypeDefinition ? $context['type'] : null;
             $isHome = true === ($context['is_home'] ?? false);
-            $tags->title = !$type instanceof ContentTypeDefinition || $isHome ? $this->site->title() : $type->pluralLabel;
+            $tags->title = !$type instanceof ContentTypeDefinition || $isHome ? $this->site->title() : $this->labels->type($type, plural: true);
             $tags->description = $siteDescription;
 
             if ($isHome) {

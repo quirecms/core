@@ -49,6 +49,9 @@ final class ContentType implements ExtenderInterface
 
     private ?string $pluralLabel = null;
 
+    /** @var array<string, string>|null */
+    private ?array $phrases = null;
+
     /** @var list<string>|null */
     private ?array $capabilities = null;
 
@@ -85,6 +88,29 @@ final class ContentType implements ExtenderInterface
     {
         $this->label = $singular;
         $this->pluralLabel = $plural;
+
+        return $this;
+    }
+
+    /**
+     * The sentences that name the type, in English ICU MessageFormat, so each language can word them whole
+     * rather than drop a noun into a sentence ("New post" is "Neuer Beitrag", "New page" is "Neue Seite").
+     * Translations go in the extension's domain, keyed by these texts. Any left out reads "New: Recipe",
+     * "Recipes: 4" and so on.
+     *
+     *     ->phrases([
+     *         'new' => 'New recipe',
+     *         'all' => 'All recipes',
+     *         'count' => '{count, plural, one {# recipe} other {# recipes}}',
+     *         'search' => 'Search {count, plural, one {# recipe} other {# recipes}}…',
+     *         'empty' => 'No recipes yet.',
+     *     ])
+     *
+     * @param array<string, string> $phrases Of {@see ContentTypeDefinition::PHRASES}
+     */
+    public function phrases(array $phrases): self
+    {
+        $this->phrases = $phrases;
 
         return $this;
     }
@@ -225,6 +251,27 @@ final class ContentType implements ExtenderInterface
         }
 
         $label = $this->label ?? ucfirst(str_replace('_', ' ', $this->id));
+        $phrases = $this->phrases ?? [];
+
+        foreach ($phrases as $name => $phrase) {
+            if (!\in_array($name, ContentTypeDefinition::PHRASES, true)) {
+                throw $context->error(\sprintf('Extend\ContentType("%s")::phrases()', $this->id), \sprintf('"%s" isn\'t a phrase a type words. Phrases: %s.', $name, implode(', ', ContentTypeDefinition::PHRASES)));
+            }
+
+            if ('' === trim($phrase)) {
+                throw $context->error(\sprintf('Extend\ContentType("%s")::phrases()', $this->id), \sprintf('The phrase "%s" is empty.', $name));
+            }
+
+            try {
+                new \MessageFormatter('en', $phrase);
+            } catch (\IntlException) {
+                throw $context->error(\sprintf('Extend\ContentType("%s")::phrases()', $this->id), \sprintf('The phrase "%s" isn\'t an ICU message (%s). A brace meant as text is quoted: "\'{\'".', $name, intl_get_error_message()));
+            }
+
+            if ('count' === $name && !str_contains($phrase, '{count')) {
+                throw $context->error(\sprintf('Extend\ContentType("%s")::phrases()', $this->id), 'The phrase "count" says how many with {count}, e.g. "{count, plural, one {# recipe} other {# recipes}}".');
+            }
+        }
 
         return new ContentTypeDefinition(
             id: $this->id,
@@ -235,6 +282,7 @@ final class ContentType implements ExtenderInterface
             permalink: $permalink,
             sortField: $sortField,
             sortDirection: $sortDirection,
+            phrases: $phrases,
         );
     }
 
@@ -250,7 +298,7 @@ final class ContentType implements ExtenderInterface
             throw $context->error($where, 'No content type with this ID is registered yet. If another extension provides it, require that extension in composer.json, so it boots first.');
         }
 
-        if (null !== $this->label || null !== $this->capabilities || null !== $this->permalink || null !== $this->sortField) {
+        if (null !== $this->label || null !== $this->phrases || null !== $this->capabilities || null !== $this->permalink || null !== $this->sortField) {
             throw $context->error($where, 'Only capabilities and fields can be added to a type registered elsewhere. Sites change permalinks in settings.');
         }
 
@@ -272,6 +320,7 @@ final class ContentType implements ExtenderInterface
             sortField: $type->sortField,
             sortDirection: $type->sortDirection,
             fields: $type->fields,
+            phrases: $type->phrases,
         );
     }
 
@@ -318,6 +367,7 @@ final class ContentType implements ExtenderInterface
             sortField: $type->sortField,
             sortDirection: $type->sortDirection,
             fields: $fields,
+            phrases: $type->phrases,
         );
     }
 

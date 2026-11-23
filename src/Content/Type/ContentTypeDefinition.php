@@ -13,6 +13,13 @@ use Quire\Content\Field\FieldDefinition;
  */
 final readonly class ContentTypeDefinition
 {
+    /**
+     * The sentences a type may word itself (Extend\ContentType::phrases()): "new" (a button, "New post"),
+     * "all" (a link, "All posts"), "count" ("{count, plural, one {# post} other {# posts}}"), "search" (a
+     * search box's hint, with {count}) and "empty" ("No posts yet.").
+     */
+    public const array PHRASES = ['new', 'all', 'count', 'search', 'empty'];
+
     /** Columns that listings can be sorted by, besides sortable fields. */
     public const array SORT_COLUMNS = ['published_at', 'created_at', 'updated_at', 'title', 'position'];
 
@@ -23,6 +30,7 @@ final readonly class ContentTypeDefinition
      * @param string                         $sortField     Default sort for listings: a column such as "published_at"
      * @param 'asc'|'desc'                   $sortDirection
      * @param array<string, FieldDefinition> $fields        Keyed by name, in form order
+     * @param array<string, string>          $phrases       Of {@see PHRASES}: English ICU messages, translated in the owner's domain
      */
     public function __construct(
         public string $id,
@@ -34,6 +42,7 @@ final readonly class ContentTypeDefinition
         public string $sortField,
         public string $sortDirection,
         public array $fields = [],
+        public array $phrases = [],
     ) {
     }
 
@@ -64,6 +73,7 @@ final readonly class ContentTypeDefinition
             'sort_field' => $this->sortField,
             'sort_direction' => $this->sortDirection,
             'fields' => array_map(static fn (FieldDefinition $field): array => $field->toArray(), $this->fields),
+            'phrases' => $this->phrases,
         ];
     }
 
@@ -74,7 +84,7 @@ final readonly class ContentTypeDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{id: string, label: string, plural_label: string, owner: string, capabilities: list<string>, permalink: string, sort_field: string, sort_direction: 'asc'|'desc', fields?: array<string, array<string, mixed>>} $type */
+        /** @var array{id: string, label: string, plural_label: string, owner: string, capabilities: list<string>, permalink: string, sort_field: string, sort_direction: 'asc'|'desc', fields?: array<string, array<string, mixed>>, phrases?: array<string, string>} $type */
         $type = $data;
 
         return new self(
@@ -87,6 +97,7 @@ final readonly class ContentTypeDefinition
             sortField: $type['sort_field'],
             sortDirection: $type['sort_direction'],
             fields: array_map(FieldDefinition::fromArray(...), $type['fields'] ?? []),
+            phrases: $type['phrases'] ?? [],
         );
     }
 }

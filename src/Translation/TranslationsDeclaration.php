@@ -61,18 +61,24 @@ final readonly class TranslationsDeclaration
             }
 
             if (!self::mayHave($packageName, $domain)) {
-                throw new \InvalidArgumentException(\sprintf('"extra.quire.translations.domains" lists "%s", which is %s.', $domain, \in_array($domain, self::SYMFONY_DOMAINS, true) ? 'one of Symfony\'s own domains' : 'reserved for Quire\'s own packages'));
+                throw new \InvalidArgumentException(\sprintf('"extra.quire.translations.domains" lists "%s", which is %s.', $domain, match (true) {
+                    \in_array($domain, self::SYMFONY_DOMAINS, true) => 'one of Symfony\'s own domains', self::SITE_DOMAIN === $domain => 'the site\'s own', default => 'reserved for Quire\'s own packages',
+                }));
             }
         }
     }
 
+    /** The site's own texts, in its translations/ directory: the names of its own types, for one */
+    public const string SITE_DOMAIN = 'site';
+
     /**
-     * Whether a package may have the domain: "quire" and "quire-…" are Quire's own packages'.
+     * Whether a package may have the domain: "quire" and "quire-…" are Quire's own packages', "site" the
+     * site's, and Symfony's domains no package's.
      */
     public static function mayHave(string $packageName, string $domain): bool
     {
         $quires = 'quire' === $domain || str_starts_with($domain, 'quire-');
 
-        return !\in_array($domain, self::SYMFONY_DOMAINS, true) && (!$quires || str_starts_with($packageName, 'quire/'));
+        return !\in_array($domain, self::SYMFONY_DOMAINS, true) && self::SITE_DOMAIN !== $domain && (!$quires || str_starts_with($packageName, 'quire/'));
     }
 }

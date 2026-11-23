@@ -64,6 +64,8 @@ final readonly class ContentPreviews
             $links .= \sprintf('<link rel="stylesheet" href="%s">'."\n", htmlspecialchars($url));
         }
 
+        // The frame's own margin, unlayered on purpose: it beats the theme's body rules (which are in cascade
+        // layers), so a preview sits the same in every theme.
         return \sprintf(
             "<!doctype html>\n<html lang=\"%s\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<meta name=\"robots\" content=\"noindex\">\n%s%s<style>body { margin: 0; padding: 1rem; }</style>\n</head>\n<body class=\"quire-preview\">\n%s\n</body>\n</html>\n",
             htmlspecialchars($locale),

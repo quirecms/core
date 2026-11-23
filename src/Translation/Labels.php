@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Quire\Translation;
 
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use Quire\Content\Type\ContentTypeDefinition;
 use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Extend\ExtenderContext;
@@ -52,6 +54,7 @@ final readonly class Labels implements RuntimeExtensionInterface
         private TranslatorInterface&TranslatorBagInterface $translator,
         private Permissions $permissions,
         private ContentTypeRegistry $types,
+        private LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -110,6 +113,14 @@ final readonly class Labels implements RuntimeExtensionInterface
 
             $formatted = \MessageFormatter::formatMessage($locale, $text, $parameters);
 
+            // A translation that can't be formatted (a language package's mistake) mustn't break the page:
+            // the phrase as it's declared, and the owner hears of it
+            if (false === $formatted && $text !== $message) {
+                $this->logger->warning('The translation of the phrase "{phrase}" of the type "{type}" in "{locale}" ({domain}) can\'t be formatted, so it reads in English: {error}', ['phrase' => $phrase, 'type' => $type->id, 'locale' => $locale, 'domain' => $domain, 'error' => intl_get_error_message()]);
+                [$formatted, $locale] = [\MessageFormatter::formatMessage('en', $message, $parameters), 'en'];
+            }
+
+            // The declaration itself is checked at boot; a value that doesn't fit it is the caller's mistake
             if (false === $formatted) {
                 throw new \LogicException(\sprintf('The phrase "%s" of the type "%s" can\'t be formatted in "%s": %s.', $phrase, $type->id, $locale, intl_get_error_message()));
             }

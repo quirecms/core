@@ -85,6 +85,10 @@
 "View the image on {host}": "Das Bild auf {host} ansehen"
 "Show password": "Passwort anzeigen"
 "Show": "Anzeigen"
+"Hide": "Ausblenden"
+"Hide password": "Passwort ausblenden"
+"Your password is visible.": "Ihr Passwort ist sichtbar."
+"Your password is hidden.": "Ihr Passwort ist verborgen."
 "Done": "Erledigt"
 "Still to come": "Steht noch aus"
 'You’re signed in': 'Sie sind angemeldet'

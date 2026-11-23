@@ -53,7 +53,7 @@
                     <form method="post" action="{{ path('quire_login') }}" class="form">
                         <p class="form-field">
                             <label for="username">{{ 'Email or username'|quire_trans({}, 'quire') }}</label>
-                            <input type="text" id="username" name="_username" value="{{ last_username }}" autocomplete="username" required{% if error %} aria-describedby="sign-in-error" aria-invalid="true"{% endif %}>
+                            <input type="text" id="username" name="_username" value="{{ last_username }}" autocomplete="username" autocapitalize="none" spellcheck="false" required{% if error %} aria-describedby="sign-in-error" aria-invalid="true"{% endif %}>
                         </p>
                         <p class="form-field">
                             <label for="password">{{ 'Password'|quire_trans({}, 'quire') }}</label>

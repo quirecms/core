@@ -87,6 +87,10 @@
 "View the image on {host}": "View the image on {host}"
 "Show password": "Show password"
 "Show": "Show"
+"Hide": "Hide"
+"Hide password": "Hide password"
+"Your password is visible.": "Your password is visible."
+"Your password is hidden.": "Your password is hidden."
 "Done": "Done"
 "Still to come": "Still to come"
 'You’re signed in': 'You’re signed in'

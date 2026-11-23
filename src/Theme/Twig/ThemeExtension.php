@@ -61,6 +61,8 @@ final class ThemeExtension extends AbstractExtension implements GlobalsInterface
             new TwigFunction('quire_type_phrase', [Labels::class, 'phrase']),
             new TwigFunction('quire_role_label', [Labels::class, 'role']),
             new TwigFunction('quire_ability_label', [Labels::class, 'ability']),
+            // The translation domain of what an owner declares: "core" → "quire", an extension's ID → itself
+            new TwigFunction('quire_domain', Labels::domainOf(...)),
             new TwigFunction('quire_setting_label', [Labels::class, 'setting']),
             new TwigFunction('quire_setting_help', [Labels::class, 'settingHelp']),
             // The name before 0.3, when the head held only the SEO tags.

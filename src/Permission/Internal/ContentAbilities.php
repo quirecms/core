@@ -18,16 +18,21 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
  */
 final class ContentAbilities
 {
-    /** @var array<string, array{string, list<string>}> Ability => label, default roles */
+    /**
+     * Ability => English label (for the CLI, the intent bar and the audit log), the text people read next
+     * to the type's name ("Publish (Posts)", in core's texts with the context Labels::ABILITY_CONTEXT), default roles.
+     *
+     * @var array<string, array{string, string, list<string>}>
+     */
     private const array ABILITIES = [
-        'view' => ['View %s', [Role::GUEST]],
-        'view_drafts' => ['Preview unpublished %s', [Role::EDITOR]],
-        'create' => ['Create %s', [Role::EDITOR]],
-        'edit_own' => ['Edit their own %s', [Role::EDITOR]],
-        'edit_any' => ['Edit any %s', [Role::EDITOR]],
-        'publish' => ['Publish %s', [Role::EDITOR]],
-        'review' => ['Review changes to %s', [Role::EDITOR]],
-        'delete' => ['Delete %s', [Role::EDITOR]],
+        'view' => ['View %s', 'View', [Role::GUEST]],
+        'view_drafts' => ['Preview unpublished %s', 'Preview unpublished', [Role::EDITOR]],
+        'create' => ['Create %s', 'Create', [Role::EDITOR]],
+        'edit_own' => ['Edit their own %s', 'Edit their own', [Role::EDITOR]],
+        'edit_any' => ['Edit any %s', 'Edit any', [Role::EDITOR]],
+        'publish' => ['Publish %s', 'Publish', [Role::EDITOR]],
+        'review' => ['Review changes to %s', 'Review changes', [Role::EDITOR]],
+        'delete' => ['Delete %s', 'Delete', [Role::EDITOR]],
     ];
 
     public static function declare(ContainerBuilder $container): void
@@ -41,9 +46,11 @@ final class ContentAbilities
         foreach ($types as $data) {
             $type = ContentTypeDefinition::fromArray($data);
 
-            foreach (self::ABILITIES as $action => [$label, $roles]) {
+            foreach (self::ABILITIES as $action => [$label, $text, $roles]) {
                 $config['abilities'][self::name($type->id, $action)] = [
                     'label' => \sprintf($label, strtolower($type->pluralLabel)),
+                    'type' => $type->id,
+                    'text' => $text,
                     'roles' => $roles,
                     'group' => 'content',
                     'strict' => false,

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\Translation;
 
 use Quire\Content\Type\ContentTypeDefinition;
+use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Extend\ExtenderContext;
 use Quire\Permission\Permissions;
 use Quire\Settings\SettingDefinition;
@@ -14,7 +15,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Extension\RuntimeExtensionInterface;
 
 /**
- * The names people read for content types, roles and settings, in the language of the page: the only way
+ * The names people read for content types, roles, abilities and settings, in the language of the page: the only way
  * to print them. Each is translated in its owner's domain (core's in "quire", the site's in "site", an
  * extension's in its ID). A type's sentences ("New post", "Search 54 posts…") are its own phrases, worded
  * whole in each language; a type without them reads "New: Recipe".
@@ -30,6 +31,9 @@ final readonly class Labels implements RuntimeExtensionInterface
 
     public const string ROLE_CONTEXT = 'role';
 
+    /** Of the texts core's abilities of each content type read with ("Publish|content ability") */
+    public const string ABILITY_CONTEXT = 'content ability';
+
     /** What a type that doesn't word a phrase reads: neutral forms with its name, in core's texts */
     private const array NEUTRAL = [
         'new' => 'New: {type}',
@@ -39,10 +43,14 @@ final readonly class Labels implements RuntimeExtensionInterface
         'empty' => 'Nothing here yet.',
     ];
 
+    /** How core's names of one type's ability or setting read: the type's name after, not inside, the text */
+    private const string OF_TYPE = '{text} ({types})';
+
     public function __construct(
         #[Autowire(service: 'translator')]
         private TranslatorInterface&TranslatorBagInterface $translator,
         private Permissions $permissions,
+        private ContentTypeRegistry $types,
     ) {
     }
 
@@ -138,14 +146,51 @@ final readonly class Labels implements RuntimeExtensionInterface
         return $roles;
     }
 
+    /**
+     * An ability's name. Each type's are core's, read with the type's name: "Publish (Posts)".
+     */
+    public function ability(string $ability): string
+    {
+        $declared = $this->permissions->abilities()[$ability] ?? null;
+
+        if (null === $declared) {
+            return $ability;
+        }
+
+        if (isset($declared['type'], $declared['text']) && $this->types->has($declared['type'])) {
+            return $this->ofType($this->name($declared['text'], self::ABILITY_CONTEXT, 'quire'), $declared['type']);
+        }
+
+        return $this->owned($declared['label'], $declared['owner']);
+    }
+
     public function setting(SettingDefinition $setting): string
     {
-        return $this->translator->trans($setting->label ?? $setting->key, [], self::domainOf($setting->owner));
+        if (null !== $setting->contentType && null !== $setting->typeLabel && $this->types->has($setting->contentType)) {
+            return $this->ofType($this->translator->trans($setting->typeLabel, [], 'quire'), $setting->contentType);
+        }
+
+        return $this->owned($setting->label ?? $setting->key, $setting->owner);
     }
 
     public function settingHelp(SettingDefinition $setting): ?string
     {
-        return null === $setting->help ? null : $this->translator->trans($setting->help, [], self::domainOf($setting->owner));
+        return null === $setting->help ? null : $this->owned($setting->help, null === $setting->contentType ? $setting->owner : ExtenderContext::CORE);
+    }
+
+    /**
+     * A text an owner declares (a check's label, a group's), in its owner's domain.
+     *
+     * @param array<string, mixed> $parameters
+     */
+    public function owned(string $text, string $owner, array $parameters = []): string
+    {
+        return $this->translator->trans($text, $parameters, self::domainOf($owner));
+    }
+
+    private function ofType(string $text, string $type): string
+    {
+        return $this->translator->trans(self::OF_TYPE, ['text' => $text, 'types' => $this->type($this->types->get($type), plural: true)], 'quire');
     }
 
     private function name(string $text, string $context, string $domain): string

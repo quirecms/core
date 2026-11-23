@@ -20,7 +20,7 @@ use Symfony\Contracts\Service\ResetInterface;
  * defaults while every change admins made stays. Check abilities with Symfony's is_granted(), which also
  * applies the rules of extensions; this tells what roles alone allow.
  *
- * @phpstan-type Ability array{label: string, group: ?string, roles: list<string>, strict: bool, owner: string}
+ * @phpstan-type Ability array{label: string, group: ?string, roles: list<string>, strict: bool, owner: string, type?: string, text?: string}
  *
  * @api
  */

@@ -27,6 +27,9 @@ final class PermalinkSettings
 
     public const string LISTING_PREFIX = 'quire.listings.';
 
+    /** In core's texts (ICU, so the placeholders' braces are quoted there) */
+    private const string PERMALINK_HELP = 'For example /blog/{slug} or /{year}/{month}/{slug}. Placeholders: {slug}, {path}, {id}, {year}, {month}, {day}. Old URLs keep working: they redirect to the new ones.';
+
     public static function declare(ContainerBuilder $container): void
     {
         $parameters = $container->getParameterBag()->all();
@@ -45,8 +48,10 @@ final class PermalinkSettings
                 default: $type->permalink,
                 owner: $type->owner,
                 label: \sprintf('URLs of %s', $plural),
-                help: 'For example /blog/{slug} or /{year}/{month}/{slug}. Placeholders: {'.implode('}, {', PermalinkPattern::PLACEHOLDERS).'}. Old URLs keep working: they redirect to the new ones.',
+                help: self::PERMALINK_HELP,
                 group: 'permalinks',
+                contentType: $type->id,
+                typeLabel: 'Item URLs',
             )->toArray();
 
             if ($type->has(Capability::LISTABLE)) {
@@ -61,6 +66,8 @@ final class PermalinkSettings
                     help: 'For example /blog. Empty for no list.',
                     group: 'permalinks',
                     nullable: true,
+                    contentType: $type->id,
+                    typeLabel: 'List URL',
                 )->toArray();
             }
         }

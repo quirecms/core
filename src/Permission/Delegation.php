@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Quire\Permission;
 
+use Quire\Translation\Labels;
 use Quire\User\User;
 use Symfony\Component\Security\Core\User\UserInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
  * Whether someone may give out, or act on, abilities: nobody hands out what they don't hold, and nobody
@@ -27,6 +29,8 @@ final readonly class Delegation
     public function __construct(
         private Permissions $permissions,
         private Access $access,
+        private Labels $labels,
+        private TranslatorInterface $translator,
     ) {
     }
 
@@ -93,9 +97,9 @@ final readonly class Delegation
      */
     public function labels(array $abilities): string
     {
-        $labels = array_map(fn (string $ability): string => '"'.($this->permissions->abilities()[$ability]['label'] ?? $ability).'"', \array_slice($abilities, 0, 3));
+        $labels = implode(', ', array_map(fn (string $ability): string => $this->translator->trans('“{name}”', ['name' => $this->labels->ability($ability)], 'quire'), \array_slice($abilities, 0, 3)));
 
-        return implode(', ', $labels).(\count($abilities) > 3 ? \sprintf(' and %d more', \count($abilities) - 3) : '');
+        return \count($abilities) > 3 ? $this->translator->trans('{abilities} and {count} more', ['abilities' => $labels, 'count' => \count($abilities) - 3], 'quire') : $labels;
     }
 
     /**

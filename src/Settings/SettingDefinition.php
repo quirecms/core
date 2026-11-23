@@ -20,6 +20,10 @@ final readonly class SettingDefinition
      * @param array<string, string> $valueLabels How values read in the sentence: by choice for "enum", "on" and "off" for "bool"
      * @param string|null           $ability     The ability changing it takes besides managing settings, for a setting another
      *                                           part of the admin owns, e.g. the active theme ("quire.themes.manage")
+     * @param string|null           $contentType For core's settings of one content type: the type, whose name people read
+     *                                           next to $typeLabel ("Item URLs (Posts)"). Its label and help are core's texts.
+     * @param string|null           $typeLabel   The label without the type's name, e.g. "Item URLs"; $label stays the
+     *                                           English name in full ("URLs of posts"), for the CLI and the intent bar
      */
     public function __construct(
         public string $key,
@@ -37,6 +41,8 @@ final readonly class SettingDefinition
         public ?string $phrase = null,
         public array $valueLabels = [],
         public ?string $ability = null,
+        public ?string $contentType = null,
+        public ?string $typeLabel = null,
     ) {
     }
 
@@ -98,6 +104,8 @@ final readonly class SettingDefinition
             'phrase' => $this->phrase,
             'value_labels' => $this->valueLabels,
             'ability' => $this->ability,
+            'content_type' => $this->contentType,
+            'type_label' => $this->typeLabel,
         ];
     }
 
@@ -108,7 +116,7 @@ final readonly class SettingDefinition
      */
     public static function fromArray(array $data): self
     {
-        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool, phrase?: ?string, value_labels?: array<string, string>, ability?: ?string} $definition */
+        /** @var array{key: string, type: string, default: mixed, owner: string, label: ?string, help: ?string, group: ?string, widget: ?string, choices: list<string|int>, nullable: bool, sensitive: bool, exposed?: bool, phrase?: ?string, value_labels?: array<string, string>, ability?: ?string, content_type?: ?string, type_label?: ?string} $definition */
         $definition = $data;
 
         return new self(
@@ -127,6 +135,8 @@ final readonly class SettingDefinition
             phrase: $definition['phrase'] ?? null,
             valueLabels: $definition['value_labels'] ?? [],
             ability: $definition['ability'] ?? null,
+            contentType: $definition['content_type'] ?? null,
+            typeLabel: $definition['type_label'] ?? null,
         );
     }
 }

@@ -25,7 +25,9 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  *   `<span class="footnote" id="fn-N" role="note">`, and the reference is a link named "Note N". On wide
  *   screens a theme sets it in the margin, on narrow ones it reads in place: no list at the end.
  * - **Task lists**: each box is disabled and named by its state ("Done", "Still to come"), and its
- *   item has `data-task="done"` or `"open"`, and the state's words in `data-state`.
+ *   item has `data-task="done"` or `"open"`, and the state's words in `data-state`. What follows the box
+ *   in its item, up to a list of sub-tasks, is one `<span class="task-text">`: a theme lays the item out
+ *   as the box, its state and that text, whatever the text holds (a link, a note read in place).
  * - **Tables**: in `<div class="table" role="region" tabindex="0">`, named by the heading before them,
  *   so a wide one scrolls by keyboard. The table roles stay when CSS changes its display; every cell
  *   has `data-label` (its column's header), the first cell of a body row is a row header, a column's
@@ -381,7 +383,30 @@ final readonly class DocumentStructure
                 $box->parentElement->setAttribute('data-task', $done ? 'done' : 'open');
                 // For a theme to write the state beside the box: an attribute, so feeds and excerpts never carry it
                 $box->parentElement->setAttribute('data-state', $state);
+                $this->taskText($box);
             }
+        }
+    }
+
+    /**
+     * The item's text after its box, as one element, up to a list of sub-tasks (or any other block, which
+     * a span can't hold).
+     */
+    private function taskText(\Dom\Element $box): void
+    {
+        if (!$box->ownerDocument instanceof \Dom\Document) {
+            return;
+        }
+
+        $text = $box->ownerDocument->createElement('span');
+        $text->setAttribute('class', 'task-text');
+
+        while ($box->nextSibling instanceof \Dom\Node && (!$box->nextSibling instanceof \Dom\Element || !\in_array(strtolower($box->nextSibling->tagName), ['ul', 'ol', 'p', 'div', 'pre', 'blockquote', 'table'], true))) {
+            $text->appendChild($box->nextSibling);
+        }
+
+        if ($text->firstChild instanceof \Dom\Node) {
+            $box->after($text);
         }
     }
 

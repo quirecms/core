@@ -1,7 +1,8 @@
 // "Show" beside a password field (Quire's account pages): a button that only this script reveals, so
 // without JavaScript the field is a plain password field. It says what it does next ("Show", "Hide"),
 // in its text and its name, and the field is a password field again before its form is sent, so a
-// browser never keeps or offers it as plain text.
+// browser never keeps or offers it as plain text. The focus stays on the button, so pressing it again
+// hides the password, and a key meant for the button never types into the field or sends the form.
 for (const button of document.querySelectorAll('button[data-quire-password-toggle]')) {
     const field = document.getElementById(button.getAttribute('aria-controls') ?? '');
 
@@ -24,7 +25,6 @@ for (const button of document.querySelectorAll('button[data-quire-password-toggl
         if (status) {
             status.textContent = (shown ? status.dataset.shown : status.dataset.hidden) ?? '';
         }
-        field.focus();
     });
     field.form?.addEventListener('submit', () => {
         field.type = 'password';

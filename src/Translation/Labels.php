@@ -9,6 +9,7 @@ use Quire\Content\Type\ContentTypeRegistry;
 use Quire\Extend\ExtenderContext;
 use Quire\Permission\Permissions;
 use Quire\Settings\SettingDefinition;
+use Quire\User\Role;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\Translation\TranslatorBagInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
@@ -128,6 +129,23 @@ final readonly class Labels implements RuntimeExtensionInterface
         $owner = $this->permissions->roleOwner($role);
 
         return null === $owner ? $label : $this->name($label, self::ROLE_CONTEXT, self::domainOf($owner));
+    }
+
+    /**
+     * The role someone is named by, e.g. in an invitation ("as Editor"): their first beyond "Everyone"
+     * and "Member", by name, or null when they have none.
+     *
+     * @param list<string> $roles
+     */
+    public function mainRole(array $roles): ?string
+    {
+        foreach ($roles as $role) {
+            if (Role::GUEST !== $role && Role::MEMBER !== $role && $this->permissions->hasRole($role)) {
+                return $this->role($role);
+            }
+        }
+
+        return null;
     }
 
     /**

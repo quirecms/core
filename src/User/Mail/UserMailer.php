@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Quire\User\Mail;
 
 use Quire\Settings\Settings;
+use Quire\Translation\Labels;
 use Quire\User\AccountSettings;
 use Quire\User\User;
 use Symfony\Bridge\Twig\Mime\TemplatedEmail;
@@ -44,6 +45,7 @@ final readonly class UserMailer
         private RouterInterface $router,
         private RequestStack $requests,
         private TranslatorInterface $translator,
+        private Labels $labels,
         #[Autowire(param: 'router.request_context.base_url')]
         private string $siteUri,
         private ?MailerInterface $mailer = null,
@@ -65,6 +67,7 @@ final readonly class UserMailer
         $this->send($user, 'invitation', 'You’re invited to {site}', [
             'url' => $this->link('quire_welcome', ['token' => $token]),
             'invited_by' => $invitedBy,
+            'role' => $this->labels->mainRole($user->roles),
         ]);
     }
 

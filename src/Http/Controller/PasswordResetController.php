@@ -6,13 +6,11 @@ namespace Quire\Http\Controller;
 
 use Doctrine\DBAL\Connection;
 use Psr\Log\LoggerInterface;
-use Quire\Permission\Permissions;
 use Quire\Settings\Settings;
 use Quire\Translation\Labels;
 use Quire\User\AccountSettings;
 use Quire\User\Exception\InvalidUserException;
 use Quire\User\Mail\UserMailer;
-use Quire\User\Role;
 use Quire\User\Security\FormThrottle;
 use Quire\User\Security\SignInListener;
 use Quire\User\Token\UserTokens;
@@ -66,7 +64,6 @@ final readonly class PasswordResetController
         private Connection $connection,
         private UrlGeneratorInterface $urls,
         private LoggerInterface $logger,
-        private Permissions $permissions,
         private Labels $labels,
     ) {
     }
@@ -215,12 +212,6 @@ final readonly class PasswordResetController
 
     private function roleLabel(User $user): ?string
     {
-        foreach ($user->roles as $role) {
-            if (Role::GUEST !== $role && Role::MEMBER !== $role && $this->permissions->hasRole($role)) {
-                return $this->labels->role($role);
-            }
-        }
-
-        return null;
+        return $this->labels->mainRole($user->roles);
     }
 }

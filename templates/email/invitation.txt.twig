@@ -1,6 +1,6 @@
 {{ 'Hello {name},'|trans({ name: user.displayName }, 'quire') }}
 
-{% if invited_by %}{{ '{admin} added you to {site}, as {username}. Choose your password to sign in:'|trans({ admin: invited_by.displayName, site: site.title, username: user.username }, 'quire')|raw }}{% else %}{{ 'You were added to {site}, as {username}. Choose your password to sign in:'|trans({ site: site.title, username: user.username }, 'quire')|raw }}{% endif %}
+{{ (invited_by ? (role ? '{admin} invited you to {site} as {role}. Your username is {username}. Choose your password to sign in:' : '{admin} invited you to {site}. Your username is {username}. Choose your password to sign in:') : (role ? 'You’re invited to {site} as {role}. Your username is {username}. Choose your password to sign in:' : 'You’re invited to {site}. Your username is {username}. Choose your password to sign in:'))|trans({ admin: invited_by.displayName ?? '', site: site.title, role: role ?? '', username: user.username }, 'quire')|raw }}
 
 {{ url|raw }}
 

@@ -10,7 +10,7 @@ use Symfony\Component\HtmlSanitizer\HtmlSanitizerAction;
 use Symfony\Component\HtmlSanitizer\HtmlSanitizerConfig;
 
 /**
- * Builds the HTML sanitiser for a profile.
+ * Builds the HTML sanitizer for a profile.
  *
  * @internal
  */

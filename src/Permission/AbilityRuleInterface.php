@@ -7,7 +7,7 @@ namespace Quire\Permission;
 use Symfony\Component\Security\Core\User\UserInterface;
 
 /**
- * Decides abilities case by case, beyond what roles grant: e.g. "organisers may edit the news of their own
+ * Decides abilities case by case, beyond what roles grant: e.g. "organizers may edit the news of their own
  * tournaments", or "suspended commenters may not comment". Register it with Extend\Permissions::rule().
  *
  * Any rule can refuse an ability, whatever roles and other rules say: a refusal wins.

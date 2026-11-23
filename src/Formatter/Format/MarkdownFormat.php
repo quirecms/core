@@ -68,7 +68,7 @@ final class MarkdownFormat implements FormatInterface, ResetInterface
     private function converter(FormatterProfile $profile): array
     {
         $environment = new Environment([
-            // Raw HTML is escaped unless the profile allows it; it's sanitised either way.
+            // Raw HTML is escaped unless the profile allows it; it's sanitized either way.
             'html_input' => $profile->rawHtml ? 'allow' : 'escape',
             'allow_unsafe_links' => false,
             // Limits against pathological input that makes parsers slow.

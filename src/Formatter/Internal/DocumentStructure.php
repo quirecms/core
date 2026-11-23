@@ -9,7 +9,7 @@ use Quire\Formatter\FormatterProfile;
 use Symfony\Contracts\Translation\TranslatorInterface;
 
 /**
- * What every theme gets from the renderer for rich text, after the sanitiser has run: the structure
+ * What every theme gets from the renderer for rich text, after the sanitizer has run: the structure
  * screen readers and small screens need, the same for every theme. A theme styles it and decides
  * nothing (docs/themes.md, "What the renderer prints").
  *

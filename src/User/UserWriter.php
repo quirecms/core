@@ -541,7 +541,7 @@ final readonly class UserWriter
     }
 
     /**
-     * Serialises choosing usernames until the transaction ends, so two new users can't take the same.
+     * Serializes choosing usernames until the transaction ends, so two new users can't take the same.
      */
     private function lockUsernames(): void
     {

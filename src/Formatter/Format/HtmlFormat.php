@@ -9,7 +9,7 @@ use Quire\Formatter\FormatInterface;
 use Quire\Formatter\Internal\ShortcodeSyntax;
 
 /**
- * HTML written by the author. It's sanitised like every format's output, with the profile's policy.
+ * HTML written by the author. It's sanitized like every format's output, with the profile's policy.
  */
 final class HtmlFormat implements FormatInterface
 {

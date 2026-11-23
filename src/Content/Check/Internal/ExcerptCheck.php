@@ -25,7 +25,7 @@ final readonly class ExcerptCheck implements ContentCheckInterface
     public function check(Content $item): iterable
     {
         if ($this->types->has($item->type) && $this->types->get($item->type)->has(Capability::EXCERPT) && '' === trim($item->excerpt ?? '')) {
-            yield new Finding('There\'s no excerpt: lists and search engines then show the start of the text, which may not summarise it.', 'excerpt');
+            yield new Finding('There\'s no excerpt: lists and search engines then show the start of the text, which may not summarize it.', 'excerpt');
         }
     }
 }

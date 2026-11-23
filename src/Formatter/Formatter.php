@@ -19,7 +19,7 @@ use Symfony\Contracts\Service\ResetInterface;
 /**
  * Turns text into safe HTML:
  *
- *     source → pre-processors → format (Markdown, text, HTML, …) → post-processors → sanitiser
+ *     source → pre-processors → format (Markdown, text, HTML, …) → post-processors → sanitizer
  *
  * {@see compile()} does that and keeps shortcodes as placeholders; {@see expand()} renders them. Compiled
  * text can be cached, since shortcodes run on every expansion. {@see render()} does both.
@@ -107,7 +107,7 @@ final class Formatter implements ResetInterface
 
         $html = $this->sanitizer($context->profile)->sanitize($html);
 
-        // After the sanitiser: the structure every theme gets (headings' links, notes, tables, code)
+        // After the sanitizer: the structure every theme gets (headings' links, notes, tables, code)
         $headings = [];
 
         if ($this->structure instanceof DocumentStructure) {

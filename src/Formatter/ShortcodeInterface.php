@@ -15,7 +15,7 @@ namespace Quire\Formatter;
 interface ShortcodeInterface
 {
     /**
-     * @return string HTML. Unless the shortcode is registered as trusted, it's sanitised with the profile's policy.
+     * @return string HTML. Unless the shortcode is registered as trusted, it's sanitized with the profile's policy.
      */
     public function render(Shortcode $shortcode, FormatContext $context): string;
 }

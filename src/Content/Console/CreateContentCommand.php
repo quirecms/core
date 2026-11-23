@@ -23,6 +23,10 @@ use Symfony\Component\Console\Style\SymfonyStyle;
           <info>%command.full_name% post "Hello world" --body "My *first* post." --publish</info>
           <info>%command.full_name% page "Team" --parent 0192b6a0-… --body-file team.md --author grace</info>
           <info>%command.full_name% post "Launch" --body-file=- --schedule "2026-12-24 09:00" < launch.md</info>
+          <info>%command.full_name% post "Spring draw" --body-file draw.md --published-at "2026-03-14 09:00"</info>
+
+        <comment>--published-at</comment> publishes the item with an earlier date, e.g. when bringing a site's posts
+        over from elsewhere: it shows that date, and lists and archives place it there.
 
         The slug is generated from the title unless you pass <comment>--slug</comment>.
         HELP,
@@ -67,13 +71,21 @@ final readonly class CreateContentCommand
         bool $publish = false,
         #[Option(description: 'Publish the item at a future date, e.g. "2026-12-24 09:00"')]
         ?string $schedule = null,
+        #[Option(description: 'Publish the item with an earlier date, e.g. "2026-03-14 09:00" (when bringing content over)')]
+        ?string $publishedAt = null,
     ): int {
-        return ConsoleErrors::handle($io, function () use ($io, $type, $title, $body, $bodyFile, $format, $slug, $excerpt, $locale, $parent, $fields, $translationOf, $author, $message, $publish, $schedule): int {
-            if ($publish && null !== $schedule) {
-                throw new \InvalidArgumentException('Pass either --publish or --schedule, not both.');
+        return ConsoleErrors::handle($io, function () use ($io, $type, $title, $body, $bodyFile, $format, $slug, $excerpt, $locale, $parent, $fields, $translationOf, $author, $message, $publish, $schedule, $publishedAt): int {
+            if ((int) $publish + (int) (null !== $schedule) + (int) (null !== $publishedAt) > 1) {
+                throw new \InvalidArgumentException('Pass one of --publish, --schedule and --published-at.');
             }
 
             $at = null === $schedule ? null : ConsoleErrors::date($schedule, '--schedule');
+            $earlier = null === $publishedAt ? null : ConsoleErrors::date($publishedAt, '--published-at');
+
+            // Checked before the item is made, so a date in the future leaves no draft behind
+            if ($earlier instanceof \DateTimeImmutable && $earlier > new \DateTimeImmutable()) {
+                throw new \InvalidArgumentException('--published-at is for an earlier date: to publish later, use --schedule.');
+            }
 
             $content = $this->writer->create(new CreateContent(
                 type: $type,
@@ -90,8 +102,10 @@ final readonly class CreateContentCommand
                 revisionMessage: $message,
             ));
 
-            if ($publish || $at instanceof \DateTimeImmutable) {
-                $content = $this->writer->transition($content->id, $content->version, $publish ? Status::PUBLISH : Status::SCHEDULE, $at);
+            if ($publish || $earlier instanceof \DateTimeImmutable) {
+                $content = $this->writer->transition($content->id, $content->version, Status::PUBLISH, $earlier);
+            } elseif ($at instanceof \DateTimeImmutable) {
+                $content = $this->writer->transition($content->id, $content->version, Status::SCHEDULE, $at);
             }
 
             $io->success(\sprintf('Created %s "%s" (%s) as %s, with ID %s.', $content->type, $content->title, $content->slug, $content->status, $content->id));

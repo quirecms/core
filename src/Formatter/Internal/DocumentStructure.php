@@ -22,8 +22,10 @@ use Symfony\Contracts\Translation\TranslatorInterface;
  *   whose id is prefixed (`h-…`, so it never meets a theme's own ids), and a `<a class="heading-anchor">`
  *   beside it, named "Link to the section …", outside the heading so its name stays the heading's.
  * - **Footnotes** (with the profile's footnotes): each note is put right after its first reference, as
- *   `<span class="footnote" id="fn-N" role="note">`, and the reference is a link named "Note N". On wide
- *   screens a theme sets it in the margin, on narrow ones it reads in place: no list at the end.
+ *   `<span class="footnote" id="fn-N" role="note" tabindex="-1">`, and the reference is a link named
+ *   "Note N". Following it moves focus to the note, which ends with a link back to its reference
+ *   (`<a class="footnote-back">`, named "Back to the text"). On wide screens a theme sets it in the margin,
+ *   on narrow ones it reads in place: no list at the end.
  * - **Task lists**: each box is disabled and named by its state ("Done", "Still to come"), and its
  *   item has `data-task="done"` or `"open"`, and the state's words in `data-state`. What follows the box
  *   in its item, up to a list of sub-tasks, is one `<span class="task-text">`: a theme lays the item out
@@ -225,6 +227,8 @@ final readonly class DocumentStructure
             $side->setAttribute('class', 'footnote');
             $side->setAttribute('id', $plain);
             $side->setAttribute('role', 'note');
+            // Focus follows the reference here, and a link at its end goes back
+            $side->setAttribute('tabindex', '-1');
             $mark = $document->createElement('b');
             $hidden = $document->createElement('span');
             $hidden->setAttribute('class', 'visually-hidden');
@@ -267,6 +271,19 @@ final readonly class DocumentStructure
                     $side->appendChild($child);
                 }
             }
+            $back = $document->createElement('a');
+            $back->setAttribute('class', 'footnote-back');
+            $back->setAttribute('href', '#'.self::REFERENCE_PREFIX.$shown);
+            $arrow = $document->createElement('span');
+            $arrow->setAttribute('aria-hidden', 'true');
+            $arrow->textContent = '↩';
+            $named = $document->createElement('span');
+            $named->setAttribute('class', 'visually-hidden');
+            $named->textContent = $this->translator->trans('Back to the text', [], self::DOMAIN, $locale);
+            $back->appendChild($arrow);
+            $back->appendChild($named);
+            $side->appendChild($document->createTextNode(' '));
+            $side->appendChild($back);
             $sup->parentNode?->insertBefore($side, $sup->nextSibling);
         }
 

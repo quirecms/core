@@ -54,6 +54,15 @@
         "symfony/workflow": "^8.1",
         "symfony/yaml": "^8.1"
     },
+    "conflict": {
+        "symfony/doctrine-bridge": "<8.1.12",
+        "symfony/framework-bundle": "<8.1.12",
+        "symfony/http-client": "<8.1.12",
+        "symfony/http-kernel": "<8.1.12",
+        "symfony/mailer": "<8.1.12",
+        "symfony/routing": "<8.1.12",
+        "twig/twig": "<3.31.1"
+    },
     "autoload": {
         "psr-4": {
             "Quire\\": "src/"
